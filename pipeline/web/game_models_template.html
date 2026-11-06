@@ -206,7 +206,8 @@ const up=e=>{pts.delete(e.pointerId);pd=0;};addEventListener('pointerup',up);add
 addEventListener('wheel',e=>{dist=Math.max(ZMIN,Math.min(ZMAX,dist*(1+e.deltaY*.001)));auto=false;},{passive:true});
 let last=performance.now(),fr=0,ft=0;
 function loop(t){requestAnimationFrame(loop);const dt=Math.min(.05,(t-last)/1000);last=t;if(auto)yaw+=dt*.18;
-  const d=dist*(cam.aspect<1?1.08:1);cam.position.set(Math.sin(yaw)*Math.cos(pitch)*d,ty+Math.sin(pitch)*d,Math.cos(yaw)*Math.cos(pitch)*d);cam.lookAt(0,ty,0);
+  const d=dist*(cam.aspect<1?1.08:1),ty_=ty-(cam.aspect>1.2?dist*.055:0);   /* on a wide screen the model sits a little higher, clear of the buttons */
+  cam.position.set(Math.sin(yaw)*Math.cos(pitch)*d,ty_+Math.sin(pitch)*d,Math.cos(yaw)*Math.cos(pitch)*d);cam.lookAt(0,ty_,0);
   R.render(S,cam);fr++;ft+=dt;if(ft>1){const el=$('dc');if(el)el.innerHTML='<b>'+R.info.render.calls+'</b> calls · '+Math.round(fr/ft)+' fps';fr=0;ft=0;}}
 requestAnimationFrame(loop);
 window.__bay={R,S,cam,M,show,MODELS};
