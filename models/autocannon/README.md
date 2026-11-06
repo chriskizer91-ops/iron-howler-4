@@ -25,7 +25,7 @@ III = one above two, IV = the 2 × 2 the pictures show).
 - **Left and right:** the pictures show the module on the LEFT arm but ChatGPT drew the clamp on opposite sides in the front
   and back views, so the left model's front and back pictures were flipped to agree with the side view. The right twin is the
   left model mirrored (`pipeline/mirror_item.py`), printed from the unflipped pictures, with the side's lettering box
-  un-mirrored.
+  un-mirrored. The left model's inner face gets its lettering flipped back the same way, so "AC-4" reads correctly on every face.
 - Download: full 1.8 MB GLB (bay pack 1.5 MB), combat 64 KB.
 
 ## How it was made (commands, from the repo root)

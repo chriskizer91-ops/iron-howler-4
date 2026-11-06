@@ -20,3 +20,5 @@
   - new `mirror_item.py`: the left/right twin of an item (mesh, joints and mounts mirrored, faces kept outward).
   - new `fit_check.py`: kit pieces placed on the Wraith at their mounts, rendered from three angles.
   - `v2_board.py`: model tiles sized and framed from the model, the tile background matched to the sheet.
+  - `project_sheet.py`: an `unmirror` box can name its view as a 5th entry (`[x0, y0, x1, y1, "front"]`), for lettering on a
+    front or back picture that was flipped (the Lance, the Arc). Boxes without it work as before (the mirrored side).

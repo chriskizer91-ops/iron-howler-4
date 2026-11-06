@@ -89,7 +89,7 @@ def view_uvd(v, p, m):
     if v == 'top': return m['cu'] + x * m['ppm'], m['vg'] - y * m['ppm'], -z      # v2.1: looking straight down, front at the top
     return m['cu'] + x * m['ppm'], vv, y
 
-UNMIRROR = []      # picture boxes (x0, y0, x1, y1) on the side view holding text
+UNMIRROR = []      # picture boxes (x0, y0, x1, y1[, view]) holding text: by default on the side view, flipped for the other side
 TOCAM = {'front': (0, 1, 0), 'side': (-1, 0, 0), 'sideR': (1, 0, 0), 'rear': (0, -1, 0), 'top': (0, 0, 1)}
 SRC = {'front': 'front', 'side': 'side', 'sideR': 'side', 'rear': 'rear', 'top': 'top'}
 SIDE_IS_RIGHT = [False]
@@ -214,9 +214,10 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
         px = np.clip(((tu - crop[0]) * k).astype(int), 0, W * k - 1); py = np.clip(((tv - crop[1]) * k).astype(int), 0, Hh * k - 1)
         vis = td <= zb[py, px] + eps
         f = tn @ np.array(TOCAM[v], float); w = np.where(vis & (f > .05), np.clip(f, 0, 1) ** power, 0)
-        if v == ('side' if SIDE_IS_RIGHT[0] else 'sideR'):      # numbers painted on the shown side would read backwards on the other side: flip them back
-            for x0_, y0_, x1_, y1_ in UNMIRROR:
-                inb = (tu >= x0_) & (tu <= x1_) & (tv >= y0_) & (tv <= y1_); tu = np.where(inb, x0_ + x1_ - tu, tu)
+        for b_ in UNMIRROR:     # numbers painted on the shown side would read backwards on the other side: flip them back
+            x0_, y0_, x1_, y1_ = b_[:4]                        # a 5th entry names another view (a front or back picture that was flipped)
+            if v != (b_[4] if len(b_) > 4 else ('side' if SIDE_IS_RIGHT[0] else 'sideR')): continue
+            inb = (tu >= x0_) & (tu <= x1_) & (tv >= y0_) & (tv <= y1_); tu = np.where(inb, x0_ + x1_ - tu, tu)
         src = filled(SR[SRC[v]]['img'], SR[SRC[v]]['mask'], crop)
         col = bilinear(src, tu - crop[0], tv - crop[1])
         acc += col * w[:, None]; wsum += w; who[:, j] = w

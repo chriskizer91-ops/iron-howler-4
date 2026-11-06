@@ -167,6 +167,12 @@ sheet at a shared scale. From there every step above works the same. Tested on 6
 - Both chats publish to the model bay. Before republishing, read the live page and patch that one.
 - ChatGPT's view pictures sit on one exact grey (200, 200, 202). Use that colour for the outline, not "close to the
   background", or pale paint and bright rims get cut off (`make_views.py` does this by itself since v2.2).
+- When a part takes its heights from the side view (`zfrom: side`), draw its front outline a little taller than its side
+  outline. If both outlines end at the same height, that face sinks about 1 cm (the edge rounding works on it from both views)
+  and a gap opens where two parts meet (the Lance's feed box). Round parts (rings, coils): an ellipse as the front outline.
+- Lettering on a flipped front or back picture: add `unmirror` boxes with the view's name, `[x0, y0, x1, y1, "front"]`.
+- If ChatGPT draws one part wrong in one view, repair the picture from the same picture (copy a matching part) and keep the
+  script with the item (`models/arc/source/tools/fix_top_coil.py`).
 - The left/right slip: ChatGPT may draw a one-sided part (the forearm clamp) on opposite sides in the front and back views.
   Check before tracing and flip the view that disagrees with the side view.
 - Timing here (2 cores): blockout 6 s, large model 30 s, print 3.5 minutes, combat 8 s, bake 25 s.
