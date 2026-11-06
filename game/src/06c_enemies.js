@@ -13,7 +13,8 @@ function loadEnemies(){
   EMAT.esteel=MT.steel;
   EMAT.ered=new THREE.MeshBasicMaterial({color:new THREE.Color(1,.12,.05).multiplyScalar(2.2)});
   EMAT.emblem=hookWorld(new THREE.MeshStandardMaterial({map:tex('29-enemy-emblem',{clamp:true,glb:true}),transparent:true,alphaTest:.35,roughness:.55,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3}));
-  const L=new THREE.GLTFLoader(LM),jobs=Object.keys(EDEF).map(id=>new Promise(ok=>L.load('models/mech/'+EDEF[id].file+'.glb',g=>{
+  /* Ironhowl 4: machines with an m4 entry are the new FORGE models from the repo's models/ folder (printed and baked, one atlas each) */
+  const L=new THREE.GLTFLoader(LM),jobs=Object.keys(EDEF).map(id=>EDEF[id].m4?f4load(id):new Promise(ok=>L.load('models/mech/'+EDEF[id].file+'.glb',g=>{
     g.scene.traverse(o=>{if(o.isMesh){o.material=EMAT[o.material.name]||EMAT.egun;o.castShadow=o.material!==EMAT.emblem;o.receiveShadow=true;}});
     mergeParts(g.scene);ETPL[id]=g.scene;ok();},undefined,()=>ok())));
   return Promise.all(jobs).then(()=>{ENEMY_READY=true;});
@@ -56,8 +57,8 @@ function spawnEnemy(id,x,z){const d=EDEF[id],tp=ETPL[id];if(!tp)return null;
   else{e.hips=N('hips');e.torso=N('torso');e.armR=N('armR');e.armL=N('armL');e.mzR=N('mzR');e.mzL=N('mzL');
     e.legs=[-1,1].map(sd=>{const s=sd<0?'L':'R';return {thigh:N('thigh_'+s),knee:N('knee_'+s),ankle:N('ankle_'+s),sd};});e.gp=0;}
   /* each enemy gets its own copy of the armour material so it can flash when hit */
-  e.mat=EMAT.egrey.clone();e.mat.onBeforeCompile=EMAT.egrey.onBeforeCompile;e.mat.customProgramCacheKey=EMAT.egrey.customProgramCacheKey;
-  o.traverse(m=>{if(m.isMesh&&m.material===EMAT.egrey)m.material=e.mat;});
+  const base=d.amat||EMAT.egrey;e.mat=base.clone();e.mat.onBeforeCompile=base.onBeforeCompile;e.mat.customProgramCacheKey=base.customProgramCacheKey;
+  o.traverse(m=>{if(m.isMesh&&m.material===base)m.material=e.mat;});if(d.dress)d.dress(e);
   if(!Q.has('noskin'))skinify(o);   /* speed pass: one skinned mesh per material instead of one mesh per part */
   o.scale.setScalar(d.sc||1);o.position.set(x,e.y,z);o.visible=false;S.add(o);EN.push(e);
   return e;}
@@ -126,14 +127,19 @@ function updEnemies(dt){
     else if(e.d.brain){const r=e.d.brain(e,dt,dist,dx,dz,face);mvx=r[0];mvz=r[1];sp=r[2];want=r[3];}
     else if(e.id==='lancer'){const r=lancerBrain(e,dt,dist,dx,dz);mvx=r[0];mvz=r[1];sp=r[2];want=face;}
     else if(e.id==='skitter'){
-      if(dist>2.8){const nd=navDir(e.x,e.z);mvx=nd[0];mvz=nd[1];want=Math.atan2(-mvx,-mvz);
+      if(e.st==='hop'){/* IH4: after a zap it springs back a few metres, then comes again (gives you a moment to shoot it) */
+        mvx=-dx/dist;mvz=-dz/dist;sp=e.d.speed*.85;want=face;if(e.t>.5){e.st='move';e.t=0;}}
+      else if(dist>2.8){const nd=navDir(e.x,e.z);mvx=nd[0];mvz=nd[1];want=Math.atan2(-mvx,-mvz);
         const s=Math.sin(e.t*3+e.phase)*.5;mvx+=-nd[1]*s;mvz+=nd[0]*s;}
-      else if(e.cd<=0&&!P.dead){e.cd=1;hurtPlayer(4,e.x,e.z);sZap();sparks(lerp(e.x,P.x,.6),e.y+1.2,lerp(e.z,P.z,.6),6,[.6,.85,1]);}
+      else if(e.cd<=0&&!P.dead){e.cd=1.2;e.st='hop';e.t=0;hurtPlayer(e.d.zap||4,e.x,e.z);sZap();sparks(lerp(e.x,P.x,.6),e.y+1.2,lerp(e.z,P.z,.6),6,[.6,.85,1]);}
     }else if(e.id==='hound'){
-      if(e.st==='move'){const nd=navDir(e.x,e.z);mvx=nd[0];mvz=nd[1];want=Math.atan2(-mvx,-mvz);if(dist<20&&dist>6&&e.cd<=0&&los(e.x,e.z)){e.st='aim';e.t=0;}}
+      if(e.st==='move'){if(dist<6.5+e.d.r){/* IH4: too close to charge, so back off to one side facing you, then come again (it used to cling) */
+          mvx=-dx/dist-dz/dist*e.strafe*.8;mvz=-dz/dist+dx/dist*e.strafe*.8;want=face;}
+        else{const nd=navDir(e.x,e.z);mvx=nd[0];mvz=nd[1];want=Math.atan2(-mvx,-mvz);}
+        if(dist<20+e.d.r&&dist>6+e.d.r&&e.cd<=0&&los(e.x,e.z)){e.st='aim';e.t=0;}}
       else if(e.st==='aim'){sp=0;want=face;if(e.t>.75){e.st='charge';e.t=0;e.cx=dx/dist;e.cz=dz/dist;sHowl();}}
       else if(e.st==='charge'){mvx=e.cx;mvz=e.cz;sp=26;want=Math.atan2(-mvx,-mvz);
-        if(!P.dead&&dist<e.d.r+RAD+.4&&P.y-hgt(P.x,P.z)<1.6&&!e.hitDone){e.hitDone=true;hurtPlayer(18,e.x,e.z);P.vx+=e.cx*9;P.vz+=e.cz*9;}
+        if(!P.dead&&dist<e.d.r+RAD+.4&&P.y-hgt(P.x,P.z)<1.6&&!e.hitDone){e.hitDone=true;hurtPlayer(e.d.bite||18,e.x,e.z);P.vx+=e.cx*9;P.vz+=e.cz*9;}
         if(e.t>1.1){e.st='rest';e.t=0;e.hitDone=false;}}
       else{sp=1.5;mvx=dx/dist;mvz=dz/dist;if(e.t>1.3){e.st='move';e.cd=1.2+Math.random();}}
     }else{/* gunner: hold 24-42 m, strafe, shoot bursts when it can see you */
@@ -142,10 +148,10 @@ function updEnemies(dt){
       else if(dist<24){mvx=-dx/dist;mvz=-dz/dist;}
       else{mvx=-dz/dist*e.strafe;mvz=dx/dist*e.strafe;sp*=.7;}
       want=face;
-      if(seen&&dist<55&&e.cd<=0&&!P.dead){e.burst=3;e.cd=2.4+Math.random();e.bt=0;}
+      if(seen&&dist<55&&e.cd<=0&&!P.dead){e.burst=e.d.burst||3;e.cd=2.4+Math.random();e.bt=0;}
       if(e.burst>0){e.bt-=dt;if(e.bt<=0){e.bt=.18;e.burst--;const mz=e.burst%2?e.mzR:e.mzL;mz.getWorldPosition(_w);
         const lead=dist/30*.6,tx=P.x+P.vx*lead,ty=P.y+3.2,tz=P.z+P.vz*lead;let ax=tx-_w.x,ay=ty-_w.y,az=tz-_w.z;const l=Math.hypot(ax,ay,az)||1;
-        EBOLTS.push({x:_w.x,y:_w.y,z:_w.z,vx:ax/l*30,vy:ay/l*30,vz:az/l*30,life:2.4,dmg:8});sEShot();part({x:_w.x,y:_w.y,z:_w.z,vx:0,vy:0,vz:0,life:.08,s0:1.2,s1:.5,a:2,col:[1,.3,.1],glow:true});}}
+        EBOLTS.push({x:_w.x,y:_w.y,z:_w.z,vx:ax/l*30,vy:ay/l*30,vz:az/l*30,life:2.4,dmg:e.d.bolt||8});sEShot();part({x:_w.x,y:_w.y,z:_w.z,vx:0,vy:0,vz:0,life:.08,s0:1.2,s1:.5,a:2,col:[1,.3,.1],glow:true});}}
     }
     /* move with separation from other machines, trunk collisions and knockback */
     for(const o of EN){if(o===e||o.dead||o.spawnT>0)continue;const ox=e.x-o.x,oz=e.z-o.z,rr=e.d.r+o.d.r,d2=ox*ox+oz*oz;if(d2<rr*rr&&d2>1e-4){const d=Math.sqrt(d2);mvx+=ox/d*(rr-d)/rr*1.5;mvz+=oz/d*(rr-d)/rr*1.5;}}

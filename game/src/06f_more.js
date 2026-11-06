@@ -27,11 +27,15 @@ function makeSpawner(x,z){const y=hgt(x,z),g=new THREE.Group();g.position.set(x,
     eye:new THREE.SphereGeometry(.5,12,8),fin:new THREE.BoxGeometry(.3,1.6,1.4)};
   const glow=new THREE.MeshBasicMaterial({color:new THREE.Color(1,.12,.05).multiplyScalar(3)}),arm=tmat('54-forge-armour',{rep:[2,1]}),gm=tmat('24-gunmetal');
   const add=(geo,m,px,py,pz,ry)=>{const o=new THREE.Mesh(geo,m);o.position.set(px,py,pz);o.rotation.y=ry||0;o.castShadow=o.receiveShadow=m!==glow;g.add(o);return o;};
-  add(POD_GEO.base,gm,0,.4,0);const shell=add(POD_GEO.shell,arm,0,.8,0);add(POD_GEO.ring,glow,0,.9,0);const eye=add(POD_GEO.eye,glow,0,3.1,0);
-  for(let i=0;i<4;i++){const a=i/4*TAU+.4;add(POD_GEO.fin,gm,Math.sin(a)*2.3,1.4,Math.cos(a)*2.3,a);}
+  const base=add(POD_GEO.base,gm,0,.4,0),shell=add(POD_GEO.shell,arm,0,.8,0),ring=add(POD_GEO.ring,glow,0,.9,0);const eye=add(POD_GEO.eye,glow,0,3.1,0);
+  const fins=[0,1,2,3].map(i=>{const a=i/4*TAU+.4;return add(POD_GEO.fin,gm,Math.sin(a)*2.3,1.4,Math.cos(a)*2.3,a);});
   S.add(g);addBox(x-2.6,z-2.6,x+2.6,z+2.6,3);
-  return addTarget({x,z,y,hpMax:320,spheres:[[x,y+1.6,z,2.8]],obj:g,spawn:2+Math.random()*3,eye,glow,
-    die(){glow.color.setRGB(.12,.02,.01);shell.scale.y=.45;eye.visible=false;}});}
+  const t=addTarget({x,z,y,hpMax:320,spheres:[[x,y+1.8,z,2.6],[x,y+4.3,z,1.7]],obj:g,spawn:2+Math.random()*3,eye,glow,
+    die(){glow.color.setRGB(.12,.02,.01);shell.scale.y=.45;eye.visible=false;
+      if(t.pod){t.pod.position.y=-.8;t.pod.rotation.z=.16;t.podMat.color.setScalar(.3);t.podMat.onBeforeCompile=SPOD.mat.onBeforeCompile;t.podMat.customProgramCacheKey=SPOD.mat.customProgramCacheKey||(()=>'');t.podMat.needsUpdate=true;}}});
+  /* Ironhowl 4: the FORGE spawner pod model replaces these shapes once it has loaded (06j_forge.js) */
+  if(typeof spodDress==='function')spodDress(t,g,x,z,[base,shell,ring,...fins]);
+  return t;}
 function updSpawners(dt){for(const t of MS.objs){if(t.dead||t.spawn==null)continue;t.spawn-=dt;t.eye.scale.setScalar(1+.25*Math.max(0,Math.sin(G.t*6)));
   if(t.spawn<=0){t.spawn=8.5;if(EN.filter(e=>!e.dead).length<16){for(let i=0;i<2;i++){const a=Math.random()*TAU,c=collide(t.x+Math.cos(a)*4.8,t.z+Math.sin(a)*4.8,1.3);const e=spawnEnemy('skitter',c[0],c[1]);if(e)e.spawnT=.5;}
     for(let k=0;k<10;k++)part({x:t.x,y:t.y+3,z:t.z,vx:(Math.random()-.5)*6,vy:4+Math.random()*4,vz:(Math.random()-.5)*6,life:.5,s0:1.4,s1:.3,a:1.5,col:[1,.2,.08],glow:true});}}}}

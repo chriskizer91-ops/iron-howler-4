@@ -14,10 +14,16 @@ playable at the test link.
 | Session | What gets built | What you can try at the end |
 |---|---|---|
 | 1 ✅ (6 Nov) | Ironhowl 3's engine copied in. The Wraith (combat model, 7,464 triangles) with its kit fitted by the mounts, walking on the terrain with its own leg solver. The **modification bay**: the full-detail Wraith (949,948 triangles) turnable, tap a mount, swap its kit, armory-book card per piece, loadout saved; Ironhowl 3's upgrade tracks under UPGRADES. Missiles need an MP-9 fitted. | Walk, hop and shoot the Wraith in the woods, field, docks or foundry sandbox; fit it out in the bay |
-| 2 | The new FORGE machines: Gunner, Hound, Skitter and the spawner pod in place of Ironhowl 3's, with their walk cycles and attacks; the bosses Gunner Prime, Alpha Hound, Brood Skitter | Fight the new machines in the sandbox and Endless |
+| 2 ✅ (6 Nov) | The new FORGE machines in place of Ironhowl 3's (`src/06j_forge.js`): Gunner (8,098 triangles, bird legs solved so the feet stay planted, arms aim at you), Hound (7,570, gallop, jaw, tail), Skitter (1,986), the spawner pod on mission 5's four pods (glowing seams; sinks dark when destroyed). Bosses as waves 7, 8 and 9 after Ironhowl 3's six: **Alpha Hound** (x1.7, rust red, horns and spines twice as big, 700 hp, bites for 30), **Gunner Prime** (x1.8, bone white, a heavy cannon on both arms, 1,500 hp, 6-shot bursts), **Brood Skitter** (x3, black with glowing red seams, the pod on its back prints 2 Skitters every 7 s, 900 hp), each with its name banner. Fight fixes: Hounds back off and charge again instead of clinging; Skitters spring back after a zap | Fight the new machines and the three bosses in the sandbox and Endless; mission 5's new pods |
 | 3 | The kit's own behaviours: Lance (charge, piercing rail shot), Arc (chain lightning), Watcher (radar, marks, faster lock, warnings), the assist drone (flies beside you, gun, repairs), the jet pack's 30 s hover | Every kit piece works differently in a fight |
 | 4 | The intel brief before a fight (the foes coming, full detail, turnable, with their cards); the armory book; pilot levels | Brief, fight, salvage, upgrade loop |
 | 5+ | New missions and story (someone is steering FORGE; the salvage rush), then the new places (environments, probably another chat) | The campaign |
 
-Still Ironhowl 3's for now: the machines you fight (session 2), the places, the Endless waves; the mission campaign is hidden
+Still Ironhowl 3's for now: the places, the brains (how the machines move, aim and attack, with the two fixes above); the mission campaign is hidden
 until Ironhowl 4's own missions are written.
+
+## Testing (for Claude)
+With `?dev` the page has `window.__ih3` (Ironhowl 3's test hooks: `ff(t)` runs the game t seconds without drawing, `ctl()`,
+`showcase()`, `info()`) and `window.__ih4` (`wave(n)` starts wave n+1, `face(e)` turns the Wraith so the crosshair is on a
+machine, `look(e,ang,d,h)` points the camera at one, `st()` the fight state). `window.__freeze=true` stops the game clock so
+only `ff()` moves it. `?map=field&nodress` is the quickest place to test.

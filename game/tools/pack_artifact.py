@@ -1,12 +1,13 @@
 """Make the test build of Ironhowl 4 for a claude.ai artifact (the host serves web file types only, so every .glb goes in as a
 gzip-compressed, base64 .glb.json, and a small shim in the page unpacks it). The game itself is unchanged.
 usage: python3 game/tools/pack_artifact.py <repo> <outdir>
-Writes outdir/: index.html, js/, art/, models/ (Ironhowl 3's places and machines) and m4/ (the Wraith and its kit from models/)."""
+Writes outdir/: index.html, js/, art/, models/ (Ironhowl 3's places and machines) and m4/ (the Wraith, its kit and the FORGE machines from models/)."""
 import os, sys, gzip, base64, json, shutil
 repo, out = sys.argv[1], sys.argv[2]
 G = os.path.join(repo, 'game')
 IH4 = {'wraith-v2-hd': ['wraith_v2'], 'autocannon': ['ac_L', 'ac_R'], 'lance': ['ln_L', 'ln_R'], 'arc': ['ar_L', 'ar_R'],
        'mpod': ['mpod'], 'watcher': ['watcher'], 'jetpack': ['jetpack'], 'drone': ['drone']}
+FOES = {'fgunner': 'fgunner', 'fhound': 'fhound', 'fskitter': 'fskitter', 'spod': 'spod'}   # the FORGE machines: field files only
 ORM = {'autocannon': 'ac_combat_orm', 'lance': 'ln_combat_orm', 'arc': 'ar_combat_orm'}
 n = 0; size = 0
 def put(src, rel):
@@ -27,6 +28,9 @@ for d, stems in IH4.items():
             put(os.path.join(repo, 'models', d, f), 'm4/%s/%s' % (d, f))
         o = ORM.get(d, st + '_combat_orm') + '.webp'
         if not os.path.exists(os.path.join(out, 'm4', d, o)): put(os.path.join(repo, 'models', d, o), 'm4/%s/%s' % (d, o))
+for d, st in FOES.items():
+    for f in (st + '_combat.glb', st + '_combat_albedo.webp', st + '_combat_normal.webp', st + '_combat_orm.webp'):
+        put(os.path.join(repo, 'models', d, f), 'm4/%s/%s' % (d, f))
 put(os.path.join(G, 'js', 'three-ih3.min.js'), 'js/three-ih3.min.js'); put(os.path.join(G, 'js', 'ironhowl4.js'), 'js/ironhowl4.js')
 shim = """<script>/* test build: models come as .glb.json (gzip + base64); unpack them for the GLTF loader */
 window.IH4_MODELS='m4/';
