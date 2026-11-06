@@ -1,3 +1,7 @@
 build/
 __pycache__/
 *.blend1
+viewer/*.glb
+viewer/*_glb.txt
+viewer/draco_decoder.js
+viewer/ref_*.jpg

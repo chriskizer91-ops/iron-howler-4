@@ -22,6 +22,10 @@ The workflow:
 | Triangles | **735,664** | **735,664** |
 | Texture | – | `textures/wraith_projected_4096.png` (+ `_confidence.png`: white = taken from the sheet, black = filled) |
 
+`viewer/index.html` is an interactive before/after viewer. It shows a synchronized orbit view,
+plus Front, Side and Rear ortho views on the sheet's pixel grid with a reference-overlay slider.
+Build its assets with `viewer/make_viewer_assets.sh`, then serve the folder over http.
+
 Scale: 1 sheet pixel = 0.02 m, so the mech stands about 10.1 m tall. It faces −Y in
 Blender (−Z in glTF), with its left side on +X.
 

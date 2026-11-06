@@ -1,0 +1,386 @@
+<title>Wraith Fresh Build</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a hangar inspection bay — compact spec header, one wide viewer split into BEFORE | AFTER bays, controls rail beneath, short notes. */
+:root {
+  --bg: #e7e8eb;
+  --panel: #f4f4f6;
+  --ink: #1b1d22;
+  --muted: #5d6270;
+  --line: #c9ccd3;
+  --bay: #d7d9de;
+  --accent: #c8621a;      /* Wraith paint orange */
+  --accent-ink: #ffffff;
+  --glow: #f2a541;
+  --font-display: "Chakra Petch", "Arial Narrow", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171b; --panel: #1d2026; --ink: #e9eaee; --muted: #a2a7b3; --line: #343842;
+    --bay: #23262d; --accent: #e07a2c; --accent-ink: #15171b; --glow: #f2a541; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171b; --panel: #1d2026; --ink: #e9eaee; --muted: #a2a7b3; --line: #343842;
+  --bay: #23262d; --accent: #e07a2c; --accent-ink: #15171b; --glow: #f2a541; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+.title { display: grid; gap: 2px; min-width: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(26px, 4vw, 38px); line-height: 1.05; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+h1 .num { color: var(--accent); }
+.specs { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.specs b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.viewer { position: relative; height: clamp(440px, 72vh, 860px); border: 1px solid var(--line); background: var(--bay); overflow: hidden; touch-action: none; }
+.viewer canvas { display: block; width: 100%; height: 100%; outline: none; }
+.viewer:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bay-label { position: absolute; top: 10px; font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; padding: 3px 8px; background: var(--panel); border: 1px solid var(--line); pointer-events: none; }
+.bay-label small { font-family: var(--font-mono); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); margin-left: 6px; }
+.bay-status { position: absolute; font-family: var(--font-mono); font-size: 12px; color: var(--muted); pointer-events: none; transform: translate(-50%, -50%); text-align: center; }
+.divider { position: absolute; background: var(--line); pointer-events: none; }
+.hint { position: absolute; right: 10px; bottom: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); pointer-events: none; }
+
+.rail { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); }
+.group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.group > .lab { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); }
+.seg button { font: 600 13px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink); background: transparent; border: 0; padding: 9px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.seg button:focus-visible, input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg button:disabled { opacity: .45; cursor: default; }
+input[type=range] { accent-color: var(--accent); width: 160px; max-width: 40vw; }
+.val { font-family: var(--font-mono); font-size: 12px; color: var(--muted); min-width: 3.5em; font-variant-numeric: tabular-nums; }
+
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px 28px; }
+.notes section { min-width: 0; }
+.notes h2 { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 4px; }
+.notes p { margin: 0; color: var(--muted); max-width: 62ch; }
+.notes code { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="title">
+      <span class="eyebrow">Ironhowl 3 · Sheet 90 · Recon Support</span>
+      <h1>Wraith <span class="num">09</span> fresh build</h1>
+    </div>
+    <div class="specs" aria-label="Model stats">
+      <span>Triangles <b>735,664</b></span>
+      <span>Silhouette IoU <b>front 0.952 · side 0.975</b></span>
+      <span>Height <b>10.1 m</b></span>
+      <span>Bake <b>4096² (2048² here)</b></span>
+    </div>
+  </header>
+
+  <div class="viewer" id="viewer" tabindex="0" aria-label="3D viewer. Drag to orbit, scroll or pinch to zoom.">
+    <canvas id="c"></canvas>
+    <div class="divider" id="divider"></div>
+    <div class="bay-label" id="labA">Before <small>blank model</small></div>
+    <div class="bay-label" id="labB">After <small>sheet projected + baked</small></div>
+    <div class="bay-status" id="stA">Loading blank model…</div>
+    <div class="bay-status" id="stB">Loading projected model…</div>
+    <div class="hint" id="hint">drag to orbit · scroll to zoom · right-drag to pan</div>
+  </div>
+
+  <div class="rail" role="toolbar" aria-label="Viewer controls">
+    <div class="group">
+      <span class="lab">View</span>
+      <div class="seg" id="views">
+        <button type="button" id="v-orbit" data-view="orbit" aria-pressed="true">3/4 orbit</button>
+        <button type="button" id="v-front" data-view="front" aria-pressed="false">Front</button>
+        <button type="button" id="v-side" data-view="side" aria-pressed="false">Side</button>
+        <button type="button" id="v-rear" data-view="rear" aria-pressed="false">Rear</button>
+      </div>
+    </div>
+    <div class="group">
+      <label class="lab" for="ov">Sheet overlay</label>
+      <input type="range" id="ov" min="0" max="100" value="0" step="1" disabled>
+      <span class="val" id="ovv">off</span>
+    </div>
+    <div class="group">
+      <span class="lab">After shading</span>
+      <div class="seg" id="shade">
+        <button type="button" id="s-lit" data-shade="lit" aria-pressed="true">Lit</button>
+        <button type="button" id="s-tex" data-shade="tex" aria-pressed="false">Texture only</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <section>
+      <h2>Front · Side · Rear</h2>
+      <p>These views use orthographic cameras on the sheet's exact pixel grid (1 px = 2 cm). Raise <em>Sheet overlay</em> to lay the original drawing over both models and check the match.</p>
+    </section>
+    <section>
+      <h2>What to expect</h2>
+      <p>Front and side match closely. The rear drawing disagrees with the front (wider stance, two ears), so its colours are warped onto the model at bake time. Tops and inner faces aren't visible in any view, so they take the nearest sheet tone.</p>
+    </section>
+    <section>
+      <h2>Files</h2>
+      <p><code>wraith-fresh/models/</code> has the full-resolution GLBs and <code>blender/</code> the .blend files. The rebuild pipeline is <code>scripts/run_all.sh</code>.</p>
+    </section>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const PX = 0.02;                       // metres per sheet pixel
+const ZC = (519.5 - 260) * PX;         // vertical centre of the sheet crops (glTF +Y)
+// sheet crops: width in px, camera centre, overlay plane placement (glTF coords, Y-up, mech faces +Z)
+const VIEWS = {
+  front: { w: 360, h: 520, img: 'ref_front.jpg', pos: [(520 - 518) * PX, ZC, 80],  look: [(520 - 518) * PX, ZC, 0], plane: [(520 - 518) * PX, ZC, 30],  rotY: 0 },
+  side:  { w: 290, h: 520, img: 'ref_side.jpg',  pos: [80, ZC, -(935 - 930) * PX], look: [0, ZC, -(935 - 930) * PX], plane: [30, ZC, -(935 - 930) * PX], rotY: Math.PI / 2 },
+  rear:  { w: 400, h: 520, img: 'ref_rear.jpg',  pos: [(1382 - 1390) * PX, ZC, -80], look: [(1382 - 1390) * PX, ZC, 0], plane: [(1382 - 1390) * PX, ZC, -30], rotY: Math.PI },
+};
+
+const viewer = document.getElementById('viewer');
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+renderer.setScissorTest(true);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envTex = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+function makeScene() {
+  const s = new THREE.Scene();
+  s.environment = envTex;
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x3a3d44, 0.55); s.add(hemi);
+  const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(-6, 14, 10); s.add(key);
+  const rim = new THREE.DirectionalLight(0xdfe8ff, 0.9); rim.position.set(8, 9, -10); s.add(rim);
+  // soft ground disc
+  const gc = document.createElement('canvas'); gc.width = gc.height = 256;
+  const g = gc.getContext('2d');
+  const grad = g.createRadialGradient(128, 128, 10, 128, 128, 128);
+  grad.addColorStop(0, 'rgba(0,0,0,0.38)'); grad.addColorStop(0.55, 'rgba(0,0,0,0.12)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+  const gt = new THREE.CanvasTexture(gc);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(11, 9), new THREE.MeshBasicMaterial({ map: gt, transparent: true, depthWrite: false }));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = 0.005; ground.renderOrder = -1; s.add(ground);
+  s.userData.ground = ground;
+  return s;
+}
+const sceneA = makeScene(), sceneB = makeScene();
+
+// overlay planes (one per view per scene) carrying the sheet crops
+const texLoader = new THREE.TextureLoader();
+const overlays = [];
+for (const [name, v] of Object.entries(VIEWS)) {
+  const tex = texLoader.load(v.img, () => requestRender());
+  tex.colorSpace = THREE.SRGBColorSpace;
+  for (const s of [sceneA, sceneB]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(v.w * PX, v.h * PX),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthTest: false, depthWrite: false, toneMapped: false }));
+    m.position.set(...v.plane); m.rotation.y = v.rotY; m.renderOrder = 999; m.visible = false;
+    m.userData.view = name; s.add(m); overlays.push(m);
+  }
+}
+
+// cameras + controls
+const persp = new THREE.PerspectiveCamera(32, 1, 0.1, 400);
+const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
+let camera = persp;
+const controls = new OrbitControls(persp, viewer);
+controls.target.set(0, 5.0, 0);
+controls.enableDamping = true; controls.dampingFactor = 0.12;
+controls.minDistance = 4; controls.maxDistance = 70;
+const orthoControls = new OrbitControls(ortho, viewer);
+orthoControls.enableRotate = false; orthoControls.enabled = false;
+orthoControls.screenSpacePanning = true;
+function homeOrbit() {
+  const az = -32 * Math.PI / 180, el = 10 * Math.PI / 180, d = 27;
+  persp.position.set(Math.sin(az) * Math.cos(el) * d, 5.0 + Math.sin(el) * d, Math.cos(az) * Math.cos(el) * d);
+  controls.target.set(0, 5.0, 0); controls.update();
+}
+homeOrbit();
+
+let view = 'orbit';
+let layout = { split: 'h', panes: [] };
+function computeLayout() {
+  const r = viewer.getBoundingClientRect();
+  const W = r.width, H = r.height;
+  const stacked = W < 720;
+  const panes = stacked
+    ? [{ x: 0, y: 0, w: W, h: H / 2 }, { x: 0, y: H / 2, w: W, h: H / 2 }]
+    : [{ x: 0, y: 0, w: W / 2, h: H }, { x: W / 2, y: 0, w: W / 2, h: H }];
+  layout = { stacked, panes, W, H };
+  const d = document.getElementById('divider');
+  if (stacked) Object.assign(d.style, { left: '0', top: (H / 2) + 'px', width: '100%', height: '1px' });
+  else Object.assign(d.style, { left: (W / 2) + 'px', top: '0', width: '1px', height: '100%' });
+  const la = document.getElementById('labA'), lb = document.getElementById('labB');
+  la.style.left = '10px'; la.style.top = '10px';
+  lb.style.left = (panes[1].x + 10) + 'px'; lb.style.top = (panes[1].y + 10) + 'px';
+  const sa = document.getElementById('stA'), sb = document.getElementById('stB');
+  sa.style.left = (panes[0].x + panes[0].w / 2) + 'px'; sa.style.top = (panes[0].y + panes[0].h / 2) + 'px';
+  sb.style.left = (panes[1].x + panes[1].w / 2) + 'px'; sb.style.top = (panes[1].y + panes[1].h / 2) + 'px';
+}
+function fitOrtho() {
+  const v = VIEWS[view]; if (!v) return;
+  const p = layout.panes[0]; const aspect = p.w / p.h;
+  const hw = v.w * PX / 2, hh = v.h * PX / 2;
+  let halfW, halfH;
+  if (aspect > hw / hh) { halfH = hh * 1.03; halfW = halfH * aspect; } else { halfW = hw * 1.03; halfH = halfW / aspect; }
+  ortho.left = -halfW; ortho.right = halfW; ortho.top = halfH; ortho.bottom = -halfH;
+  ortho.zoom = 1; ortho.position.set(...v.pos); ortho.up.set(0, 1, 0);
+  orthoControls.target.set(...v.look); ortho.lookAt(...v.look); ortho.updateProjectionMatrix();
+  orthoControls.update();
+}
+function resize() {
+  const r = viewer.getBoundingClientRect();
+  renderer.setSize(r.width, r.height, false);
+  computeLayout();
+  const p = layout.panes[0];
+  persp.aspect = p.w / p.h; persp.updateProjectionMatrix();
+  if (view !== 'orbit') fitOrtho();
+  requestRender();
+}
+new ResizeObserver(resize).observe(viewer);
+
+// colours from the theme tokens
+function bayColor() { return new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--bay').trim() || '#d7d9de'); }
+let clear = bayColor();
+const mq = window.matchMedia('(prefers-color-scheme: dark)');
+const reTheme = () => { clear = bayColor(); requestRender(); };
+mq.addEventListener?.('change', reTheme);
+new MutationObserver(reTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// models
+// load embedded textures through <img> (blob: image URLs) instead of fetch(), which strict sandboxes refuse
+try { window.createImageBitmap = undefined; } catch (e) {}
+const draco = new DRACOLoader();
+draco.setDecoderPath('./');
+draco.setDecoderConfig({ type: 'js' });
+const loader = new GLTFLoader(); loader.setDRACOLoader(draco);
+let afterMats = [];
+function onModel(g, scene, statusEl) {
+  scene.add(g.scene); statusEl.hidden = true;
+  g.scene.traverse((o) => { if (o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.envMapIntensity = 0.55; }); });
+  if (scene === sceneB) {
+    g.scene.traverse((o) => {
+      if (o.isMesh) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach((m) => afterMats.push({ mesh: o, lit: m, flat: new THREE.MeshBasicMaterial({ map: m.map || null, color: m.map ? 0xffffff : m.color, toneMapped: false }) }));
+      }
+    });
+    applyShade();
+  }
+  requestRender();
+}
+// the GLBs ship as base64 text files; fetch, decode, then hand the bytes to GLTFLoader
+async function load(url, scene, statusEl, label) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    const total = Number(res.headers.get('content-length')) || 0;
+    let text;
+    if (res.body && total) {
+      const reader = res.body.getReader(); const parts = []; let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read(); if (done) break;
+        parts.push(value); got += value.length;
+        statusEl.textContent = `Loading ${label}… ${(got / 1e6 * 0.75).toFixed(1)} / ${(total / 1e6 * 0.75).toFixed(1)} MB`;
+      }
+      text = new TextDecoder().decode(await new Blob(parts).arrayBuffer());
+    } else text = await res.text();
+    statusEl.textContent = `Decoding ${label}…`;
+    const bin = atob(text.trim());
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    loader.parse(bytes.buffer, './', (g) => onModel(g, scene, statusEl),
+      (err) => { statusEl.textContent = `Couldn't read the ${label}. Reload the page to try again.`; console.error(err); });
+  } catch (err) {
+    statusEl.textContent = `Couldn't load the ${label}. Reload the page to try again.`; console.error(err);
+  }
+}
+load('before_glb.txt', sceneA, document.getElementById('stA'), 'blank model');
+load('after_glb.txt', sceneB, document.getElementById('stB'), 'projected model');
+
+// shading toggle for the after model
+let shade = 'lit';
+function applyShade() {
+  const byMesh = new Map();
+  for (const r of afterMats) { if (!byMesh.has(r.mesh)) byMesh.set(r.mesh, []); byMesh.get(r.mesh).push(r); }
+  for (const [mesh, rs] of byMesh) {
+    const pick = rs.map((r) => (shade === 'lit' ? r.lit : r.flat));
+    mesh.material = Array.isArray(mesh.material) ? pick : pick[0];
+  }
+  requestRender();
+}
+document.getElementById('shade').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  shade = b.dataset.shade;
+  for (const x of document.querySelectorAll('#shade button')) x.setAttribute('aria-pressed', String(x === b));
+  applyShade();
+});
+
+// view presets + overlay
+const ov = document.getElementById('ov'), ovv = document.getElementById('ovv');
+function applyOverlay() {
+  const a = Number(ov.value) / 100;
+  for (const m of overlays) { m.visible = view !== 'orbit' && m.userData.view === view && a > 0; m.material.opacity = a; }
+  ovv.textContent = view === 'orbit' ? 'off' : `${ov.value}%`;
+  requestRender();
+}
+ov.addEventListener('input', applyOverlay);
+function setView(v) {
+  view = v;
+  for (const x of document.querySelectorAll('#views button')) x.setAttribute('aria-pressed', String(x.dataset.view === v));
+  const isOrtho = v !== 'orbit';
+  camera = isOrtho ? ortho : persp;
+  controls.enabled = !isOrtho; orthoControls.enabled = isOrtho;
+  for (const s of [sceneA, sceneB]) s.userData.ground.visible = !isOrtho;
+  ov.disabled = !isOrtho;
+  if (isOrtho) { if (ov.value === '0') ov.value = '50'; fitOrtho(); } else homeOrbit();
+  document.getElementById('hint').textContent = isOrtho ? 'sheet-matched ortho · scroll to zoom · right-drag to pan' : 'drag to orbit · scroll to zoom · right-drag to pan';
+  applyOverlay();
+}
+document.getElementById('views').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.view); });
+
+// render on demand
+let pending = false;
+function requestRender() { if (!pending) { pending = true; requestAnimationFrame(frame); } }
+controls.addEventListener('change', requestRender);
+orthoControls.addEventListener('change', requestRender);
+function frame() {
+  pending = false;
+  const moving = (controls.enabled && controls.update()) || (orthoControls.enabled && orthoControls.update());
+  const H = layout.H;
+  [[sceneA, layout.panes[0]], [sceneB, layout.panes[1]]].forEach(([s, p]) => {
+    const y = H - p.y - p.h;   // WebGL origin is bottom-left
+    renderer.setViewport(p.x, y, p.w, p.h); renderer.setScissor(p.x, y, p.w, p.h);
+    renderer.setClearColor(clear, 1); renderer.clear();
+    renderer.render(s, camera);
+  });
+  if (moving) requestRender();
+}
+resize();
+</script>
