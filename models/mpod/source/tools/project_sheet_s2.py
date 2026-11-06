@@ -1,8 +1,8 @@
-"""Session 2 copy of pipeline/project_sheet.py. Two changes: "power" in the print settings (default 3, the pipeline's) sets
-how strongly the most square-on view wins where two views see a rounded surface (higher = less cross-fading of two
-different pictures). And "alpha" in the print settings (default 0.35, the pipeline's value)
-sets how squarely a view must see a surface before its picture fully replaces the fallback tint. Kit pieces use 0.1, so faces a
-picture sees at a steep angle (an open door's inside, seen from the front) keep the picture's colour instead of fading to grey.
+"""Session 2 copy of pipeline/project_sheet.py (v2.2), with two print settings added:
+  "alpha" (default 0.35, the pipeline's): how squarely a view must see a surface before its picture fully replaces the fill.
+    Kit pieces use 0.1, so faces a picture sees at a steep angle (an open door's inside) keep the picture's colour.
+  "power" (default 3, the pipeline's): how strongly the most square-on view wins where two views see a rounded surface
+    (higher = less cross-fading of two different pictures). Coverage (alpha) is still measured with the pipeline's power 3.
 Paint a concept sheet (or any front / side / rear picture set that lines up with the model) onto the combat model's
 colour atlas. Every texel of the atlas knows where it sits on the model; it takes its colour from the view that looks
 at it most squarely and can actually see it (nothing in front of it). Texels no view sees keep the baked colour.
@@ -94,12 +94,13 @@ def view_uvd(v, p, m):
     if v == 'top': return m['cu'] + x * m['ppm'], m['vg'] - y * m['ppm'], -z      # v2.1: looking straight down, front at the top
     return m['cu'] + x * m['ppm'], vv, y
 
-UNMIRROR = []      # picture boxes (x0, y0, x1, y1) on the side view holding text
+UNMIRROR = []      # picture boxes (x0, y0, x1, y1[, view]) holding text: by default on the side view, flipped for the other side
 TOCAM = {'front': (0, 1, 0), 'side': (-1, 0, 0), 'sideR': (1, 0, 0), 'rear': (0, -1, 0), 'top': (0, 0, 1)}
 SRC = {'front': 'front', 'side': 'side', 'sideR': 'side', 'rear': 'rear', 'top': 'top'}
 SIDE_IS_RIGHT = [False]
+FILL = ['tint']
 ALPHA = [.35]
-POWER = [3.0]       # session 2: how strongly the most square-on view wins where two views see a surface (print setting "power")
+POWER = [3.0]      # how surfaces no picture sees are coloured: 'tint' (the Wraith) or 'nearest' (v2.1 items)
 
 def register(P, SM, H, search=30):
     """the scale from the side picture's height, then per view the sideways shift that overlaps the outlines best"""
@@ -188,6 +189,7 @@ def views_sources(I):
         mv = VJ['view'][v]
         out[v] = dict(img=img, mask=mask, m=dict(ppm=VJ['ppm'], cu=mv['cu'], vg=mv.get('vg', mv.get('cv')), crop=tuple(b), iou=1.0))
     SIDE_IS_RIGHT[0] = VJ['view'].get('side', {}).get('is') == 'right'
+    FILL[0] = I.get('fill', 'nearest')
     return out
 
 def sheet_sources(img_path, boxes_path, P, H, mapping=None):
@@ -220,15 +222,16 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
         px = np.clip(((tu - crop[0]) * k).astype(int), 0, W * k - 1); py = np.clip(((tv - crop[1]) * k).astype(int), 0, Hh * k - 1)
         vis = td <= zb[py, px] + eps
         f = tn @ np.array(TOCAM[v], float); w = np.where(vis & (f > .05), np.clip(f, 0, 1) ** power, 0)
-        wcov += np.where(vis & (f > .05), np.clip(f, 0, 1) ** 3, 0)      # session 2: how well the pictures cover it (as the pipeline measures)
-        if v == ('side' if SIDE_IS_RIGHT[0] else 'sideR'):      # numbers painted on the shown side would read backwards on the other side: flip them back
-            for x0_, y0_, x1_, y1_ in UNMIRROR:
-                inb = (tu >= x0_) & (tu <= x1_) & (tv >= y0_) & (tv <= y1_); tu = np.where(inb, x0_ + x1_ - tu, tu)
+        wcov += np.where(vis & (f > .05), np.clip(f, 0, 1) ** 3, 0)      # session 2: coverage measured as the pipeline does
+        for b_ in UNMIRROR:     # numbers painted on the shown side would read backwards on the other side: flip them back
+            x0_, y0_, x1_, y1_ = b_[:4]                        # a 5th entry names another view (a front or back picture that was flipped)
+            if v != (b_[4] if len(b_) > 4 else ('side' if SIDE_IS_RIGHT[0] else 'sideR')): continue
+            inb = (tu >= x0_) & (tu <= x1_) & (tv >= y0_) & (tv <= y1_); tu = np.where(inb, x0_ + x1_ - tu, tu)
         src = filled(SR[SRC[v]]['img'], SR[SRC[v]]['mask'], crop)
         col = bilinear(src, tu - crop[0], tv - crop[1])
         acc += col * w[:, None]; wsum += w; who[:, j] = w
         print(v, 'paints', int((w > .2).sum()), 'texels', flush=True)
-    del tp, tn
+    del tn
     base = np.asarray(Image.open(base_albedo).convert('RGB')).astype(np.float32)
     if base.shape[0] != size: base = np.asarray(Image.fromarray(base.astype(np.uint8)).resize((size, size), Image.LANCZOS)).astype(np.float32)
     out = base.copy(); alpha = np.clip(wcov / ALPHA[0], 0, 1)[:, None]
@@ -251,6 +254,15 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
         if sat(c) >= .35: tgt = paint * (lum(c) / max(1, lum(paint))) ** .3
         else: tgt = metal_c * np.clip(lum(c) / max(1, grey_l), .5, 1.8)
         tinted[sel] = bt[sel] * np.clip(tgt / np.maximum(4, c), .2, 3)
+    if FILL[0] == 'nearest':     # v2.1: surfaces no picture sees (tops, bottoms) take the colour of the nearest painted surface
+        from scipy.spatial import cKDTree
+        good = alpha[:, 0] > .8
+        if good.sum() > 100 and (~good).any():
+            gi = np.where(good)[0]
+            if len(gi) > 150000: gi = np.random.default_rng(1).choice(gi, 150000, replace=False)     # a sample is plenty, and fast
+            d_, j_ = cKDTree(tp[gi], balanced_tree=False, compact_nodes=False).query(tp[~good], k=4, workers=-1)
+            tinted[~good] = proj[gi][j_].mean(1)
+    del tp
     out[idx] = tinted * (1 - alpha) + proj * alpha
     # 3. spread the painted colour into the gaps between atlas islands (no seams when the texture is shrunk)
     dist, (iy, ix) = ndimage.distance_transform_edt(~cov, return_indices=True)
