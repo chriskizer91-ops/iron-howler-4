@@ -14,29 +14,37 @@ canvas{position:fixed;inset:0;display:block;width:100%;height:100%}
 #stats b{color:#fff;font-weight:700}
 .bar{position:fixed;left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:4px;border-radius:999px;background:#0c0e11cc;border:1px solid #ffffff1a;backdrop-filter:blur(8px)}
 #bar{bottom:calc(env(safe-area-inset-bottom,0px) + 18px)}
-#liv{bottom:calc(env(safe-area-inset-bottom,0px) + 70px);max-width:calc(100vw - 24px);overflow-x:auto;scrollbar-width:none}#liv::-webkit-scrollbar{display:none}
+#liv{bottom:calc(env(safe-area-inset-bottom,0px) + 70px)}
+#pick{bottom:calc(env(safe-area-inset-bottom,0px) + 116px)}
+#liv,#pick{max-width:calc(100vw - 24px);overflow-x:auto;scrollbar-width:none}#liv::-webkit-scrollbar,#pick::-webkit-scrollbar{display:none}
 .bar button{all:unset;cursor:pointer;padding:9px 18px;border-radius:999px;color:#ffffffa0;font-size:12px;letter-spacing:.14em;white-space:nowrap}
-#liv button{padding:7px 13px;font-size:11px}
+#liv button,#pick button{padding:7px 13px;font-size:11px}
 .bar button.on{background:var(--acc,#ffb347);color:#140c08}
 #load{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#ffffffa0;font-size:11px;letter-spacing:.2em;pointer-events:none}
 #load .t{width:min(240px,60vw);height:3px;background:#ffffff1a;border-radius:2px;overflow:hidden}#lb{height:100%;width:0;background:var(--acc,#ffb347);transition:width .15s}
 </style></head><body>
 <canvas id="gl"></canvas>
 <div id="top"><div id="name"><span id="nm">WRAITH</span><small id="sub"></small></div><div id="stats"></div></div>
+<div id="pick" class="bar"></div>
 <div id="liv" class="bar"></div>
 <div id="bar" class="bar"><button data-v="full" class="on">FULL</button><button data-v="combat">COMBAT</button></div>
 <div id="load"><div id="lt">LOADING</div><div class="t"><div id="lb"></div></div></div>
 <script src="three-ih3.min.js"></script>
 <script>
-/* Peaceful mode test: the same Wraith V2 HD model in every livery. Only the paint picture changes; the shape is untouched. */
+/* Peaceful mode test: the same models in every livery. Only the paint picture changes; the shapes are untouched.
+   Files per model id: <id>_full_1.json, <id>_combat_1.json (packed GLBs), <id>_<livery>_print.webp (full model's paint),
+   <id>_<livery>_albedo.webp (combat model's paint), <id>_normal.webp, <id>_orm.webp. */
 (()=>{
 const T=THREE,$=id=>document.getElementById(id),Q=new URLSearchParams(location.search);
 const LIV={frontlines:{label:'FRONT LINES',acc:'#ffb347'},survey:{label:'SURVEY',acc:'#46d8d2'},ranger:{label:'RANGER',acc:'#b5c77a'},cobalt:{label:'COBALT',acc:'#5b96ff'}};
-let curL=LIV[Q.get('l')]?Q.get('l'):'survey',curV=Q.get('v')==='combat'?'combat':'full';
+/* each model: its name in Front Lines and in Peaceful mode (same model, new job), button, camera height and distance, size */
+const MODELS={wraith:{fl:'WRAITH',pc:'WRAITH',btn:'WRAITH',ty:3.2,dist:13,size:1},
+  mpod:{fl:'MISSILE POD MP-9',pc:'BEACON LAUNCHER MP-9',btn:'MISSILE POD',ty:.55,dist:4.3,size:.25}};
+let curM=MODELS[Q.get('m')]?Q.get('m'):'wraith',curL=LIV[Q.get('l')]?Q.get('l'):'survey',curV=Q.get('v')==='combat'?'combat':'full';
 const R=new T.WebGLRenderer({canvas:$('gl'),antialias:true,powerPreference:'high-performance'});
 R.outputColorSpace=T.SRGBColorSpace;R.toneMapping=T.ACESFilmicToneMapping;R.toneMappingExposure=1.1;R.shadowMap.enabled=true;R.shadowMap.type=T.PCFShadowMap;
 const S=new T.Scene();S.background=new T.Color(0x07080a);
-const cam=new T.PerspectiveCamera(38,1,.1,200);
+const cam=new T.PerspectiveCamera(38,1,.05,200);
 function resize(){const w=innerWidth,h=innerHeight;R.setPixelRatio(Math.min(devicePixelRatio||1,2));R.setSize(w,h,false);cam.aspect=w/h;cam.fov=w<h?50:38;cam.updateProjectionMatrix();}
 addEventListener('resize',resize);resize();
 /* the model bay's light: a room with light strips and two softboxes, used as reflections */
@@ -48,53 +56,61 @@ addEventListener('resize',resize);resize();
  const box=new T.MeshBasicMaterial({color:new T.Color(1,.97,.92).multiplyScalar(7)});
  for(const x of [-4,4]){const m=new T.Mesh(new T.BoxGeometry(6,.1,3),box);m.position.set(x,15,0);room.add(m);}
  const pm=new T.PMREMGenerator(R);S.environment=pm.fromScene(room,.02).texture;}
-const key=new T.DirectionalLight(0xfff3e6,2.2);key.position.set(5,11,7);key.castShadow=true;key.shadow.mapSize.set(2048,2048);
-Object.assign(key.shadow.camera,{left:-5,right:5,top:7,bottom:-2,near:1,far:30});key.shadow.bias=-.0004;key.shadow.normalBias=.02;S.add(key);
+const sun=new T.DirectionalLight(0xfff3e6,2.2);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.bias=-.0004;sun.shadow.normalBias=.02;S.add(sun);
 const rim=new T.DirectionalLight(0xbfd6ff,1.1);rim.position.set(-4,6,-8);S.add(rim);
-const ringM=new T.MeshBasicMaterial({color:0xffffff});
+const ringM=new T.MeshBasicMaterial({color:0xffffff});let ring;
 {const f=new T.Mesh(new T.CircleGeometry(16,64),new T.MeshStandardMaterial({color:0x0d0e10,roughness:.5,metalness:.15}));f.rotation.x=-Math.PI/2;f.receiveShadow=true;S.add(f);
- const r=new T.Mesh(new T.RingGeometry(4.3,4.36,96),ringM);r.rotation.x=-Math.PI/2;r.position.y=.005;S.add(r);}
-/* paint: one picture per livery; the model is loaded once per version and only its picture is swapped */
-const TL=new T.TextureLoader(),TX={};
+ ring=new T.Mesh(new T.RingGeometry(4.3,4.36,96),ringM);ring.rotation.x=-Math.PI/2;ring.position.y=.005;S.add(ring);}
+/* paint: one picture per livery; each model is loaded once per version and only its picture is swapped */
+const TL=new T.TextureLoader(),TX={},MAT={};
 function tex(n,srgb=true){if(TX[n])return TX[n];const t=TL.load(n);t.flipY=false;t.colorSpace=srgb?T.SRGBColorSpace:T.NoColorSpace;t.anisotropy=8;return TX[n]=t;}
-const ORM=tex('wraith_orm.webp',false),NRM=tex('wraith_normal.webp',false);
-const MAT={full:new T.MeshStandardMaterial({roughness:.62,metalness:.18}),
-  combat:new T.MeshStandardMaterial({normalMap:NRM,aoMap:ORM,roughnessMap:ORM,metalnessMap:ORM,roughness:1,metalness:1})};
-function paint(){MAT.full.map=tex('wraith_'+curL+'_print.webp');MAT.combat.map=tex('wraith_'+curL+'_albedo.webp');MAT.full.needsUpdate=MAT.combat.needsUpdate=true;}
-const M={},DOWN={};
+function mat(m,v){const k=m+'/'+v;if(MAT[k])return MAT[k];
+  if(v==='full')return MAT[k]=new T.MeshStandardMaterial({roughness:.62,metalness:.18});
+  const orm=tex(m+'_orm.webp',false);return MAT[k]=new T.MeshStandardMaterial({normalMap:tex(m+'_normal.webp',false),aoMap:orm,roughnessMap:orm,metalnessMap:orm,roughness:1,metalness:1});}
+function paint(){const t=mat(curM,curV);t.map=tex(curM+'_'+curL+'_'+(curV==='full'?'print':'albedo')+'.webp');t.needsUpdate=true;}
+const M={},DOWN={},BUSY={};
 function fetchBytes(url,onp){return fetch(url).then(r=>{const L=+r.headers.get('content-length')||0;if(!r.body||!L)return r.arrayBuffer();
   const rd=r.body.getReader(),parts=[];let got=0;return (function pump(){return rd.read().then(({done,value})=>{if(done){const b=new Uint8Array(got);let o=0;for(const p of parts){b.set(p,o);o+=p.length;}return b.buffer;}
     parts.push(value);got+=value.length;onp(got/L);return pump();});})();});}
-function load(v,onp){return fetchBytes('wraith_'+v+'_1.json',onp).then(b=>{DOWN[v]=b.byteLength;const j=JSON.parse(new TextDecoder().decode(b)),s=atob(j.b64),u=new Uint8Array(s.length);
+function load(m,v,onp){const key=m+'/'+v;return fetchBytes(m+'_'+v+'_1.json',onp).then(b=>{DOWN[key]=b.byteLength;const j=JSON.parse(new TextDecoder().decode(b)),s=atob(j.b64),u=new Uint8Array(s.length);
     for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();})
   .then(buf=>new Promise((res,rej)=>new T.GLTFLoader().parse(buf,'',g=>{const r=g.scene;let tris=0;
-    r.traverse(o=>{if(!o.isMesh)return;tris+=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;o.material=MAT[v];o.castShadow=o.receiveShadow=true;});
-    r.userData.tris=Math.round(tris);M[v]=r;S.add(r);res(r);},rej)));}
+    r.traverse(o=>{if(!o.isMesh)return;tris+=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;o.material=mat(m,v);o.castShadow=o.receiveShadow=true;});
+    r.userData.tris=Math.round(tris);r.visible=false;M[key]=r;S.add(r);res(r);},rej)));}
+$('pick').innerHTML=Object.keys(MODELS).map(k=>'<button data-m="'+k+'">'+MODELS[k].btn+'</button>').join('');
 $('liv').innerHTML=Object.keys(LIV).map(k=>'<button data-l="'+k+'">'+LIV[k].label+'</button>').join('');
-function show(){const C=LIV[curL];document.documentElement.style.setProperty('--acc',C.acc);ringM.color.set(C.acc).multiplyScalar(2.2);paint();
+let yaw=Q.has('yaw')?+Q.get('yaw'):2.55,pitch=.12,dist=13,ty=3.2,auto=!Q.has('still'),shownM='';
+function show(){const C=LIV[curL],D=MODELS[curM],key=curM+'/'+curV;
+  document.documentElement.style.setProperty('--acc',C.acc);ringM.color.set(C.acc).multiplyScalar(2.2);paint();
+  if(shownM!==curM){shownM=curM;dist=D.dist;ty=D.ty;const k=D.size,sc=sun.shadow.camera;
+    Object.assign(sc,{left:-5*k,right:5*k,top:7*k,bottom:-2*k,near:.1,far:30*k});sc.updateProjectionMatrix();sun.position.set(5*k,11*k,7*k);ring.scale.setScalar(k);}
+  document.querySelectorAll('#pick button').forEach(b=>b.classList.toggle('on',b.dataset.m===curM));
   document.querySelectorAll('#liv button').forEach(b=>b.classList.toggle('on',b.dataset.l===curL));
   document.querySelectorAll('#bar button').forEach(b=>b.classList.toggle('on',b.dataset.v===curV));
+  $('nm').textContent=curL==='frontlines'?D.fl:D.pc;
   $('sub').textContent=(curL==='frontlines'?'FRONT LINES':'PEACEFUL · '+C.label)+' · '+(curV==='full'?'FULL DETAIL':'COMBAT');
-  for(const k in M)M[k].visible=k===curV;
-  if(!M[curV]){$('stats').innerHTML='';$('load').style.display='flex';$('lb').style.width='0';$('lt').textContent='LOADING WRAITH · '+curV.toUpperCase();
-    const v=curV;load(v,p=>$('lb').style.width=(p*100)+'%').then(()=>{$('load').style.display='none';show();});return;}
-  $('stats').innerHTML='<b>'+M[curV].userData.tris.toLocaleString('en-US')+'</b> triangles<br><b>'+(DOWN[curV]/1e6).toFixed(1)+' MB</b> download';}
+  for(const k in M)M[k].visible=k===key;
+  if(!M[key]){$('stats').innerHTML='';$('load').style.display='flex';$('lb').style.width='0';$('lt').textContent='LOADING '+D.btn+' · '+curV.toUpperCase();
+    if(!BUSY[key]){BUSY[key]=1;load(curM,curV,p=>$('lb').style.width=(p*100)+'%').then(()=>{$('load').style.display='none';show();});}return;}
+  $('load').style.display='none';
+  $('stats').innerHTML='<b>'+M[key].userData.tris.toLocaleString('en-US')+'</b> triangles<br><b>'+(DOWN[key]<1e5?Math.round(DOWN[key]/1e3)+' KB':(DOWN[key]/1e6).toFixed(1)+' MB')+'</b> download';}
+document.querySelectorAll('#pick button').forEach(b=>b.onclick=()=>{curM=b.dataset.m;show();});
 document.querySelectorAll('#liv button').forEach(b=>b.onclick=()=>{curL=b.dataset.l;show();});
 document.querySelectorAll('#bar button').forEach(b=>b.onclick=()=>{curV=b.dataset.v;show();});
 show();
 /* orbit: drag to turn, pinch or wheel to zoom; turns slowly on its own until touched */
-let yaw=Q.has('yaw')?+Q.get('yaw'):2.55,pitch=.12,dist=13,ty=3.2,auto=!Q.has('still');const pts=new Map();let pd=0;
+const pts=new Map();let pd=0;const lim=d=>Math.max(MODELS[curM].dist*.2,Math.min(MODELS[curM].dist*1.8,d));
 addEventListener('pointerdown',e=>{if(e.target.closest('.bar'))return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});auto=false;});
 addEventListener('pointermove',e=>{const p=pts.get(e.pointerId);if(!p)return;
   if(pts.size===1){yaw-=(e.clientX-p.x)*.008;pitch=Math.max(-.15,Math.min(1.1,pitch+(e.clientY-p.y)*.006));}p.x=e.clientX;p.y=e.clientY;
-  if(pts.size===2){const [a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pd)dist=Math.max(2.6,Math.min(23,dist*pd/d));pd=d;}});
+  if(pts.size===2){const [a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pd)dist=lim(dist*pd/d);pd=d;}});
 const up=e=>{pts.delete(e.pointerId);pd=0;};addEventListener('pointerup',up);addEventListener('pointercancel',up);
-addEventListener('wheel',e=>{dist=Math.max(2.6,Math.min(23,dist*(1+e.deltaY*.001)));auto=false;},{passive:true});
+addEventListener('wheel',e=>{dist=lim(dist*(1+e.deltaY*.001));auto=false;},{passive:true});
 let last=performance.now();
 function loop(t){requestAnimationFrame(loop);const dt=Math.min(.05,(t-last)/1000);last=t;if(auto)yaw+=dt*.18;
   const d=dist*(cam.aspect<1?1.08:1);cam.position.set(Math.sin(yaw)*Math.cos(pitch)*d,ty+Math.sin(pitch)*d,Math.cos(yaw)*Math.cos(pitch)*d);cam.lookAt(0,ty,0);R.render(S,cam);}
 requestAnimationFrame(loop);
-window.__bay={show,set:(l,v)=>{curL=l;curV=v;show();}};
+window.__bay={show,set:(m,l,v)=>{curM=m;curL=l;curV=v;show();},ready:()=>!!M[curM+'/'+curV]};
 })();
 </script>
 </body></html>

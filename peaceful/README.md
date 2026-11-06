@@ -26,14 +26,20 @@ This folder holds the notes and the work for it, and it's kept here only (not in
 - Commands: `python3 peaceful/liveries/recolor.py in.png survey out.png` (add `--foe` for FORGE machines).
 
 ## Peaceful bay (`bay/`)
-The real 3D Wraith V2 HD in all four colours, full (949,948 triangles) and combat (7,464), on the model bay's lighting.
-Only the paint picture is swapped. The model is the same file in every colour.
+The real 3D models in all four colours, full and combat, on the model bay's lighting. Only the paint picture is swapped:
+the model is the same file in every colour, with the same triangles and download.
+- **Wraith V2 HD**: full 949,948 triangles, combat 7,464.
+- **Missile pod MP-9** (session 2's model, `models/mpod/`): full 89,994, combat 1,854. In peaceful mode it's called the
+  **Beacon Launcher**: same model, new job.
 - Live page: https://claude.ai/artifact/FYrr9Zwxv36UzMspeRDSem (FRONT LINES / SURVEY / RANGER / COBALT, FULL / COMBAT)
-- Phone screenshots: `previews/wraith_3d_liveries.jpg`.
-- The paint files `bay/wraith_<scheme>_print.webp` (full model) and `bay/wraith_<scheme>_albedo.webp` (combat model) were made with
-  `recolor.py` from `models/wraith-v2-hd/wraith_v2_full_print.png` and `wraith_v2_combat_albedo.png`.
-- The model files aren't kept here (they're the Wraith's own). To run the page, pack them first:
-  `python3 -I pipeline/pack.py models/wraith-v2-hd/wraith_v2_full.glb peaceful/bay/wraith_full` (and the same for `_combat`).
+- Phone screenshots: `previews/wraith_3d_liveries.jpg`, `previews/mpod_3d_liveries.jpg`.
+- Files per model id (`wraith`, `mpod`): `<id>_<scheme>_print.webp` (full model's paint) and `<id>_<scheme>_albedo.webp`
+  (combat model's paint), made with `recolor.py` from the model's own `*_full_print.png` and `*_combat_albedo.png`; `front lines`
+  is the original. Plus `<id>_normal.webp` and `<id>_orm.webp`, copied from the model's folder.
+- The model files aren't kept here (they're the models' own). To run the page, pack them first, for example
+  `python3 -I pipeline/pack.py models/mpod/mpod_full.glb peaceful/bay/mpod_full` (and the same for `_combat`).
+- To add a model: recolour its two paint pictures, copy its normal and ORM maps, pack its two GLBs, and add a line to `MODELS`
+  in `bay/index.html` with its Front Lines name, its peaceful name, the camera height and distance, and its size.
 
 ## Proposed, not yet confirmed by Christopher
 - **Story:** the same crew and the same Wraith with a different job. While Front Lines fights, the crew's research team goes unarmed into
@@ -46,6 +52,6 @@ Only the paint picture is swapped. The model is the same file in every colour.
 - In the story, the research team gets the front lines' retired guns and refits them as tools.
 
 ## Next
-- Put the colours on each kit and foe model as its session finishes it (`models/<item>/`). That means recolouring its print and its combat
-  albedo with `recolor.py`, then adding it to the peaceful bay.
+- Put the colours on each kit and foe model as its session finishes it (`models/<item>/`), and add it to the peaceful bay
+  (done: Wraith, missile pod).
 - Christopher to pick which couple of models this chat builds (the zip's pieces are split between sessions 1–4 in `SESSIONS.md`).
