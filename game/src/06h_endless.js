@@ -11,6 +11,8 @@ const EW={wave:0,state:'break',t:5,boss:false,queue:[],qt:0};
 const EN_ORDER=[['skitter',1,5],['hound',3,3],['gunner',5,2.2],['hornet',7,2.2],['lancer',9,1],['bulwark',11,1.1],['tank',13,.7],['mortar',15,.6]];
 function endlessWave(n){const w={},add=(id,k)=>{w[id]=(w[id]||0)+k;};
   if(n%10===0){add('skitter',Math.min(8,2+(n/5|0)));add('hound',Math.min(4,n/10|0));return w;}
+  /* IH4: each heavy wave also brings one of the FORGE bosses, in turn: wave 5 Alpha Hound, 15 Gunner Prime, 25 Brood Skitter, 35 Alpha Hound ... */
+  if(n%5===0)add(['ahound','gprime','brood'][((n/5|0)-1)/2%3|0],1);
   if(n%5===0){add('gunner',2+(n/10|0));add('hound',2);if(n>=11)add('bulwark',1+(n/20|0));if(n>=13)add('tank',1+(n/25|0));else add('gunner',1);return w;}
   const pool=EN_ORDER.filter(t=>n>=t[1]),tot=pool.reduce((a,t)=>a+t[2],0),count=Math.min(24,3+n);
   for(let i=0;i<count;i++){let r=Math.random()*tot;for(const t of pool){r-=t[2];if(r<=0){add(t[0],1);break;}}}

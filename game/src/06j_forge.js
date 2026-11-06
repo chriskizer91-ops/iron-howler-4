@@ -89,7 +89,7 @@ if(DEV)window.__ih4={spawnEnemy,EN,EDEF,F4,startWave,get P(){return P;},
   look(e,ang,d,h,ly){const k=e.d.sc||1,a=e.yaw+(ang||0),ty=e.y+(ly||e.d.cy*k);CAMX={pos:[e.x-Math.sin(a)*d,ty+h,e.z-Math.cos(a)*d],at:[e.x,ty,e.z]};},
   free(){CAMX=null;},
   /* fight tests: start wave n (0 = the first), turn the Wraith to face a machine, read the state */
-  wave(n){G.wave=n;startWave();},face(e){const d=Math.hypot(e.x-P.x,e.z-P.z);P.yaw=Math.atan2(-(e.x-P.x),-(e.z-P.z));/* pitch so the close camera's crosshair ray passes through the machine's middle */
+  wave(n){G.wave=n;startWave();},ewave(n){return n?endlessWave(n):startEWave();},face(e){const d=Math.hypot(e.x-P.x,e.z-P.z);P.yaw=Math.atan2(-(e.x-P.x),-(e.z-P.z));/* pitch so the close camera's crosshair ray passes through the machine's middle */
     let bp=0,be=1e9;for(let pt=.34;pt>=-.85;pt-=.01){const cy_=8.7-pt*1.2,ly=6.2+Math.tan(pt)*26,y=cy_+(ly-cy_)*(d+6.4)/32.4,er=Math.abs(y-(e.y-P.y+e.d.cy));if(er<be){be=er;bp=pt;}}P.pitch=bp;
     /* the close camera sits to the right of the mech (more when looking down), so the crosshair line runs to the right: turn so the machine is on it */
     const sd=1.5+Math.max(0,-bp-.2)*3;P.yaw+=Math.asin(Math.min(1,sd/Math.max(d,.1)));},

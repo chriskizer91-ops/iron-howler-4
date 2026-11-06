@@ -1947,6 +1947,8 @@ const EW={wave:0,state:'break',t:5,boss:false,queue:[],qt:0};
 const EN_ORDER=[['skitter',1,5],['hound',3,3],['gunner',5,2.2],['hornet',7,2.2],['lancer',9,1],['bulwark',11,1.1],['tank',13,.7],['mortar',15,.6]];
 function endlessWave(n){const w={},add=(id,k)=>{w[id]=(w[id]||0)+k;};
   if(n%10===0){add('skitter',Math.min(8,2+(n/5|0)));add('hound',Math.min(4,n/10|0));return w;}
+  /* IH4: each heavy wave also brings one of the FORGE bosses, in turn: wave 5 Alpha Hound, 15 Gunner Prime, 25 Brood Skitter, 35 Alpha Hound ... */
+  if(n%5===0)add(['ahound','gprime','brood'][((n/5|0)-1)/2%3|0],1);
   if(n%5===0){add('gunner',2+(n/10|0));add('hound',2);if(n>=11)add('bulwark',1+(n/20|0));if(n>=13)add('tank',1+(n/25|0));else add('gunner',1);return w;}
   const pool=EN_ORDER.filter(t=>n>=t[1]),tot=pool.reduce((a,t)=>a+t[2],0),count=Math.min(24,3+n);
   for(let i=0;i<count;i++){let r=Math.random()*tot;for(const t of pool){r-=t[2];if(r<=0){add(t[0],1);break;}}}
@@ -2221,7 +2223,7 @@ if(DEV)window.__ih4={spawnEnemy,EN,EDEF,F4,startWave,get P(){return P;},
   look(e,ang,d,h,ly){const k=e.d.sc||1,a=e.yaw+(ang||0),ty=e.y+(ly||e.d.cy*k);CAMX={pos:[e.x-Math.sin(a)*d,ty+h,e.z-Math.cos(a)*d],at:[e.x,ty,e.z]};},
   free(){CAMX=null;},
   /* fight tests: start wave n (0 = the first), turn the Wraith to face a machine, read the state */
-  wave(n){G.wave=n;startWave();},face(e){const d=Math.hypot(e.x-P.x,e.z-P.z);P.yaw=Math.atan2(-(e.x-P.x),-(e.z-P.z));/* pitch so the close camera's crosshair ray passes through the machine's middle */
+  wave(n){G.wave=n;startWave();},ewave(n){return n?endlessWave(n):startEWave();},face(e){const d=Math.hypot(e.x-P.x,e.z-P.z);P.yaw=Math.atan2(-(e.x-P.x),-(e.z-P.z));/* pitch so the close camera's crosshair ray passes through the machine's middle */
     let bp=0,be=1e9;for(let pt=.34;pt>=-.85;pt-=.01){const cy_=8.7-pt*1.2,ly=6.2+Math.tan(pt)*26,y=cy_+(ly-cy_)*(d+6.4)/32.4,er=Math.abs(y-(e.y-P.y+e.d.cy));if(er<be){be=er;bp=pt;}}P.pitch=bp;
     /* the close camera sits to the right of the mech (more when looking down), so the crosshair line runs to the right: turn so the machine is on it */
     const sd=1.5+Math.max(0,-bp-.2)*3;P.yaw+=Math.asin(Math.min(1,sd/Math.max(d,.1)));},
