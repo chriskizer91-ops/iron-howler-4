@@ -20,15 +20,26 @@ import bpy
 
 VIEWS = ('front', 'side', 'rear')
 
+def fill_small_holes(m, max_area=400):
+    """white numbers, white stripes and pale highlights read as background: put them back into the figure"""
+    holes = ndimage.binary_fill_holes(m) & ~m; lab, n = ndimage.label(holes)
+    if not n: return m
+    area = ndimage.sum(holes, lab, range(1, n + 1))
+    return m | np.isin(lab, 1 + np.where(area < max_area)[0])
+
 def figure_masks(img_path, boxes_path):
     import sheetfit as SF
-    return SF.sheet_masks(img_path, json.load(open(boxes_path)))
+    SM, img = SF.sheet_masks(img_path, json.load(open(boxes_path)))
+    for v in SM: SM[v]['mask'] = fill_small_holes(SM[v]['mask'])
+    return SM, img
+
+COLL, MAT = 'LO', 'atlas'      # which meshes get painted (the combat model by default; Wraith V2 paints its full model)
 
 def atlas_triangles():
-    """world positions, normals and atlas UVs of every combat-model triangle"""
+    """world positions, normals and atlas UVs of every triangle to paint"""
     P, N, U = [], [], []
-    for o in bpy.data.collections['LO'].objects:
-        if o.type != 'MESH' or not o.data.materials or o.data.materials[0].name != 'atlas': continue
+    for o in bpy.data.collections[COLL].objects:
+        if o.type != 'MESH' or not o.data.materials or (MAT and o.data.materials[0].name != MAT): continue
         me = o.data; me.calc_loop_triangles(); M = o.matrix_world; Mn = M.to_3x3().inverted().transposed()
         nv = len(me.vertices); co = np.zeros(nv * 3); me.vertices.foreach_get('co', co); co = co.reshape(-1, 3)
         co = co @ np.array(M.to_3x3()).T + np.array(M.translation)
@@ -43,7 +54,7 @@ def atlas_triangles():
 def raster(t2, attr, W, H, depth=None, pad=.0):
     """rasterise triangles t2 (T,3,2 pixel coords) into a W x H grid. With depth (T,3): a z-buffer (nearest wins) and the
     triangle id per pixel. Without: attr (T,3,C) interpolated per pixel (triangles must not overlap, like UV islands)."""
-    out = np.full((H, W), np.inf) if depth is not None else np.zeros((H, W, attr.shape[2]))
+    out = np.full((H, W), np.inf, np.float32) if depth is not None else np.zeros((H, W, attr.shape[2]), np.float32)
     tid = np.full((H, W), -1, np.int64)
     for i in range(len(t2)):
         a, b, c = t2[i]
@@ -127,7 +138,7 @@ def figure_mask(im, bg=None):
     import cv2
     a = im.astype(np.int32); bg = np.median(np.concatenate([a[:12].reshape(-1, 3), a[-12:].reshape(-1, 3), a[:, :12].reshape(-1, 3), a[:, -12:].reshape(-1, 3)]), 0) if bg is None else bg
     m = (np.abs(a - bg).sum(2) > 40) | ((a.max(2) - a.min(2)) > 40)
-    m = ndimage.binary_opening(m, iterations=1)
+    m = fill_small_holes(ndimage.binary_opening(m, iterations=1))
     n, lab, st, _ = cv2.connectedComponentsWithStats(m.astype(np.uint8), 8)
     if n > 1:
         big = 1 + np.argmax(st[1:, cv2.CC_STAT_AREA]); keep = [i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] > max(60, st[big, cv2.CC_STAT_AREA] * .002)]
@@ -170,9 +181,10 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
     # 1. every texel: where it is on the model and which way it faces
     t2 = np.stack([U[..., 0] * size, (1 - U[..., 1]) * size], -1)
     pos, tid = raster(t2, np.concatenate([P, N], -1), size, size, pad=.6)
-    cov = tid >= 0; idx = np.where(cov); tp = pos[idx][:, :3]; tn = pos[idx][:, 3:]; tn /= np.maximum(1e-9, np.linalg.norm(tn, axis=1, keepdims=True))
+    cov = tid >= 0; del tid; idx = np.where(cov); tp = pos[idx][:, :3]; tn = pos[idx][:, 3:]; del pos
+    tn /= np.maximum(1e-9, np.linalg.norm(tn, axis=1, keepdims=True))
     print('texels on the model', len(tp), flush=True)
-    acc = np.zeros((len(tp), 3)); wsum = np.zeros(len(tp)); who = np.zeros((len(tp), 4))
+    acc = np.zeros((len(tp), 3), np.float32); wsum = np.zeros(len(tp), np.float32); who = np.zeros((len(tp), 4), np.float32)
     for j, v in enumerate(('front', 'side', 'sideR', 'rear')):
         mv = m[SRC[v]]; crop = mv['crop']; W, Hh = crop[2] - crop[0], crop[3] - crop[1]
         # 2. what this view can see: a depth picture of the whole model at 2x the picture's resolution
@@ -190,8 +202,9 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
         col = bilinear(src, tu - crop[0], tv - crop[1])
         acc += col * w[:, None]; wsum += w; who[:, j] = w
         print(v, 'paints', int((w > .2).sum()), 'texels', flush=True)
-    base = np.asarray(Image.open(base_albedo).convert('RGB')).astype(np.float64)
-    if base.shape[0] != size: base = np.asarray(Image.fromarray(base.astype(np.uint8)).resize((size, size), Image.LANCZOS)).astype(np.float64)
+    del tp, tn
+    base = np.asarray(Image.open(base_albedo).convert('RGB')).astype(np.float32)
+    if base.shape[0] != size: base = np.asarray(Image.fromarray(base.astype(np.uint8)).resize((size, size), Image.LANCZOS)).astype(np.float32)
     out = base.copy(); alpha = np.clip(wsum / .35, 0, 1)[:, None]
     proj = acc / np.maximum(1e-9, wsum)[:, None]
     # where no picture sees the model, the baked colour is re-tinted to match the picture: each baked colour family
@@ -211,8 +224,8 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
         tinted[sel] = bt[sel] * np.clip(tgt / np.maximum(4, c), .2, 3)
     out[idx] = tinted * (1 - alpha) + proj * alpha
     # 3. spread the painted colour into the gaps between atlas islands (no seams when the texture is shrunk)
-    _, (iy, ix) = ndimage.distance_transform_edt(~cov, return_indices=True)
-    gap = ~cov & (ndimage.distance_transform_edt(~cov) < 12)
+    dist, (iy, ix) = ndimage.distance_transform_edt(~cov, return_indices=True)
+    gap = ~cov & (dist < 12); del dist
     out[gap] = out[iy[gap], ix[gap]]
     os.makedirs(outdir, exist_ok=True)
     Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)).save(os.path.join(outdir, name + '_albedo.png'))

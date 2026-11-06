@@ -1,0 +1,14 @@
+{
+ "image": "/home/claude/work/wv2/sheet90.png",
+ "boxes": "/home/claude/work/measure/90.json",
+ "H": 6.6,
+ "unmirror": [
+  [
+   928,
+   123,
+   969,
+   156
+  ]
+ ],
+ "map": "/home/claude/work/wv2/wv2_map.json"
+}

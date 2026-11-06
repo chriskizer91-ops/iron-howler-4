@@ -10,6 +10,7 @@ Every version stays, labelled, and opens from the W1 / W2 / W3 row in the model 
 | W3 | W2's combat model with sheet 90 painted onto it (`models/classes/wraith3/`) | (W2's shape) |
 | W4 | W2's combat model with ChatGPT's repaint of the guide pictures painted onto it | waiting for the pictures |
 | W5 (maybe) | the same painting on the full model | not started |
+| **Wraith V2** | a fresh start: every part traced from sheet 90 only, the sheet printed onto the large model (`models/classes/wraith-v2/`) | 91% / 86% / 83% |
 
 ## Pictures
 - `W1_board.jpg`, `W1_outline.png`: the first build against the sheet
@@ -17,6 +18,8 @@ Every version stays, labelled, and opens from the W1 / W2 / W3 row in the model 
 - `../../models/classes/wraith2/W2_outline_fit.jpg`, `W2_board.jpg`: after fitting
 - `../../models/classes/wraith3/W3_view.jpg`: the sheet painted on
 - `guide/`: the three guide pictures for ChatGPT (1024 x 1536, 212 px per metre), their outlines, the mapping (`wraith2_guide.json`) and `CHATGPT_PROMPT.md`
+
+W3 was re-painted (6 Nov) after a fix: the sheet's white numbers and stripes had been read as background and painted over.
 
 ## Limits found
 - The sheet only shows one side, so the other side is painted from it mirrored (the 09 is flipped back so it reads right).

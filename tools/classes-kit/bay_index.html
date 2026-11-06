@@ -18,7 +18,7 @@ canvas{position:fixed;inset:0;display:block;width:100%;height:100%}
 .bar button{all:unset;cursor:pointer;padding:9px 18px;border-radius:999px;color:#ffffffa0;font-size:12px;letter-spacing:.14em}
 .bar button.on{background:var(--acc,#ffb347);color:#140c08}
 #pick button{padding:7px 14px;font-size:11px;flex:0 0 auto}
-#ver{bottom:calc(env(safe-area-inset-bottom,0px) + 122px);display:none}#ver button{padding:6px 13px;font-size:10.5px}
+#ver{bottom:calc(env(safe-area-inset-bottom,0px) + 122px);display:none}#ver button{padding:6px 12px;font-size:10.5px;white-space:nowrap}
 #pick{max-width:calc(100vw - 24px);overflow-x:auto;scrollbar-width:none;touch-action:pan-x;-webkit-overflow-scrolling:touch}#pick::-webkit-scrollbar{display:none}
 #load{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#ffffffa0;font-size:11px;letter-spacing:.2em;pointer-events:none}
 #load .t{width:min(240px,60vw);height:3px;background:#ffffff1a;border-radius:2px;overflow:hidden}#lb{height:100%;width:0;background:var(--acc,#ffb347);transition:width .15s}
@@ -94,13 +94,15 @@ const GLOW={eye:new T.MeshBasicMaterial({color:new T.Color(1,.62,.22),toneMapped
   famber:new T.MeshBasicMaterial({color:new T.Color(1,.62,.12).multiplyScalar(1.6),toneMapped:false})};
 const decalMat=f=>new T.MeshStandardMaterial({map:tex(f,{rep:false}),transparent:true,alphaTest:.3,roughness:.6,metalness:.1,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3});
 const DECALS={decal:lazy(()=>decalMat('tex/howler-decals.webp')),cdecal:lazy(()=>decalMat('tex/classes-decals.webp')),emblem:lazy(()=>decalMat('tex/forge-emblem.webp')),fdecal:lazy(()=>decalMat('tex/fenrir-decals.webp'))};
-const ATLAS={};
+const ATLAS={},PAINTS={};
+const PAINT=p=>PAINTS[p]||(PAINTS[p]=new T.MeshStandardMaterial({map:tex(p+'_albedo.webp',{rep:false}),roughness:.62,metalness:.18}));
+const CLAY=lazy(()=>new T.MeshStandardMaterial({color:new T.Color(.40,.40,.42),roughness:.7,metalness:.05}));
 function atlas(m){if(ATLAS[m])return ATLAS[m];const mp=(MODELS[m]&&MODELS[m].maps)||{},orm=tex((mp.orm||m)+'_orm.webp',{srgb:false,rep:false});
   return ATLAS[m]=new T.MeshStandardMaterial({map:tex((mp.albedo||m)+'_albedo.webp',{rep:false}),normalMap:tex((mp.normal||m)+'_normal.webp',{srgb:false,rep:false}),aoMap:orm,roughnessMap:orm,metalnessMap:orm,roughness:1,metalness:1});}
-function dress(root,m,isFull){let tris=0;const F=FULLMAT();
+function dress(root,m,isFull){let tris=0;const F=FULLMAT(),C=MODELS[m];
   root.traverse(o=>{if(!o.isMesh)return;const n=(o.material&&o.material.name)||'';
     tris+=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;
-    if(GLOW[n])o.material=GLOW[n];else if(DECALS[n])o.material=DECALS[n]();else if(n==='fglass')o.material=F.fglass;else if(!isFull||n==='atlas')o.material=atlas(m);else o.material=F[n]||F.gun;
+    if(isFull&&C.paint)o.material=PAINT(C.paint);else if(isFull&&C.clay)o.material=CLAY();else if(GLOW[n])o.material=GLOW[n];else if(DECALS[n])o.material=DECALS[n]();else if(n==='fglass')o.material=F.fglass;else if(!isFull||n==='atlas')o.material=atlas(m);else o.material=F[n]||F.gun;
     if(isFull&&!o.geometry.attributes.color&&o.material.vertexColors){o.material=o.material.clone();o.material.vertexColors=false;}
     o.castShadow=!GLOW[n]&&!DECALS[n];o.receiveShadow=true;});
   return {tris:Math.round(tris)};}
@@ -122,6 +124,11 @@ const MODELS={
     parts:{full:1,combat:1},stance(r){}},
   wraith3:{label:'WRAITH',sub:{full:'W3 · FULL DETAIL (SAME AS W2)',combat:'W3 · COMBAT · SHEET 90 PAINTED ON'},acc:'#ffb347',ty:3.2,dist:13,grp:'wraith',vl:'W3',
     src:{full:'wraith2'},maps:{normal:'wraith2',orm:'wraith2'},parts:{full:1,combat:1},stance(r){}},
+  /* Wraith V2 (sheet 90 only): the large model traced part by part from the sheet; blank, and with the sheet printed on. No combat model yet. */
+  wraithv2:{label:'WRAITH V2',sub:{full:'V2 · TRACED FROM SHEET 90 · BLANK',combat:''},acc:'#ffb347',ty:3.2,dist:13,grp:'wraith',vl:'V2',clay:1,nocombat:1,
+    parts:{full:1,combat:1},stance(r){}},
+  wraithv2p:{label:'WRAITH V2',sub:{full:'V2 · SHEET 90 PRINTED ON',combat:''},acc:'#ffb347',ty:3.2,dist:13,grp:'wraith',vl:'V2 PRINT',paint:'wraithv2',nocombat:1,
+    src:{full:'wraithv2'},parts:{full:1,combat:1},stance(r){}},
   howler:{label:'HOWLER',sub:{full:'FULL DETAIL · UPGRADE BAY',combat:'COMBAT MODEL · BAKED'},acc:'#ffb347',ty:3.0,dist:12.5,
     stance(r){const HIP=3.2,L1=1.05,L2=1.0,L3=.9,ANK=.36,PHI=.26;
       for(const s of ['L','R']){const th=N(r,'thigh_'+s),kn=N(r,'knee_'+s),hk=N(r,'hock_'+s),an=N(r,'ankle_'+s);if(!th)continue;
@@ -152,7 +159,7 @@ function unpack(buf){const j=JSON.parse(new TextDecoder().decode(buf)),bin=atob(
   return new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();}
 /* big models come in several files (each under the host's 20 MB limit): fetch them all, join the pieces, then unzip */
 /* a version can borrow another version's files: the full model is shared, a combat model wears its own paint */
-const SRC=(m,v)=>((MODELS[m].src||{})[v])||m,KEY=(m,v)=>(v==='full'?SRC(m,v):m)+'/'+v;
+const SRC=(m,v)=>((MODELS[m].src||{})[v])||m,KEY=(m,v)=>(v==='full'&&!MODELS[m].paint&&!MODELS[m].clay?SRC(m,v):m)+'/'+v;
 function fetchParts(m,v,onp){const f=SRC(m,v),n=((MODELS[f]||MODELS[m]).parts||{})[v]||1,got=new Array(n).fill(0);
   return Promise.all([...Array(n)].map((_,i)=>fetchBytes(f+'_'+v+'_'+(i+1)+'.json',p=>{got[i]=p;onp(got.reduce((a,b)=>a+b,0)/n);})))
     .then(bs=>{let L=0;const ch=bs.map(b=>{const j=JSON.parse(new TextDecoder().decode(b)),s=atob(j.b64),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);L+=b.byteLength;return u;});
@@ -162,7 +169,8 @@ function load(m,v,onp){const key=KEY(m,v);return fetchParts(m,v,onp).then(r=>{DO
   new T.GLTFLoader().parse(buf,'',g=>{const r=g.scene;MODELS[m].stance(r);r.userData.st=dress(r,m,v==='full');M[key]=r;S.add(r);res(r);},rej);}));}
 let yaw=Q.has('yaw')?+Q.get('yaw'):2.55,pitch=Q.has('pitch')?+Q.get('pitch'):.12,dist=12.5,ty=3,auto=!Q.has('still');
 const GL={};   /* the version last shown in each group (Wraith W1, W2 ...) */
-function show(m,v){curM=m;curV=v;const C=MODELS[m],key=KEY(m,v);if(C.grp)GL[C.grp]=m;
+function show(m,v){if(MODELS[m].nocombat)v='full';curM=m;curV=v;const C=MODELS[m],key=KEY(m,v);
+  {const cb=document.querySelector('#bar button[data-v="combat"]');if(cb)cb.style.display=C.nocombat?'none':'';}if(C.grp)GL[C.grp]=m;
   {const vb=$('ver');if(C.grp){vb.innerHTML=Object.keys(MODELS).filter(k=>MODELS[k].grp===C.grp).map(k=>'<button data-w="'+k+'"'+(k===m?' class="on"':'')+'>'+MODELS[k].vl+'</button>').join('');vb.style.display='flex';
     vb.querySelectorAll('button').forEach(b=>b.onclick=()=>show(b.dataset.w,curV));}else vb.style.display='none';}
   document.documentElement.style.setProperty('--acc',C.acc);ringM.color.set(C.acc).multiplyScalar(2.2);

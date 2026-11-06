@@ -25,6 +25,7 @@ https://claude.ai/artifact/LTv46FVbWAPFW3pyy3L2Mr
 | Wraith W2 | 90 | | 839,374 triangles | 7,274 triangles | done: remade to sheet 90's outlines (82% overlap, was 61%) |
 | Wraith W3 | 90 | | (W2's) | 7,274 triangles | done: sheet 90 painted onto W2's combat model |
 | Wraith W4 | 90 | | (W2's) | | waiting for the ChatGPT repaint pictures |
+| Wraith V2 | 90 | 6.6 m | 949,948 triangles | not yet | traced part by part from sheet 90 only; blank and with the sheet printed on (`models/classes/wraith-v2/`) |
 | Bastion | 89 | 7.1 m | | | paused (after the Wraith experiment) |
 
 All four share one skeleton (so the same game code moves any of them) and five mount points for the modules: two forearm saddles, two shoulder sockets and a backbone dock.
