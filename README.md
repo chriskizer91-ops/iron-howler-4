@@ -20,8 +20,8 @@ https://claude.ai/artifact/LTv46FVbWAPFW3pyy3L2Mr
 |---|---|---|---|---|---|
 | Howler 07 | 88 | 6.4 m | 862,964 triangles | 9,206 triangles | done |
 | Strider | 87 | 6.1 m | 792,986 triangles | 6,451 triangles | done |
-| Wraith | 90 | 6.6 m | | | next |
-| Bastion | 89 | 7.1 m | | | after Wraith |
+| Wraith | 90 | 6.6 m | 844,934 triangles | 7,870 triangles | done |
+| Bastion | 89 | 7.1 m | | | next |
 
 All four share one skeleton (so the same game code moves any of them) and five mount points for the modules: two forearm saddles, two shoulder sockets and a backbone dock.
 
