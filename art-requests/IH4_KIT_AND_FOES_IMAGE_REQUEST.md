@@ -83,8 +83,10 @@ forearm.
 
 HD views, landscape 1536 × 1024, three per weapon, all at the same scale:
 - **SIDE**: the outer face, with the muzzle pointing to the LEFT of the picture. The clamp is on the far side, out of sight.
-- **FRONT**: looking straight into the muzzle. The clamp sticks out on the RIGHT.
-- **BACK**: looking at the rear end. The clamp sticks out on the LEFT.
+- **FRONT**: looking straight into the muzzle. The clamp sticks out on the LEFT.
+- **BACK**: looking at the rear end. The clamp sticks out on the RIGHT.
+
+(These are views of a left-arm weapon. The right arm takes a mirrored copy.)
 
 | Image | Item | Design notes |
 | --- | --- | --- |
@@ -101,7 +103,7 @@ Wraith wearing a missile pod on its right shoulder, the Watcher on its left shou
 | --- | --- | --- | --- | --- |
 | B01, B02, B03 | **Missile pod** | 1.3 m long, 1.0 m wide, 1.1 m tall with its base | square 1024 × 1024 | FRONT: the launch face toward you. SIDE: the face pointing LEFT. BACK. An armoured box on a short swivel base. The front face has a 3 × 3 grid of launch tubes behind armoured doors, open in these views and showing dark tubes with red-tipped missiles. Orange armour, white stripes, code "MP-9". |
 | B04, B05, B06 | **Watcher sensor pod** | 0.9 m long, 0.8 m wide, 1.0 m tall with its base | square 1024 × 1024 | FRONT, SIDE (facing LEFT), BACK. The AI-assist sensor: radar, target marking and missile lock. A rounded armoured head on a swivel base. The front has one large amber lens and two small ones; there's a short folding radar dish on top and a 5 cm thick antenna. Code "WT-1". |
-| B07, B08, B09 | **Jet pack** | 1.6 m wide, 1.0 m deep, 1.8 m tall | square 1024 × 1024 | BACK: what you see from behind the mech; this is its outer face. SIDE: seen from the LEFT, with the mech's back (the docking plate) toward the RIGHT of the picture. FRONT: the docking face that bolts to the Wraith's back plate. Two large gunmetal thruster nozzles at the bottom, angled slightly back, with dark inner bells. Smaller steering jets at the sides, fuel tanks, vent grilles and orange armour plates. A drone dock cradle on top. Code "JP-2". |
+| B07, B08, B09 | **Jet pack** | 1.6 m wide, 1.0 m deep, 1.8 m tall | square 1024 × 1024 | BACK: what you see from behind the mech; this is its outer face. SIDE: seen from the LEFT as it sits on the mech's back, with the docking plate toward the LEFT of the picture (where the mech would be) and the outer face toward the RIGHT. FRONT: the docking face that bolts to the Wraith's back plate. Two large gunmetal thruster nozzles at the bottom, angled slightly back, with dark inner bells. Smaller steering jets at the sides, fuel tanks, vent grilles and orange armour plates. A drone dock cradle on top. Code "JP-2". |
 
 ## C: assist drone (5 images)
 

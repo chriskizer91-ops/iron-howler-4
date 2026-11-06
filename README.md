@@ -15,6 +15,7 @@ the three FORGE foes (Gunner, Hound, Skitter), all made from scratch with the mo
 
 | Folder | What it holds |
 |---|---|
+| `SESSIONS.md` | who builds what when several Claude sessions work at once, and the rules they share |
 | `MODEL-PLAN.md` | the model plan: rules, every step with its command, techniques, checks |
 | `models/wraith-v2-hd/` | Wraith V2 HD: full model (949,948 triangles), combat model (7,464), prints, sources, previews |
 | `art-requests/` | image requests for ChatGPT: `IH4_KIT_AND_FOES_IMAGE_REQUEST.md` (the Wraith's kit and the three foes, 40 images) |
