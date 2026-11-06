@@ -13,7 +13,7 @@ FORGE's four-legged pack hunter, made the Wraith V2 HD way (`../../MODEL-PLAN.md
 | `source/parts_fhound.py`, `parts.json` | every part traced on the sheet, the joints, the budgets |
 | `source/fhound_sheet_print.png`, `print.json` | the sheet used for printing (see below) and the print settings |
 | `source/tools/` | `make_fhound.sh` (every step), `spear_fix.py`, session 4's copies of two pipeline tools (see below), the model bay entries |
-| `source/walk/index.html` | the four-legged walk test page (the Wraith's walk test with a leg solver for four legs) |
+| `source/walk/index.html` | the four-legged walk test page for the Hound and the Skitter (the Wraith's walk test with a leg solver for four legs) |
 | `previews/` | blockout, large model blank, printed, phone screenshots of the model bay, walk test video |
 
 - Size: 2.4 m tall at the horn tips, 4.5 m from nose to spearhead, 1.4 m wide. The views agreed with each other: no flips.
