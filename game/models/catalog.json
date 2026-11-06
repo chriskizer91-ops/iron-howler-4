@@ -1,0 +1,768 @@
+{
+ "manifest": {
+  "pack": "Field & Forest environment pack",
+  "units": "metres",
+  "up": "+y",
+  "front": "+z",
+  "ground": "y = 0 at the model\u2019s origin",
+  "assets": [
+   {
+    "id": "grass_meadow",
+    "name": "Meadow Tuft",
+    "group": "Grass",
+    "solid": false,
+    "collider": null,
+    "where": "Lawns, parks, yards, meadows and the floor of open woods; scatter thick.",
+    "files": {
+     "near": "grass/grass_meadow.glb",
+     "far": "grass/grass_meadow_far.glb"
+    },
+    "size_m": [
+     0.607,
+     0.29,
+     0.581
+    ],
+    "tris": {
+     "near": 280,
+     "far": 36
+    },
+    "draws": {
+     "near": 1,
+     "far": 1
+    },
+    "kb": {
+     "near": 15.7,
+     "far": 3.8
+    },
+    "materials": [
+     "grass"
+    ]
+   },
+   {
+    "id": "grass_dry",
+    "name": "Dry Prairie Grass",
+    "group": "Grass",
+    "solid": false,
+    "collider": null,
+    "where": "Road shoulders, fence lines, dry country and the sunny edges of woods.",
+    "files": {
+     "near": "grass/grass_dry.glb",
+     "far": "grass/grass_dry_far.glb"
+    },
+    "size_m": [
+     1.054,
+     0.903,
+     1.182
+    ],
+    "tris": {
+     "near": 462,
+     "far": 84
+    },
+    "draws": {
+     "near": 1,
+     "far": 1
+    },
+    "kb": {
+     "near": 19.4,
+     "far": 5.3
+    },
+    "materials": [
+     "grass"
+    ]
+   },
+   {
+    "id": "grass_reeds",
+    "name": "Creek Reeds",
+    "group": "Grass",
+    "solid": false,
+    "collider": null,
+    "where": "Creek banks, ponds, standing water and roadside ditches.",
+    "files": {
+     "near": "grass/grass_reeds.glb",
+     "far": "grass/grass_reeds_far.glb"
+    },
+    "size_m": [
+     1.418,
+     1.673,
+     1.983
+    ],
+    "tris": {
+     "near": 423,
+     "far": 98
+    },
+    "draws": {
+     "near": 1,
+     "far": 1
+    },
+    "kb": {
+     "near": 17,
+     "far": 5.1
+    },
+    "materials": [
+     "grass"
+    ]
+   },
+   {
+    "id": "bush_sage",
+    "name": "Sagebrush",
+    "group": "Bushes",
+    "solid": false,
+    "collider": null,
+    "where": "Anywhere dry: open country, hills, empty lots, the edge of a salt flat.",
+    "files": {
+     "near": "bushes/bush_sage.glb",
+     "far": "bushes/bush_sage_far.glb"
+    },
+    "size_m": [
+     1.741,
+     0.935,
+     1.285
+    ],
+    "tris": {
+     "near": 2583,
+     "far": 240
+    },
+    "draws": {
+     "near": 2,
+     "far": 1
+    },
+    "kb": {
+     "near": 132.5,
+     "far": 7.3
+    },
+    "materials": [
+     "bark",
+     "foliage"
+    ]
+   },
+   {
+    "id": "bush_oleander",
+    "name": "Oleander",
+    "group": "Bushes",
+    "solid": false,
+    "collider": null,
+    "where": "Town landscaping: in front of houses, along a boulevard, round a diner or a gas station.",
+    "files": {
+     "near": "bushes/bush_oleander.glb",
+     "far": "bushes/bush_oleander_far.glb"
+    },
+    "size_m": [
+     1.777,
+     1.987,
+     1.85
+    ],
+    "tris": {
+     "near": 2825,
+     "far": 320
+    },
+    "draws": {
+     "near": 2,
+     "far": 1
+    },
+    "kb": {
+     "near": 144.1,
+     "far": 9.2
+    },
+    "materials": [
+     "bark",
+     "foliage"
+    ]
+   },
+   {
+    "id": "bush_pricklypear",
+    "name": "Prickly Pear",
+    "group": "Bushes",
+    "solid": false,
+    "collider": null,
+    "where": "Rocky ground, roadside desert, dry yards, the sunny side of a ranch.",
+    "files": {
+     "near": "bushes/bush_pricklypear.glb",
+     "far": "bushes/bush_pricklypear_far.glb"
+    },
+    "size_m": [
+     0.826,
+     0.943,
+     0.762
+    ],
+    "tris": {
+     "near": 3934,
+     "far": 480
+    },
+    "draws": {
+     "near": 1,
+     "far": 1
+    },
+    "kb": {
+     "near": 170.3,
+     "far": 24.5
+    },
+    "materials": [
+     "cactus"
+    ]
+   },
+   {
+    "id": "tree_cottonwood",
+    "name": "Cottonwood",
+    "group": "Trees",
+    "solid": true,
+    "collider": {
+     "type": "cylinder",
+     "r": 0.52,
+     "h": 4.2
+    },
+    "where": "Along creeks, round farms (windbreaks, shade by the house), parks.",
+    "files": {
+     "near": "trees/tree_cottonwood.glb",
+     "far": "trees/tree_cottonwood_far.glb"
+    },
+    "size_m": [
+     15.31,
+     12.232,
+     12.743
+    ],
+    "tris": {
+     "near": 6269,
+     "far": 492
+    },
+    "draws": {
+     "near": 2,
+     "far": 2
+    },
+    "kb": {
+     "near": 304.3,
+     "far": 14.5
+    },
+    "materials": [
+     "bark",
+     "foliage"
+    ]
+   },
+   {
+    "id": "tree_ponderosa",
+    "name": "Ponderosa Pine",
+    "group": "Trees",
+    "solid": true,
+    "collider": {
+     "type": "cylinder",
+     "r": 0.45,
+     "h": 5
+    },
+    "where": "Hills and higher ground in loose stands; open pine woods.",
+    "files": {
+     "near": "trees/tree_ponderosa.glb",
+     "far": "trees/tree_ponderosa_far.glb"
+    },
+    "size_m": [
+     8.714,
+     17.359,
+     9.095
+    ],
+    "tris": {
+     "near": 6906,
+     "far": 76
+    },
+    "draws": {
+     "near": 2,
+     "far": 2
+    },
+    "kb": {
+     "near": 338.4,
+     "far": 7.7
+    },
+    "materials": [
+     "bark",
+     "foliage"
+    ]
+   },
+   {
+    "id": "tree_mesquite",
+    "name": "Mesquite",
+    "group": "Trees",
+    "solid": true,
+    "collider": {
+     "type": "cylinder",
+     "r": 0.42,
+     "h": 2
+    },
+    "where": "Dry country and pasture, alone or in twos; shade beside a dirt road.",
+    "files": {
+     "near": "trees/tree_mesquite.glb",
+     "far": "trees/tree_mesquite_far.glb"
+    },
+    "size_m": [
+     8.674,
+     5.107,
+     9.814
+    ],
+    "tris": {
+     "near": 5194,
+     "far": 590
+    },
+    "draws": {
+     "near": 2,
+     "far": 2
+    },
+    "kb": {
+     "near": 288.4,
+     "far": 17.2
+    },
+    "materials": [
+     "bark",
+     "foliage"
+    ]
+   },
+   {
+    "id": "tree_snag",
+    "name": "Dead Snag",
+    "group": "Trees",
+    "solid": true,
+    "collider": {
+     "type": "cylinder",
+     "r": 0.42,
+     "h": 4
+    },
+    "where": "One at a time: an old pasture, a burn, deep woods, beside a dirt track.",
+    "files": {
+     "near": "trees/tree_snag.glb",
+     "far": "trees/tree_snag_far.glb"
+    },
+    "size_m": [
+     2.701,
+     7.291,
+     4.18
+    ],
+    "tris": {
+     "near": 1723,
+     "far": 144
+    },
+    "draws": {
+     "near": 1,
+     "far": 1
+    },
+    "kb": {
+     "near": 46.2,
+     "far": 5.7
+    },
+    "materials": [
+     "bark"
+    ]
+   },
+   {
+    "id": "tree_oak",
+    "name": "Bur Oak",
+    "group": "Trees",
+    "solid": true,
+    "collider": {
+     "type": "cylinder",
+     "r": 0.62,
+     "h": 2.8
+    },
+    "where": "Open woods and pasture edges; one big one alone in a clearing.",
+    "files": {
+     "near": "trees/tree_oak.glb",
+     "far": "trees/tree_oak_far.glb"
+    },
+    "size_m": [
+     15.781,
+     10.422,
+     16.798
+    ],
+    "tris": {
+     "near": 5442,
+     "far": 844
+    },
+    "draws": {
+     "near": 2,
+     "far": 2
+    },
+    "kb": {
+     "near": 276.5,
+     "far": 23.6
+    },
+    "materials": [
+     "bark",
+     "foliage"
+    ]
+   },
+   {
+    "id": "tree_aspen",
+    "name": "Quaking Aspen",
+    "group": "Trees",
+    "solid": true,
+    "collider": {
+     "type": "cylinder",
+     "r": 0.22,
+     "h": 4
+    },
+    "where": "Groves of a dozen or more, close together, on hillsides and at the edges of conifer woods.",
+    "files": {
+     "near": "trees/tree_aspen.glb",
+     "far": "trees/tree_aspen_far.glb"
+    },
+    "size_m": [
+     4.176,
+     13.843,
+     4.366
+    ],
+    "tris": {
+     "near": 4574,
+     "far": 340
+    },
+    "draws": {
+     "near": 2,
+     "far": 2
+    },
+    "kb": {
+     "near": 248.9,
+     "far": 10.8
+    },
+    "materials": [
+     "bark",
+     "foliage"
+    ]
+   },
+   {
+    "id": "tree_spruce",
+    "name": "Spruce",
+    "group": "Trees",
+    "solid": true,
+    "collider": {
+     "type": "cylinder",
+     "r": 0.45,
+     "h": 3
+    },
+    "where": "Thick conifer woods and north slopes; close enough together to wall in a path.",
+    "files": {
+     "near": "trees/tree_spruce.glb",
+     "far": "trees/tree_spruce_far.glb"
+    },
+    "size_m": [
+     8.373,
+     15.85,
+     8.231
+    ],
+    "tris": {
+     "near": 4303,
+     "far": 106
+    },
+    "draws": {
+     "near": 2,
+     "far": 2
+    },
+    "kb": {
+     "near": 254.6,
+     "far": 5.2
+    },
+    "materials": [
+     "bark",
+     "foliage"
+    ]
+   },
+   {
+    "id": "tree_willow",
+    "name": "Weeping Willow",
+    "group": "Trees",
+    "solid": true,
+    "collider": {
+     "type": "cylinder",
+     "r": 0.55,
+     "h": 3.3
+    },
+    "where": "Beside creeks and ponds and on wet ground; one beside a farmhouse.",
+    "files": {
+     "near": "trees/tree_willow.glb",
+     "far": "trees/tree_willow_far.glb"
+    },
+    "size_m": [
+     14.476,
+     9.505,
+     12.083
+    ],
+    "tris": {
+     "near": 7511,
+     "far": 112
+    },
+    "draws": {
+     "near": 2,
+     "far": 2
+    },
+    "kb": {
+     "near": 367.8,
+     "far": 5.5
+    },
+    "materials": [
+     "bark",
+     "foliage"
+    ]
+   },
+   {
+    "id": "prop_hydrant",
+    "name": "Fire Hydrant",
+    "group": "Props",
+    "solid": false,
+    "collider": null,
+    "where": "Town sidewalks, about one a block, at the kerb near corners.",
+    "files": {
+     "near": "props/prop_hydrant.glb",
+     "far": "props/prop_hydrant_far.glb"
+    },
+    "size_m": [
+     0.42,
+     0.805,
+     0.368
+    ],
+    "tris": {
+     "near": 2188,
+     "far": 144
+    },
+    "draws": {
+     "near": 1,
+     "far": 1
+    },
+    "kb": {
+     "near": 57.5,
+     "far": 7
+    },
+    "materials": [
+     "paint"
+    ]
+   },
+   {
+    "id": "prop_icechest",
+    "name": "Ice Chest",
+    "group": "Props",
+    "solid": false,
+    "collider": null,
+    "where": "Against the wall of a gas station or corner store; one a store.",
+    "files": {
+     "near": "props/prop_icechest.glb",
+     "far": "props/prop_icechest_far.glb"
+    },
+    "size_m": [
+     1.48,
+     1.26,
+     0.828
+    ],
+    "tris": {
+     "near": 480,
+     "far": 36
+    },
+    "draws": {
+     "near": 1,
+     "far": 1
+    },
+    "kb": {
+     "near": 38,
+     "far": 4.2
+    },
+    "materials": [
+     "paint"
+    ]
+   },
+   {
+    "id": "prop_tires",
+    "name": "Tire Stack",
+    "group": "Props",
+    "solid": false,
+    "collider": null,
+    "where": "A garage, behind a gas station, a farm yard, a race paddock.",
+    "files": {
+     "near": "props/prop_tires.glb",
+     "far": "props/prop_tires_far.glb"
+    },
+    "size_m": [
+     1.136,
+     0.842,
+     0.734
+    ],
+    "tris": {
+     "near": 3360,
+     "far": 500
+    },
+    "draws": {
+     "near": 1,
+     "far": 1
+    },
+    "kb": {
+     "near": 84.4,
+     "far": 14.9
+    },
+    "materials": [
+     "rubber"
+    ]
+   },
+   {
+    "id": "prop_drum",
+    "name": "Oil Drum",
+    "group": "Props",
+    "solid": false,
+    "collider": null,
+    "where": "Anywhere work happens: a garage, farm yards, a paddock, a lone one out in a field or the woods.",
+    "files": {
+     "near": "props/prop_drum.glb",
+     "far": "props/prop_drum_far.glb"
+    },
+    "size_m": [
+     0.586,
+     0.884,
+     0.586
+    ],
+    "tris": {
+     "near": 3040,
+     "far": 100
+    },
+    "draws": {
+     "near": 1,
+     "far": 1
+    },
+    "kb": {
+     "near": 74.3,
+     "far": 4.1
+    },
+    "materials": [
+     "paint"
+    ]
+   },
+   {
+    "id": "prop_mailbox",
+    "name": "Rural Mailbox",
+    "group": "Props",
+    "solid": false,
+    "collider": null,
+    "where": "At the end of a farm or cabin drive on a country road.",
+    "files": {
+     "near": "props/prop_mailbox.glb",
+     "far": "props/prop_mailbox_far.glb"
+    },
+    "size_m": [
+     0.186,
+     1.348,
+     0.555
+    ],
+    "tris": {
+     "near": 260,
+     "far": 56
+    },
+    "draws": {
+     "near": 2,
+     "far": 1
+    },
+    "kb": {
+     "near": 28.3,
+     "far": 6.8
+    },
+    "materials": [
+     "wood",
+     "metal"
+    ]
+   }
+  ],
+  "source": "Field & Forest Forest Builder (supplied by Christopher, Nov 2026); models generated procedurally",
+  "note": "Paths in files.near / files.far are relative to this folder. Vertex colours (COLOR_0), no textures."
+ },
+ "biomes": [
+  {
+   "id": "woods",
+   "name": "Mixed woods",
+   "tree": {
+    "tree_spruce": 4,
+    "tree_oak": 2.5,
+    "tree_aspen": 2.5,
+    "tree_ponderosa": 1.5,
+    "tree_cottonwood": 0.6,
+    "tree_snag": 0.35
+   },
+   "grass": {
+    "grass_meadow": 3,
+    "grass_dry": 1
+   },
+   "rate": {
+    "tree": 6,
+    "grass": 28
+   }
+  },
+  {
+   "id": "conifer",
+   "name": "Pine & spruce",
+   "tree": {
+    "tree_spruce": 5,
+    "tree_ponderosa": 2.5,
+    "tree_snag": 0.4
+   },
+   "grass": {
+    "grass_dry": 1,
+    "grass_meadow": 1
+   },
+   "rate": {
+    "tree": 8,
+    "grass": 12
+   }
+  },
+  {
+   "id": "aspen",
+   "name": "Aspen grove",
+   "tree": {
+    "tree_aspen": 9,
+    "tree_spruce": 0.8
+   },
+   "grass": {
+    "grass_meadow": 1
+   },
+   "rate": {
+    "tree": 12,
+    "grass": 36
+   }
+  },
+  {
+   "id": "creek",
+   "name": "Creek side",
+   "tree": {
+    "tree_willow": 2,
+    "tree_cottonwood": 1
+   },
+   "grass": {
+    "grass_reeds": 3,
+    "grass_meadow": 2
+   },
+   "rate": {
+    "tree": 1.2,
+    "grass": 50
+   }
+  },
+  {
+   "id": "dry",
+   "name": "Dry country",
+   "tree": {
+    "tree_mesquite": 3,
+    "tree_snag": 0.4
+   },
+   "bush": {
+    "bush_sage": 4,
+    "bush_pricklypear": 1.5
+   },
+   "grass": {
+    "grass_dry": 3
+   },
+   "rate": {
+    "tree": 1,
+    "bush": 7,
+    "grass": 22
+   }
+  },
+  {
+   "id": "meadow",
+   "name": "Meadow",
+   "grass": {
+    "grass_meadow": 3,
+    "grass_dry": 1.2
+   },
+   "bush": {
+    "bush_sage": 1
+   },
+   "rate": {
+    "grass": 60,
+    "bush": 0.5
+   }
+  }
+ ]
+}
