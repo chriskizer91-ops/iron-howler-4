@@ -2,7 +2,11 @@
 
 **Every model for the game is made.** The player's Wraith V2 HD, its seven kit pieces and the four FORGE machines with
 their three bosses, each as a full model (upgrade bay, intel brief) and a light combat model (in the game), printed from
-ChatGPT's pictures and baked. Next: discuss building the game itself.
+ChatGPT's pictures and baked.
+
+**The game is being built** in `game/` (plan: `game/PLAN.md`, test build https://claude.ai/artifact/RebwJkoUiVQYwZoDqsX6tk).
+Session 1 done: the Wraith with its kit in the field and the modification bay. Session 2 done: the FORGE machines in every
+fight, the three bosses as waves 7–9, the new spawner pods in mission 5. Next: session 3, the kit's own behaviours.
 
 ## What the game has (all in `models/`)
 | Piece | Full model (triangles) | Combat model | Made by |
