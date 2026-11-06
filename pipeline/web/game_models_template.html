@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#07080a">
+<title>Ironhowl 4 — game models</title>
+<style>
+html,body{margin:0;height:100%;background:#07080a;color:#e9e6df;overflow:hidden;font:600 12px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:.06em;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+canvas{position:fixed;inset:0;display:block;width:100%;height:100%}
+#top{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 0;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+#name{font-size:15px;letter-spacing:.2em;color:var(--acc,#ffb347)}
+#name small{display:block;font-size:10px;letter-spacing:.16em;color:#ffffff80;margin-top:3px}
+#stats{text-align:right;white-space:nowrap;color:#ffffffb0;font-variant-numeric:tabular-nums;font-size:11px;line-height:1.5}
+#stats b{color:#fff;font-weight:700}
+.bar{position:fixed;left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:4px;border-radius:999px;background:#0c0e11cc;border:1px solid #ffffff1a;backdrop-filter:blur(8px)}
+#bar{bottom:calc(env(safe-area-inset-bottom,0px) + 18px)}
+#pick{bottom:calc(env(safe-area-inset-bottom,0px) + 70px)}
+.bar button{all:unset;cursor:pointer;padding:9px 18px;border-radius:999px;color:#ffffffa0;font-size:12px;letter-spacing:.14em}
+.bar button.on{background:var(--acc,#ffb347);color:#140c08}
+#pick button{padding:7px 14px;font-size:11px;flex:0 0 auto}
+#ver{bottom:calc(env(safe-area-inset-bottom,0px) + 122px);display:none;max-width:calc(100vw - 24px);overflow-x:auto;scrollbar-width:none;touch-action:pan-x}#ver::-webkit-scrollbar{display:none}#ver button{padding:6px 12px;font-size:10.5px;white-space:nowrap;flex:0 0 auto}
+#pick{max-width:calc(100vw - 24px);overflow-x:auto;scrollbar-width:none;touch-action:pan-x;-webkit-overflow-scrolling:touch}#pick::-webkit-scrollbar{display:none}
+#load{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#ffffffa0;font-size:11px;letter-spacing:.2em;pointer-events:none}
+#load .t{width:min(240px,60vw);height:3px;background:#ffffff1a;border-radius:2px;overflow:hidden}#lb{height:100%;width:0;background:var(--acc,#ffb347);transition:width .15s}
+html.light #bar{display:none}html.light #pick{bottom:calc(env(safe-area-inset-bottom,0px) + 18px)}html.light #ver{bottom:calc(env(safe-area-inset-bottom,0px) + 70px)}
+</style></head><body>
+<canvas id="gl"></canvas>
+<div id="top"><div id="name"><span id="nm">WRAITH</span><small id="sub"></small></div><div id="stats"></div></div>
+<div id="pick" class="bar"><button data-m="wraith" class="on">WRAITH</button><button data-m="ac">KIT</button><button data-m="fgunner">FOES</button></div>
+<div id="ver" class="bar"></div>
+<div id="bar" class="bar"><button data-v="full" class="on">FULL</button><button data-v="combat">COMBAT</button></div>
+<div id="load"><div id="lt">LOADING MODEL</div><div class="t"><div id="lb"></div></div></div>
+<script>/*THREE*/</script>
+<script>const LIGHT=/*LIGHT*/false;if(LIGHT)document.documentElement.classList.add("light");</script>
+<script>
+/* the models are stored after this script, so start once the whole file is read */
+addEventListener('DOMContentLoaded',()=>{
+const T=THREE,$=id=>document.getElementById(id),Q=new URLSearchParams(location.search);
+const R=new T.WebGLRenderer({canvas:$('gl'),antialias:!Q.has('noaa'),powerPreference:'high-performance'});
+R.outputColorSpace=T.SRGBColorSpace;R.toneMapping=T.ACESFilmicToneMapping;R.toneMappingExposure=1.1;
+R.shadowMap.enabled=true;R.shadowMap.type=T.PCFShadowMap;
+const S=new T.Scene();S.background=new T.Color(0x07080a);
+const cam=new T.PerspectiveCamera(38,1,.1,200);
+function resize(){const w=innerWidth,h=innerHeight;R.setPixelRatio(Math.min(devicePixelRatio||1,2));R.setSize(w,h,false);cam.aspect=w/h;cam.fov=w<h?50:38;cam.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+/* ---------- the bay's light: a room with a ring of light strips and two softboxes overhead, turned into reflections ---------- */
+{const room=new T.Scene();
+ const g=new T.SphereGeometry(30,32,16),c=[];const p=g.attributes.position;
+ for(let i=0;i<p.count;i++){const y=p.getY(i)/30;const k=y>0?.16+.14*y:.07;c.push(k,k*1.01,k*1.05);}
+ g.setAttribute('color',new T.Float32BufferAttribute(c,3));
+ room.add(new T.Mesh(g,new T.MeshBasicMaterial({vertexColors:true,side:T.BackSide})));
+ const strip=new T.MeshBasicMaterial({color:new T.Color(1,1,1).multiplyScalar(6)});
+ for(let i=0;i<12;i++){const a=i/12*Math.PI*2,m=new T.Mesh(new T.BoxGeometry(.35,10,.35),strip);m.position.set(Math.cos(a)*14,6,Math.sin(a)*14);room.add(m);}
+ const box=new T.MeshBasicMaterial({color:new T.Color(1,.97,.92).multiplyScalar(7)});
+ for(const x of [-4,4]){const m=new T.Mesh(new T.BoxGeometry(6,.1,3),box);m.position.set(x,15,0);room.add(m);}
+ {const fl=new T.Mesh(new T.CircleGeometry(20,32),new T.MeshBasicMaterial({color:new T.Color(.09,.09,.1)}));fl.rotation.x=-Math.PI/2;fl.position.y=-.5;room.add(fl);}
+ const pm=new T.PMREMGenerator(R);S.environment=pm.fromScene(room,.02).texture;S.environmentIntensity=1;}
+const key=new T.DirectionalLight(0xfff3e6,2.2);key.position.set(5,11,7);key.castShadow=true;
+key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-5,right:5,top:7,bottom:-2,near:1,far:30});key.shadow.bias=-.0004;key.shadow.normalBias=.02;
+const KEYL=key;S.add(key);const rim=new T.DirectionalLight(0xbfd6ff,1.1);rim.position.set(-4,6,-8);S.add(rim);
+const ringM=new T.MeshBasicMaterial({color:new T.Color(1,.5,.18).multiplyScalar(2.2)});let ring,ZMIN=2.5,ZMAX=22;
+{const f=new T.Mesh(new T.CircleGeometry(16,64),new T.MeshStandardMaterial({color:0x0d0e10,roughness:.5,metalness:.15}));f.rotation.x=-Math.PI/2;f.receiveShadow=true;S.add(f);
+ ring=new T.Mesh(new T.RingGeometry(4.3,4.36,96),ringM);ring.rotation.x=-Math.PI/2;ring.position.y=.005;S.add(ring);}
+
+/* ---------- materials ---------- */
+const TL=new T.TextureLoader();
+/* every model and picture is stored inside this file (script tags with id f:<name>, base64) */
+const FD=n=>{const e=document.getElementById('f:'+n);return e?e.textContent.trim():null;};
+function tex(n,{srgb=true,rep=true}={}){const d=FD(n);const t=TL.load(d?'data:image/webp;base64,'+d:n);t.flipY=false;t.colorSpace=srgb?T.SRGBColorSpace:T.NoColorSpace;if(rep){t.wrapS=t.wrapT=T.RepeatWrapping;}t.anisotropy=8;return t;}
+const lazy=f=>{let v;return ()=>v||(v=f());};
+/* glowing parts skip the film-style colour curve, so a red light stays red instead of turning orange */
+const GLOW={eye:new T.MeshBasicMaterial({color:new T.Color(1,.62,.22),toneMapped:false}),jetcore:new T.MeshBasicMaterial({color:new T.Color(1,.55,.18),toneMapped:false}),
+  ered:new T.MeshBasicMaterial({color:new T.Color(1,.07,.03),toneMapped:false}),
+  famber:new T.MeshBasicMaterial({color:new T.Color(1,.62,.12).multiplyScalar(1.6),toneMapped:false})};
+const ATLAS={},PAINTS={};
+const PAINT=p=>PAINTS[p]||(PAINTS[p]=new T.MeshStandardMaterial({map:tex(p+'_albedo.webp',{rep:false}),roughness:.62,metalness:.18}));
+const CLAY=lazy(()=>new T.MeshStandardMaterial({color:new T.Color(.40,.40,.42),roughness:.7,metalness:.05}));
+function atlas(m){if(ATLAS[m])return ATLAS[m];const mp=(MODELS[m]&&MODELS[m].maps)||{},orm=tex((mp.orm||m)+'_orm.webp',{srgb:false,rep:false});
+  return ATLAS[m]=new T.MeshStandardMaterial({map:tex((mp.albedo||m)+'_albedo.webp',{rep:false}),normalMap:tex((mp.normal||m)+'_normal.webp',{srgb:false,rep:false}),aoMap:orm,roughnessMap:orm,metalnessMap:orm,roughness:1,metalness:1});}
+function dress(root,m,isFull){let tris=0;const C=MODELS[m];
+  root.traverse(o=>{if(!o.isMesh)return;const n=(o.material&&o.material.name)||'';
+    tris+=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;
+    if(isFull&&C.paint)o.material=PAINT(C.paint);else if(GLOW[n])o.material=GLOW[n];else o.material=atlas(m);
+    o.castShadow=!GLOW[n];o.receiveShadow=true;});
+  return {tris:Math.round(tris)};}
+
+/* ---------- each model: its label, colour, stance and camera ---------- */
+const N=(r,n)=>r.getObjectByName(n);
+const MODELS={
+  /* the player's mech: Wraith V2 HD (the only model set, Christopher 6 Nov) */
+  wraith:{label:'WRAITH',sub:{full:'PLAYER MECH \u00b7 FULL DETAIL',combat:'PLAYER MECH \u00b7 COMBAT (BAKED)'},acc:'#ffb347',ty:3.2,dist:13,paint:'wraithf',parts:{full:1,combat:1},stance(r){}},
+  /* the Wraith's kit (6 Nov): each piece built from its own ChatGPT views. The autocannon carries all four tiers (1 to 4 barrels): tap its chip again to step through them */
+  ac:{label:'AUTOCANNON',sub:{full:'KIT \u00b7 FOREARM \u00b7 FULL DETAIL',combat:'KIT \u00b7 FOREARM \u00b7 COMBAT (BAKED)'},acc:'#ffb347',ty:.45,dist:5.4,size:.4,yaw:-2.3,grp:'kit',vl:'AUTOCANNON',paint:'acf',
+    tiers:['I','II','III','IV'],tier:3,parts:{full:1,combat:1},stance(r){}},
+  ln:{label:'LN-1 LANCE',sub:{full:'KIT \u00b7 FOREARM \u00b7 FULL DETAIL',combat:'KIT \u00b7 FOREARM \u00b7 COMBAT (BAKED)'},acc:'#ffb347',ty:.45,dist:6.2,size:.45,yaw:-2.3,grp:'kit',vl:'LANCE',paint:'lnf',parts:{full:1,combat:1},stance(r){}},
+  ar:{label:'AR-1 ARC',sub:{full:'KIT \u00b7 FOREARM \u00b7 FULL DETAIL',combat:'KIT \u00b7 FOREARM \u00b7 COMBAT (BAKED)'},acc:'#ffb347',ty:.45,dist:5.4,size:.4,yaw:-2.3,grp:'kit',vl:'ARC',paint:'arf',parts:{full:1,combat:1},stance(r){}},
+  /* FORGE's four-legged runner and its swarm drone (sheet 49): they stand in their rest pose, so no stance is needed */
+  /* the second hero mech: 8 m tall, so the camera, the shadow and the floor ring are scaled up; the pose is stored in the file */
+  /* ---- session 4: the FORGE Hound and its boss, the Alpha Hound (made the Wraith V2 HD way: traced from E01-E03, printed, baked).
+     Bosses reuse the foe's files: bigger, tinted, and one change made here in code. ---- */
+  fhound:{label:'HOUND',sub:{full:'FORGE HUNTER · FULL DETAIL',combat:'FORGE HUNTER · COMBAT (BAKED)'},acc:'#ff4a3d',ty:1.15,dist:9.2,grp:'foe',vl:'HOUND',paint:'fhoundf',
+    parts:{full:1,combat:1},stance(r){},
+    /* boss helper: scale the whole machine by k, grow the named parts by g about the middle of their base, tint the printed paint */
+    boss(r,k,names,g,tint){r.scale.setScalar(k);
+      r.traverse(o=>{if(!o.isMesh||!names.some(n=>o.name===n||o.name.startsWith(n+'_')))return;
+        o.geometry.computeBoundingBox();const b=o.geometry.boundingBox,px=(b.min.x+b.max.x)/2,pz=(b.min.z+b.max.z)/2,py=b.min.y;
+        o.geometry.translate(-px,-py,-pz);o.geometry.scale(g,g,g);o.geometry.translate(px,py,pz);});
+      Promise.resolve().then(()=>{const done=new Map();r.traverse(o=>{if(!o.isMesh)return;let m=done.get(o.material);
+        if(!m){m=o.material.clone();m.color.setRGB(...tint);done.set(o.material,m);}o.material=m;});});}},
+  alphahound:{label:'ALPHA HOUND',sub:{full:'BOSS · x1.7 · HORNS AND BLADES x2',combat:'BOSS · COMBAT (BAKED)'},acc:'#ff6a2a',ty:1.95,dist:15.6,size:1.7,grp:'foe',vl:'ALPHA HOUND',
+    paint:'fhoundf',src:{full:'fhound',combat:'fhound'},maps:{albedo:'fhound',normal:'fhound',orm:'fhound'},parts:{full:1,combat:1},
+    stance(r){MODELS.fhound.boss(r,1.7,['horn_R','horn_L','spine1','spine2','spine3','spine4'],2,[1.75,.78,.55]);}},
+  /* ---- session 3: the FORGE Gunner (made the Wraith V2 HD way: traced from D01-D03, printed, baked) and its boss Gunner Prime.
+     Gunner Prime reuses the Gunner's files: x1.8, bone white with red lights, and its one change, the heavy cannon on both
+     arms (the right arm's cannon mirrored onto the left in place of the rotary guns). ---- */
+  fgunner:{label:'GUNNER',sub:{full:'FORGE HEAVY · FULL DETAIL',combat:'FORGE HEAVY · COMBAT (BAKED)'},acc:'#ff4a3d',ty:2.45,dist:11.5,grp:'foe',vl:'GUNNER',paint:'fgunnerf',
+    parts:{full:1,combat:1},stance(r){},
+    prime(r){r.scale.setScalar(1.8);
+      for(const n of ['rotary_a','rotary_b'])for(let i=-1;i<6;i++){const o=N(r,i<0?n:'barrel_'+n.slice(-1)+i);if(o)o.visible=false;}
+      const c=N(r,'cannon'),aL=N(r,'arm_L');
+      if(c&&aL){const g=c.geometry.clone();g.scale(-1,1,1);const ix=g.index.array;for(let i=0;i<ix.length;i+=3){const t=ix[i+1];ix[i+1]=ix[i+2];ix[i+2]=t;}
+        const m2=new T.Mesh(g,c.material);m2.name='cannon_L';m2.position.copy(c.position);m2.position.x*=-1;m2.quaternion.copy(c.quaternion);m2.scale.copy(c.scale);aL.add(m2);}
+      const mR=N(r,'muzzle_R'),mL=N(r,'muzzle_L');if(mR&&mL){mL.position.copy(mR.position);mL.position.x*=-1;}
+      /* bone white: the printed greys become bone white (shading kept), red primer and red lights stay red, the white emblems turn dark */
+      const bone=m=>{m=m.clone();m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\n'+
+        '{vec3 c=diffuseColor.rgb;float l=dot(c,vec3(.3,.59,.11));float red=smoothstep(.06,.2,c.r-max(c.g,c.b));float emb=smoothstep(.36,.52,l)*(1.-red);'+
+        'vec3 o=vec3(.83,.75,.61)*clamp(pow(l/.077,.75)*.82,0.,1.15);o=mix(o,c,red);diffuseColor.rgb=mix(o,vec3(.035,.03,.03),emb);}');};
+        m.customProgramCacheKey=()=>'bonewhite';return m;};
+      Promise.resolve().then(()=>{const done=new Map();r.traverse(o=>{if(!o.isMesh)return;let m=done.get(o.material);if(!m){m=bone(o.material);done.set(o.material,m);}o.material=m;});});}},
+  gunnerprime:{label:'GUNNER PRIME',sub:{full:'BOSS · x1.8 · TWIN CANNONS',combat:'BOSS · COMBAT (BAKED)'},acc:'#ff4a3d',ty:4.4,dist:20.5,size:1.8,grp:'foe',vl:'PRIME',
+    paint:'fgunnerf',src:{full:'fgunner',combat:'fgunner'},maps:{albedo:'fgunner',normal:'fgunner',orm:'fgunner'},parts:{full:1,combat:1},
+    stance(r){MODELS.fgunner.prime(r);}},
+  /* the spawner pod (F05-F06; the back from the side picture, as on sheet F00): an egg on five anchors that keeps printing
+     Skitters. Joints: spod (base centre on the ground), hatch (slides), spawn (where a new Skitter steps out). */
+  spod:{label:'SPAWNER POD',sub:{full:'FORGE SPAWNER \u00b7 FULL DETAIL',combat:'FORGE SPAWNER \u00b7 COMBAT (BAKED)'},acc:'#ff4a3d',ty:1.2,dist:6.6,size:.55,grp:'foe',vl:'POD',paint:'spodf',
+    parts:{full:1,combat:1},stance(r){}},
+  mpod:{label:'MP-9 MISSILE POD',sub:{full:'SHOULDER MODULE · PRINTED · FULL DETAIL',combat:'SHOULDER MODULE · COMBAT MODEL (BAKED)'},acc:'#ffb347',ty:.5,dist:4.3,size:.3,yaw:2.55,grp:'kit',vl:'MP-9',paint:'mpodf',parts:{full:1,combat:1},stance(r){}},
+  watcher:{label:'WT-1 WATCHER',sub:{full:'SHOULDER MODULE · SENSOR · PRINTED · FULL DETAIL',combat:'SHOULDER MODULE · SENSOR · COMBAT MODEL (BAKED)'},acc:'#ffb347',ty:.5,dist:3.9,size:.3,yaw:-2.4,grp:'kit',vl:'WATCHER',paint:'watcherf',parts:{full:1,combat:1},stance(r){}},
+  /* ---- session 4: the FORGE Skitter and its boss, the Brood Skitter (Skitter x3, black with glowing red seams, a spawner pod on its back).
+     The pod is session 3's model (bay id spod): the Brood Skitter wears it as soon as that entry is in the bay. ---- */
+  fskitter:{label:'SKITTER',sub:{full:'SWARM DRONE · FULL DETAIL',combat:'SWARM DRONE · COMBAT (BAKED)'},acc:'#ff4a3d',ty:.38,dist:5.6,size:.45,grp:'foe',vl:'SKITTER',paint:'fskitterf',
+    parts:{full:1,combat:1},stance(r){},
+    /* boss helper: black paint whose red primer and lights glow, and the spawner pod mounted on the shell */
+    brood(r,k,pod){r.scale.setScalar(k);
+      Promise.resolve().then(()=>{let tris=0;const done=new Map();
+        r.traverse(o=>{if(!o.isMesh)return;tris+=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;let m=done.get(o.material);
+          if(!m){m=o.material.clone();m.color.setRGB(.34,.32,.32);
+            m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n#ifdef USE_MAP\n{vec4 c_=texture2D(map,vMapUv);totalEmissiveRadiance+=vec3(1.,.025,.01)*1.25*smoothstep(.2,.42,c_.r-max(c_.g,c_.b));}\n#endif');};
+            m.customProgramCacheKey=()=>'brood';done.set(o.material,m);}o.material=m;});
+        if(!MODELS[pod])return;const v=tris>50000?'full':'combat';     /* the pod in the same detail as the Skitter */
+        fetchParts(pod,v,()=>{}).then(x=>gunzip(x.gz)).then(buf=>new T.GLTFLoader().parse(buf,'',g=>{const p=g.scene;MODELS[pod].stance(p);dress(p,pod,v==='full');
+          p.scale.setScalar(.8/k);p.position.set(0,.84,.12);r.add(p);}),()=>{});});}},
+  broodskitter:{label:'BROOD SKITTER',sub:{full:'BOSS · x3 · SPAWNER POD',combat:'BOSS · COMBAT (BAKED)'},acc:'#ff2a1a',ty:1.6,dist:17,size:1.5,grp:'foe',vl:'BROOD SKITTER',
+    paint:'fskitterf',src:{full:'fskitter',combat:'fskitter'},maps:{albedo:'fskitter',normal:'fskitter',orm:'fskitter'},parts:{full:1,combat:1},
+    stance(r){MODELS.fskitter.brood(r,3,'spod');}},
+  jetpack:{label:'JP-2 JET PACK',sub:{full:'BACK MODULE · PRINTED · FULL DETAIL',combat:'BACK MODULE · COMBAT MODEL (BAKED)'},acc:'#ffb347',ty:.9,dist:6.2,size:.45,yaw:-2.5,grp:'kit',vl:'JET PACK',paint:'jetpackf',parts:{full:1,combat:1},stance(r){}},
+  drone:{label:'DR-1 ASSIST DRONE',sub:{full:'ASSIST DRONE · PRINTED · FULL DETAIL',combat:'ASSIST DRONE · COMBAT MODEL (BAKED)'},acc:'#ffb347',ty:.62,dist:3.1,size:.3,yaw:-2.6,grp:'kit',vl:'DRONE',paint:'dronef',parts:{full:1,combat:1},stance(r){r.position.y=.45;}},
+};
+
+/* ---------- loading: each model is stored in this file as gzip-compressed GLB (base64) ---------- */
+const M={},DOWN={};let curM=Q.get('m')||'wraith',curV=LIGHT?'combat':(Q.get('v')||'full');if(!MODELS[curM])curM='wraith';
+/* big models come in several files (each under the host's 20 MB limit): fetch them all, join the pieces, then unzip */
+/* a version can borrow another version's files: the full model is shared, a combat model wears its own paint */
+const SRC=(m,v)=>((MODELS[m].src||{})[v])||m,KEY=(m,v)=>(v==='full'&&!MODELS[m].paint&&!MODELS[m].clay?SRC(m,v):m)+'/'+v;
+function fetchParts(m,v,onp){const f=SRC(m,v),d=FD(f+'_'+v);if(!d)return Promise.reject(new Error('not in this file: '+f+'_'+v));
+  const b=atob(d),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);onp(1);return Promise.resolve({bytes:u.length,gz:[u]});}
+function gunzip(chunks){return new Response(new Blob(chunks).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();}
+function load(m,v,onp){const key=KEY(m,v);return fetchParts(m,v,onp).then(r=>{DOWN[key]=r.bytes;return gunzip(r.gz);}).then(buf=>new Promise((res,rej)=>{
+  new T.GLTFLoader().parse(buf,'',g=>{const r=g.scene;MODELS[m].stance(r);r.userData.st=dress(r,m,v==='full');M[key]=r;S.add(r);res(r);},rej);}));}
+let yaw=Q.has('yaw')?+Q.get('yaw'):2.55,pitch=Q.has('pitch')?+Q.get('pitch'):.12,dist=12.5,ty=3,auto=!Q.has('still');
+const GL={};
+const ORDER=['wraith','ac','ln','ar','mpod','watcher','jetpack','drone','fgunner','gunnerprime','fhound','alphahound','fskitter','broodskitter','spod'];   /* chip order */   /* the version last shown in each group (Wraith W1, W2 ...) */
+/* tiers: a model holding several versions of one part (t1_ .. t4_ objects) shows only the chosen one */
+const chipLabel=k=>{const C=MODELS[k];return C.tiers?C.vl+' '+C.tiers[C.tier]:C.vl;};
+function applyTier(m){const C=MODELS[m];if(!C.tiers)return;for(const k in M){if(!k.startsWith(m+'/'))continue;
+  M[k].traverse(o=>{const t=/^t(\d)_/.exec(o.name||'');if(t)o.visible=(+t[1]===C.tier+1);});}}
+function show(m,v){if(LIGHT)v='combat';if(MODELS[m].nocombat)v='full';curM=m;curV=v;const C=MODELS[m],key=KEY(m,v);
+  {const cb=document.querySelector('#bar button[data-v="combat"]');if(cb)cb.style.display=C.nocombat?'none':'';}if(C.grp)GL[C.grp]=m;
+  {const vb=$('ver');if(C.grp){vb.innerHTML=ORDER.filter(k=>MODELS[k].grp===C.grp).map(k=>'<button data-w="'+k+'"'+(k===m?' class="on"':'')+'>'+chipLabel(k)+'</button>').join('');vb.style.display='flex';
+    {const on_=vb.querySelector('.on');if(on_)on_.scrollIntoView({inline:'center',block:'nearest'});}
+    vb.querySelectorAll('button').forEach(b=>b.onclick=()=>{const T_=MODELS[b.dataset.w];if(b.dataset.w===curM&&T_.tiers){T_.tier=(T_.tier+1)%T_.tiers.length;}show(b.dataset.w,curV);});}else vb.style.display='none';}
+  document.documentElement.style.setProperty('--acc',C.acc);ringM.color.set(C.acc).multiplyScalar(2.2);
+  for(const k in M)M[k].visible=k===key;
+  document.querySelectorAll('#bar button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  document.querySelectorAll('#pick button').forEach(b=>{const on=b.dataset.m===m||(C.grp&&MODELS[b.dataset.m]&&MODELS[b.dataset.m].grp===C.grp);b.classList.toggle('on',!!on);if(on)b.scrollIntoView({inline:'center',block:'nearest'});});
+  $('nm').textContent=C.label;$('sub').textContent=C.sub[v];dist=Q.has('d')?+Q.get('d'):C.dist;if(C.yaw!==undefined&&!Q.has('yaw'))yaw=C.yaw;ty=Q.has('ty')?+Q.get('ty'):C.ty;
+  {const k=C.size||1,sc=KEYL.shadow.camera;Object.assign(sc,{left:-5*k,right:5*k,top:7*k,bottom:-2*k,far:30*k});sc.updateProjectionMatrix();
+   KEYL.position.set(5*k,11*k,7*k);ring.scale.setScalar(k);ZMIN=C.dist*.2;ZMAX=C.dist*1.8;}
+  if(!M[key]){$('stats').innerHTML='';$('load').style.display='flex';$('lb').style.width='0';$('lt').textContent='LOADING '+C.label+' · '+v.toUpperCase();
+    load(m,v,p=>$('lb').style.width=(p*100)+'%').then(()=>{$('load').style.display='none';if(curM===m&&curV===v)show(m,v);else M[key].visible=false;});return;}
+  applyTier(m);
+  $('stats').innerHTML='<b>'+M[key].userData.st.tris.toLocaleString('en-US')+'</b> triangles<br><b>'+(DOWN[key]<1e5?Math.round(DOWN[key]/1e3)+' KB':(DOWN[key]/1e6).toFixed(1)+' MB')+'</b> of model data<br><span id="dc"></span>';}
+document.querySelectorAll('#bar button').forEach(b=>b.onclick=()=>show(curM,b.dataset.v));
+document.querySelectorAll('#pick button').forEach(b=>b.onclick=()=>{const g=MODELS[b.dataset.m].grp;show(g?(GL[g]||b.dataset.m):b.dataset.m,curV);});
+show(curM,curV);
+
+/* ---------- orbit: drag to turn, pinch or wheel to zoom; it turns slowly on its own until touched ---------- */
+const pts=new Map();let pd=0;
+addEventListener('pointerdown',e=>{if(e.target.closest('.bar'))return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});auto=false;});
+addEventListener('pointermove',e=>{const p=pts.get(e.pointerId);if(!p)return;
+  if(pts.size===1){yaw-=(e.clientX-p.x)*.008;pitch=Math.max(-.15,Math.min(1.1,pitch+(e.clientY-p.y)*.006));}
+  p.x=e.clientX;p.y=e.clientY;
+  if(pts.size===2){const [a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pd)dist=Math.max(ZMIN,Math.min(ZMAX,dist*pd/d));pd=d;}});
+const up=e=>{pts.delete(e.pointerId);pd=0;};addEventListener('pointerup',up);addEventListener('pointercancel',up);
+addEventListener('wheel',e=>{dist=Math.max(ZMIN,Math.min(ZMAX,dist*(1+e.deltaY*.001)));auto=false;},{passive:true});
+let last=performance.now(),fr=0,ft=0;
+function loop(t){requestAnimationFrame(loop);const dt=Math.min(.05,(t-last)/1000);last=t;if(auto)yaw+=dt*.18;
+  const d=dist*(cam.aspect<1?1.08:1);cam.position.set(Math.sin(yaw)*Math.cos(pitch)*d,ty+Math.sin(pitch)*d,Math.cos(yaw)*Math.cos(pitch)*d);cam.lookAt(0,ty,0);
+  R.render(S,cam);fr++;ft+=dt;if(ft>1){const el=$('dc');if(el)el.innerHTML='<b>'+R.info.render.calls+'</b> calls · '+Math.round(fr/ft)+' fps';fr=0;ft=0;}}
+requestAnimationFrame(loop);
+window.__bay={R,S,cam,M,show,MODELS};
+});
+</script>
+</body></html>

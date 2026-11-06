@@ -19,3 +19,9 @@ The Wraith (recon support, sheet 90), made the way every Ironhowl 4 model is mad
 - Joints: wraith (root) > hips > thigh_L/R > knee > hock > ankle > toe_L/R0..2, heel; wraith > torso > head, arm_L/R > elbow > wrist.
   Mounts: fa_L/R (child of elbow, turned so a module's +y runs along the forearm and +z points out of the saddle), sh_L/R, bk (children of torso).
 - Download: full 15.8 MB, combat 0.2 MB. In the model bay as WRAITH › V2 HD (FULL and COMBAT). Walk test: https://claude.ai/artifact/YNRKCwkntMSmoMF5EcH5DL
+
+## Re-print, 6 Nov (nearest-colour fill)
+Surfaces no picture sees (inner faces of the legs and arms, tops, undersides) were a flat grey-white tint. They now take
+the colour of the nearest printed surface of the same part (`"fill": "nearest"` in `source/print.json`, pipeline v2.3), and the
+combat model was re-baked. Same shapes and same GLB files; only the pictures changed. Before and after:
+`previews/fill_tint_vs_nearest.jpg` (fit check) and `previews/fill_phone_old_new.jpg` (phone: full old, full new, combat old, combat new).

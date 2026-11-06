@@ -37,7 +37,7 @@ COLL, MAT = 'LO', 'atlas'      # which meshes get painted (the combat model by d
 
 def atlas_triangles():
     """world positions, normals and atlas UVs of every triangle to paint"""
-    P, N, U = [], [], []
+    P, N, U, O = [], [], [], []; NAMES[:] = []
     for o in bpy.data.collections[COLL].objects:
         if o.type != 'MESH' or not o.data.materials or (MAT and o.data.materials[0].name != MAT): continue
         me = o.data; me.calc_loop_triangles(); M = o.matrix_world; Mn = M.to_3x3().inverted().transposed()
@@ -48,8 +48,15 @@ def atlas_triangles():
         uv = np.zeros(nl * 2); me.uv_layers.active.data.foreach_get('uv', uv); uv = uv.reshape(-1, 2)
         lt = np.zeros(len(me.loop_triangles) * 3, np.int64); me.loop_triangles.foreach_get('loops', lt); lt = lt.reshape(-1, 3)
         lv = np.zeros(nl, np.int64); me.loops.foreach_get('vertex_index', lv)
-        P.append(co[lv[lt]]); N.append(cn[lt]); U.append(uv[lt])
+        P.append(co[lv[lt]]); N.append(cn[lt]); U.append(uv[lt]); O.append(np.full(len(lt), len(NAMES))); NAMES.append(o.name)
+    OBJ[0] = np.concatenate(O)
     return np.concatenate(P), np.concatenate(N), np.concatenate(U)
+
+NAMES, OBJ = [], [None]      # which object each triangle came from (for the same-part fill)
+def part_of(name):
+    """the parts-file name of a Blender object: pad_R -> pad, thigh_R.001 -> thigh"""
+    n = name.split('.')[0]
+    return n[:-2] if n[-2:] in ('_R', '_L') else n
 
 def raster(t2, attr, W, H, depth=None, pad=.0):
     """rasterise triangles t2 (T,3,2 pixel coords) into a W x H grid. With depth (T,3): a z-buffer (nearest wins) and the
@@ -193,13 +200,15 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
     bpy.ops.wm.open_mainfile(filepath=blend)
     P, N, U = atlas_triangles(); print('triangles', len(P), flush=True)
     SR = views_sources(I) if 'views' in I else guide_sources(I) if 'guide' in I else sheet_sources(I['image'], I['boxes'], P, H, mapping)
+    if 'fill' in I: FILL[0] = I['fill']      # v2.2: any print can ask for the nearest-colour fill (the Wraith since 6 Nov)
     VW = [v for v in ('front', 'side', 'rear', 'top') if v in SR]
     m = {v: SR[v]['m'] for v in VW}
     print('registration', {v: round(m[v]['iou'], 3) for v in VW}, flush=True)
     # 1. every texel: where it is on the model and which way it faces
     t2 = np.stack([U[..., 0] * size, (1 - U[..., 1]) * size], -1)
     pos, tid = raster(t2, np.concatenate([P, N], -1), size, size, pad=.6)
-    cov = tid >= 0; del tid; idx = np.where(cov); tp = pos[idx][:, :3]; tn = pos[idx][:, 3:]; del pos
+    cov = tid >= 0; idx = np.where(cov); tp = pos[idx][:, :3]; tn = pos[idx][:, 3:]; del pos
+    tpart = np.array([part_of(n) for n in NAMES])[OBJ[0][tid[idx]]]; del tid
     tn /= np.maximum(1e-9, np.linalg.norm(tn, axis=1, keepdims=True))
     print('texels on the model', len(tp), flush=True)
     PV = ['front', 'side', 'sideR', 'rear'] + (['top'] if 'top' in m else [])
@@ -249,10 +258,15 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
         from scipy.spatial import cKDTree
         good = alpha[:, 0] > .8
         if good.sum() > 100 and (~good).any():
-            gi = np.where(good)[0]
-            if len(gi) > 150000: gi = np.random.default_rng(1).choice(gi, 150000, replace=False)     # a sample is plenty, and fast
-            d_, j_ = cKDTree(tp[gi], balanced_tree=False, compact_nodes=False).query(tp[~good], k=4, workers=-1)
-            tinted[~good] = proj[gi][j_].mean(1)
+            # v2.2 (session 3's change): each part is filled from its OWN printed surfaces (a pod's hidden flank from the pod,
+            # not from a red light beside it); a part with almost nothing printed falls back to every part
+            rng = np.random.default_rng(1); allg = np.where(good)[0]
+            for pn in np.unique(tpart[~good]):
+                tgt_ = np.where(~good & (tpart == pn))[0]; gi = np.where(good & (tpart == pn))[0]
+                if len(gi) < 400: gi = allg
+                if len(gi) > 150000: gi = rng.choice(gi, 150000, replace=False)     # a sample is plenty, and fast
+                d_, j_ = cKDTree(tp[gi], balanced_tree=False, compact_nodes=False).query(tp[tgt_], k=4, workers=-1)
+                tinted[tgt_] = proj[gi][j_].mean(1)
     del tp
     out[idx] = tinted * (1 - alpha) + proj * alpha
     # 3. spread the painted colour into the gaps between atlas islands (no seams when the texture is shrunk)

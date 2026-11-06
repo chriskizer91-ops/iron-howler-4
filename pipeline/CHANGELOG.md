@@ -22,3 +22,9 @@
   - `v2_board.py`: model tiles sized and framed from the model, the tile background matched to the sheet.
   - `project_sheet.py`: an `unmirror` box can name its view as a 5th entry (`[x0, y0, x1, y1, "front"]`), for lettering on a
     front or back picture that was flipped (the Lance, the Arc). Boxes without it work as before (the mirrored side).
+- **v2.3 (6 Nov 2026), for the game files and the Wraith re-print.**
+  - `project_sheet.py`: the nearest-colour fill takes colour only from the same part (session 3's change: a hidden flank is
+    filled from its own part, not from a light beside it); any print can ask for it with `"fill": "nearest"` (the Wraith's
+    `print.json` now does; session 2's pieces keep `"fill": "tint"`).
+  - new `game_pack.py` + `web/game_models_template.html`: one self-contained HTML file with every model the game uses
+    (full + combat, or `--light` combat only), opened straight from the disk, no internet needed.
