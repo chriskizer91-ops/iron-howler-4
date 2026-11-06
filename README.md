@@ -18,6 +18,7 @@ the three FORGE foes (Gunner, Hound, Skitter), all made from scratch with the mo
 | `SESSIONS.md` | who builds what when several Claude sessions work at once, and the rules they share |
 | `MODEL-PLAN.md` | the model plan: rules, every step with its command, techniques, checks |
 | `models/wraith-v2-hd/` | Wraith V2 HD: full model (949,948 triangles), combat model (7,464), prints, sources, previews |
+| `art/kit-and-foes/` | the 40 ChatGPT pictures for the Wraith's kit and the three foes (sheets and HD views, README with sizes) |
 | `art-requests/` | image requests for ChatGPT: `IH4_KIT_AND_FOES_IMAGE_REQUEST.md` (the Wraith's kit and the three foes, 40 images) |
 | `pipeline/` | the tools the plan uses (Blender 5.2 Python module; run with `python3 -I`), the model bay page and the walk test page |
 | `reference/sheets-87-95/` | Christopher's concept sheets: the four chassis (87 Strider, 88 Howler 07, 89 Bastion, 90 Wraith) and the 24 modules (91–95) |

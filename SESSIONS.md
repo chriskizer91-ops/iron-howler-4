@@ -1,13 +1,14 @@
 # Ironhowl 4: who builds what (parallel sessions)
 
-Christopher runs up to four Claude sessions at the same time. Each one builds its own pieces from the same image zip, the
-way `MODEL-PLAN.md` describes, and saves them to this repo. Wraith V2 HD (`models/wraith-v2-hd/`) is the standard to match.
+Christopher runs up to four Claude sessions at the same time. Each one builds its own pieces from the same pictures, the
+way `MODEL-PLAN.md` describes, and saves them to this repo. **All 40 pictures are already in the repo, in `art/kit-and-foes/`**
+(6 character sheets and 34 HD views, with `README.txt` and `contact_sheet.jpg`). Nobody needs the zip. Wraith V2 HD (`models/wraith-v2-hd/`) is the standard to match.
 
 ## The split
 
 | Session | Builds | Images from the zip | Model bay ids |
 | --- | --- | --- | --- |
-| **1** (the first chat; owns `pipeline/`, `STATUS.md`, `MODEL-PLAN.md` and the design document) | first **pipeline v2.1** (any item, not only the Wraith), then the forearm weapons: autocannon tiers I–IV, Lance, Arc, plus a fit check of the kit on the Wraith | A00–A09 | `ac`, `lance`, `arc` |
+| **1** (the first chat; owns `pipeline/`, `STATUS.md`, `MODEL-PLAN.md` and the design document) | **pipeline v2.1** (done), then the forearm weapons: autocannon tiers I–IV, Lance, Arc, plus a fit check of the kit on the Wraith | A00–A09 | `ac`, `lance`, `arc` |
 | **2** | shoulder and back modules: missile pod, Watcher, jet pack; then the assist drone, docked and flying | B00–B09, C00–C04 | `mpod`, `watcher`, `jetpack`, `drone` |
 | **3** | the Gunner, then its boss **Gunner Prime**, then the spawner pod | D00–D03, F05–F06 | `fgunner`, `gunnerprime`, `spod` |
 | **4** | the Hound and its boss **Alpha Hound**, then the Skitter and its boss **Brood Skitter** (which wears session 3's spawner pod) | E00–E03, F00–F04 | `fhound`, `alphahound`, `fskitter`, `broodskitter` |
@@ -18,21 +19,21 @@ and session 3 does the Hound and the Skitter with their bosses.
 The old ids `gunner`, `hound` and `skitter` belong to the archived models, so don't reuse them.
 
 ## Paste this into each new session (change the number)
-> You're session 2 of the Ironhowl 4 build. Clone the GitHub repo chriskizer91-ops/iron-howler-4, read SESSIONS.md and
-> MODEL-PLAN.md, then build your pieces from the image zip I'm attaching. Follow the rules in SESSIONS.md.
+> You're session 2 of the Ironhowl 4 build. Clone the GitHub repo chriskizer91-ops/iron-howler-4 and read SESSIONS.md and
+> MODEL-PLAN.md. Your pictures are already in the repo in art/kit-and-foes/. Build your pieces and follow the rules in SESSIONS.md.
 
 ## Rules for every session
 1. **Read `MODEL-PLAN.md` first.** It covers the method, the commands and the checks. Christopher can't code, so explain in plain
    words, prove each step with screenshots and simple numbers, and keep phone screens uncluttered.
-2. **Images.** The first session to get `ironhowl4_kit_and_foes.zip` unpacks it into `art/kit-and-foes/` and pushes it (check it isn't
-   there first). Everyone uses those files. Read its `README.txt` for each item's real size in metres.
+2. **Images:** `art/kit-and-foes/<group>/` (`A_wraith_forearm`, `B_wraith_shoulder_back`, `C_drone`, `D_gunner`, `E_hound`,
+   `F_skitter`). Read `README.txt` first. It gives each item's real size in metres (width × length × height) and the pixel scale
+   ChatGPT used for each item's views. Don't change these files.
 3. **Check each item's views agree before tracing.** The request had a left/right slip: it asked for the forearm weapons'
    clamp on the wrong side in the front and back views, and the jet pack's side view the wrong way round. If a front or back
    view is the mirror image of what the side view shows, flip it. If a side view shows the right side instead of the left,
    print it as the right side (`sideR`). Note what you did in your status file.
-4. **Wait for pipeline v2.1 before building.** Watch `pipeline/CHANGELOG.md`. Until v2.1 is listed, do only steps 1 and 2 of the
-   model plan: measure the views and trace the parts. v2.1 builds any item from three separate view pictures (front, side,
-   back, plus top where there is one) and reads its joints from the parts file.
+4. **Pipeline v2.1 is ready.** Follow the "v2.1" section of `MODEL-PLAN.md`: `make_views.py` puts an item's separate view
+   pictures on one sheet, and the parts file holds its joints, mounts and triangle budgets. Read `pipeline/CHANGELOG.md` after every pull.
 5. **Stay in your own folders:** `models/<item>/` (model files, `source/`, `previews/`) for each piece you build. Don't edit other
    sessions' folders.
 6. **`pipeline/` belongs to session 1.** Don't edit its files. If you need a change, copy the tool into
