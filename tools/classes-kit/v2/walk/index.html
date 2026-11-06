@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b0c0e">
+<title>Ironhowl 4 — Wraith V2 walk test</title>
+<style>
+html,body{margin:0;height:100%;background:#0b0c0e;color:#e9e6df;overflow:hidden;font:600 12px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:.06em;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+canvas{position:fixed;inset:0;display:block;width:100%;height:100%}
+#top{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 0;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+#name{font-size:15px;letter-spacing:.2em;color:#ffb347}
+#name small{display:block;font-size:10px;letter-spacing:.16em;color:#ffffff80;margin-top:3px}
+#stats{text-align:right;white-space:nowrap;color:#ffffffb0;font-variant-numeric:tabular-nums;font-size:11px;line-height:1.5}
+#stats b{color:#fff;font-weight:700}
+.bar{position:fixed;left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:4px;border-radius:999px;background:#0c0e11cc;border:1px solid #ffffff1a;backdrop-filter:blur(8px)}
+#bar{bottom:calc(env(safe-area-inset-bottom,0px) + 18px)}
+.bar button{all:unset;cursor:pointer;padding:9px 18px;border-radius:999px;color:#ffffffa0;font-size:12px;letter-spacing:.14em}
+.bar button.on{background:#ffb347;color:#140c08}
+#load{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#ffffffa0;font-size:11px;letter-spacing:.2em;pointer-events:none}
+#load .t{width:min(240px,60vw);height:3px;background:#ffffff1a;border-radius:2px;overflow:hidden}#lb{height:100%;width:0;background:#ffb347;transition:width .15s}
+</style></head><body>
+<canvas id="gl"></canvas>
+<div id="top"><div id="name">WRAITH V2<small>COMBAT MODEL · WALK TEST</small></div><div id="stats"></div></div>
+<div id="bar" class="bar"><button data-g="stand">STAND</button><button data-g="walk" class="on">WALK</button><button data-g="run">RUN</button></div>
+<div id="load"><div>LOADING WRAITH V2</div><div class="t"><div id="lb"></div></div></div>
+<script src="three-ih3.min.js"></script>
+<script>
+(()=>{
+const T=THREE,$=id=>document.getElementById(id),Q=new URLSearchParams(location.search);
+const R=new T.WebGLRenderer({canvas:$('gl'),antialias:true,powerPreference:'high-performance'});
+R.outputColorSpace=T.SRGBColorSpace;R.toneMapping=T.ACESFilmicToneMapping;R.toneMappingExposure=1.05;
+R.shadowMap.enabled=true;R.shadowMap.type=T.PCFShadowMap;
+const S=new T.Scene();S.background=new T.Color(0x1a1d22);S.fog=new T.Fog(0x1a1d22,30,95);
+const cam=new T.PerspectiveCamera(42,1,.1,300);
+function resize(){const w=innerWidth,h=innerHeight;R.setPixelRatio(Math.min(devicePixelRatio||1,2));R.setSize(w,h,false);cam.aspect=w/h;cam.fov=w<h?55:40;cam.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+/* ---------- light: the model bay's reflection room, a key light that follows the mech, a cool rim ---------- */
+{const room=new T.Scene();const g=new T.SphereGeometry(30,32,16),c=[];const p=g.attributes.position;
+ for(let i=0;i<p.count;i++){const y=p.getY(i)/30;const k=y>0?.18+.16*y:.08;c.push(k,k*1.01,k*1.05);}
+ g.setAttribute('color',new T.Float32BufferAttribute(c,3));room.add(new T.Mesh(g,new T.MeshBasicMaterial({vertexColors:true,side:T.BackSide})));
+ const strip=new T.MeshBasicMaterial({color:new T.Color(1,1,1).multiplyScalar(6)});
+ for(let i=0;i<12;i++){const a=i/12*Math.PI*2,m=new T.Mesh(new T.BoxGeometry(.35,10,.35),strip);m.position.set(Math.cos(a)*14,6,Math.sin(a)*14);room.add(m);}
+ const box=new T.MeshBasicMaterial({color:new T.Color(1,.97,.92).multiplyScalar(7)});
+ for(const x of [-4,4]){const m=new T.Mesh(new T.BoxGeometry(6,.1,3),box);m.position.set(x,15,0);room.add(m);}
+ const pm=new T.PMREMGenerator(R);S.environment=pm.fromScene(room,.02).texture;S.environmentIntensity=.9;}
+const key=new T.DirectionalLight(0xfff1e0,2.4);key.castShadow=true;key.shadow.mapSize.set(2048,2048);
+Object.assign(key.shadow.camera,{left:-9,right:9,top:9,bottom:-9,near:1,far:40});key.shadow.bias=-.0005;key.shadow.normalBias=.03;S.add(key);S.add(key.target);
+const rim=new T.DirectionalLight(0xbfd6ff,1.0);S.add(rim);S.add(rim.target);
+S.add(new T.HemisphereLight(0x9aa6b8,0x2a2622,.35));
+
+/* ---------- ground: concrete with a 2 m grid, the path the mech walks ---------- */
+const RAD=16;   /* path radius, metres */
+{const cv=document.createElement('canvas');cv.width=cv.height=512;const g=cv.getContext('2d');
+ g.fillStyle='#3a3c40';g.fillRect(0,0,512,512);
+ for(let i=0;i<9000;i++){const v=50+Math.random()*30|0;g.fillStyle='rgba('+v+','+v+','+(v+3)+','+(.08+Math.random()*.12)+')';g.fillRect(Math.random()*512,Math.random()*512,1+Math.random()*3,1+Math.random()*3);}
+ g.strokeStyle='rgba(20,22,25,.55)';g.lineWidth=3;g.strokeRect(0,0,512,512);g.strokeStyle='rgba(255,255,255,.05)';g.lineWidth=1;g.beginPath();g.moveTo(256,0);g.lineTo(256,512);g.moveTo(0,256);g.lineTo(512,256);g.stroke();
+ const t=new T.CanvasTexture(cv);t.colorSpace=T.SRGBColorSpace;t.wrapS=t.wrapT=T.RepeatWrapping;t.repeat.set(100,100);t.anisotropy=8;
+ const gr=new T.Mesh(new T.PlaneGeometry(400,400),new T.MeshStandardMaterial({map:t,roughness:.92,metalness:0}));gr.rotation.x=-Math.PI/2;gr.receiveShadow=true;S.add(gr);
+ const path=new T.Mesh(new T.RingGeometry(RAD-1.9,RAD+1.9,160),new T.MeshStandardMaterial({color:0x2c2e31,roughness:1,transparent:true,opacity:.55}));
+ path.rotation.x=-Math.PI/2;path.position.y=.004;path.receiveShadow=true;S.add(path);
+ for(const r of [RAD-1.9,RAD+1.9]){const l=new T.Mesh(new T.RingGeometry(r-.04,r+.04,160),new T.MeshBasicMaterial({color:0xffb347,transparent:true,opacity:.35}));l.rotation.x=-Math.PI/2;l.position.y=.006;S.add(l);}}
+
+/* ---------- loading: gzip-compressed text, the same files as the model bay ---------- */
+function fetchBytes(url,onp){return fetch(url).then(r=>{const L=+r.headers.get('content-length')||0;if(!r.body||!L)return r.arrayBuffer();
+  const rd=r.body.getReader(),parts=[];let got=0;return (function pump(){return rd.read().then(({done,value})=>{if(done){const b=new Uint8Array(got);let o=0;for(const p of parts){b.set(p,o);o+=p.length;}return b.buffer;}
+    parts.push(value);got+=value.length;onp(got/L);return pump();});})();});}
+function unpack(buf){const j=JSON.parse(new TextDecoder().decode(buf)),s=atob(j.b64),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);
+  return new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();}
+const TL=new T.TextureLoader();
+function tex(n,srgb){const t=TL.load(n);t.flipY=false;t.colorSpace=srgb?T.SRGBColorSpace:T.NoColorSpace;t.anisotropy=8;return t;}
+const M='wraithv2p';
+const orm=tex(M+'_orm.webp',false);
+const mat=new T.MeshStandardMaterial({map:tex(M+'_albedo.webp',true),normalMap:tex(M+'_normal.webp',false),aoMap:orm,roughnessMap:orm,metalnessMap:orm,roughness:1,metalness:1});
+
+const mech=new T.Group();S.add(mech);let J={},tris=0,ready=false;
+fetchBytes(M+'_combat_1.json',p=>$('lb').style.width=(p*100)+'%').then(unpack).then(buf=>new Promise((res,rej)=>new T.GLTFLoader().parse(buf,'',res,rej))).then(g=>{
+  const r=g.scene;r.traverse(o=>{if(o.isMesh){o.material=mat;o.castShadow=true;o.receiveShadow=true;tris+=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;}J[o.name]=o;});
+  mech.add(r);mech.updateMatrixWorld(true);setup();ready=true;$('load').style.display='none';});
+
+/* ---------- the walk: each leg is solved so its foot stays planted while the body moves over it ----------
+   Leg chain: hip (thigh) > knee > hock > ankle > foot. The thigh and the lower leg (hock to ankle) turn together, so the
+   leg works as two links (hip to ankle). Angles are in the mech's side plane: rotating a joint about x adds to atan2(z, y). */
+const ang=v=>Math.atan2(v.z,v.y),wrap=a=>Math.atan2(Math.sin(a),Math.cos(a));
+const L={};
+function wp(n){const v=new T.Vector3();J[n].getWorldPosition(v);return v;}
+function setup(){
+  for(const s of ['L','R']){
+    const H=wp('thigh_'+s),K=wp('knee_'+s),Hk=wp('hock_'+s),A=wp('ankle_'+s);
+    const t0={y:K.y-H.y,z:K.z-H.z},s0={y:Hk.y-K.y,z:Hk.z-K.z},m0={y:A.y-Hk.y,z:A.z-Hk.z};
+    const P={y:t0.y+m0.y,z:t0.z+m0.z};
+    L[s]={H,A,P,Q:s0,lp:Math.hypot(P.y,P.z),lq:Math.hypot(s0.y,s0.z),sign:1,x:A.x};
+    L[s].sign=[1,-1].map(sg=>[sg,solve(L[s],{y:P.y+s0.y,z:P.z+s0.z},sg)]).sort((a,b)=>(Math.abs(a[1].a)+Math.abs(a[1].b))-(Math.abs(b[1].a)+Math.abs(b[1].b)))[0][0];
+  }
+}
+function solve(l,D,sg){
+  let d=Math.hypot(D.y,D.z);d=Math.min((l.lp+l.lq)*.995,Math.max(Math.abs(l.lp-l.lq)*1.01,d));
+  const phD=ang(D),g=Math.acos(Math.max(-1,Math.min(1,(l.lp*l.lp+d*d-l.lq*l.lq)/(2*l.lp*d)))),phP=phD+sg*g;
+  const Pp={y:Math.cos(phP)*l.lp,z:Math.sin(phP)*l.lp},Dd={y:Math.cos(phD)*d,z:Math.sin(phD)*d},Qp={y:Dd.y-Pp.y,z:Dd.z-Pp.z};
+  return {a:wrap(phP-ang(l.P)),b:wrap(ang(Qp)-ang(l.Q))};}
+
+/* gaits: stride (m), cycle (s), share of the cycle a foot is on the ground, foot lift (m), body bob (m), arm swing (rad) */
+const G={stand:{L:0,T:1.6,d:.62,h:0,b:0,arm:0},walk:{L:2.1,T:1.55,d:.62,h:.42,b:.06,arm:.2},run:{L:3.4,T:1.05,d:.44,h:.75,b:.14,arm:.42}};
+let gait=Q.get('g')||'walk',cur={...G.walk},phase=0,along=0,speed=0;
+document.querySelectorAll('#bar button').forEach(b=>b.onclick=()=>{gait=b.dataset.g;document.querySelectorAll('#bar button').forEach(x=>x.classList.toggle('on',x===b));});
+document.querySelectorAll('#bar button').forEach(x=>x.classList.toggle('on',x.dataset.g===gait));
+function foot(psi,c){   /* forward offset, lift and toe pitch of a foot at its own phase psi */
+  if(psi<c.d)return {f:c.L/2-c.L*psi/c.d,u:0,p:0};
+  const s=(psi-c.d)/(1-c.d),e=s*s*(3-2*s);return {f:-c.L/2+c.L*e,u:c.h*Math.sin(Math.PI*s),p:-.35*Math.sin(Math.PI*s)*Math.min(1,c.L/2)};}
+
+/* footprints where the feet land */
+const prints=[],pm=new T.MeshBasicMaterial({color:0x101113,transparent:true,opacity:.5,depthWrite:false});const pg=new T.PlaneGeometry(.9,1.5);
+function print_(s){const v=new T.Vector3();J['ankle_'+s].getWorldPosition(v);const m=new T.Mesh(pg,pm.clone());m.rotation.x=-Math.PI/2;m.rotation.z=mech.rotation.y;
+  const fw=new T.Vector3(0,0,-1).applyAxisAngle(new T.Vector3(0,1,0),mech.rotation.y);m.position.set(v.x+fw.x*.55,.008,v.z+fw.z*.55);S.add(m);prints.push({m,t:0});if(prints.length>28){const o=prints.shift();S.remove(o.m);}}
+const was={L:false,R:false};
+
+function animate(dt){
+  const tg=G[gait];for(const k in tg)cur[k]+=(tg[k]-cur[k])*Math.min(1,dt*2.2);       /* gaits blend into each other */
+  speed=cur.L/(cur.d*cur.T);phase=(phase+dt/cur.T)%1;along+=speed*dt;
+  const th=along/RAD,px=Math.cos(th)*RAD,pz=Math.sin(th)*RAD;
+  /* walking counter-clockwise seen from above: the path's direction is (-sin, cos); the mech's front is its -z */
+  const head=Math.atan2(Math.sin(th),-Math.cos(th));
+  const bob=-cur.b*Math.cos(4*Math.PI*(phase-.12)),sway=.07*Math.min(1,cur.L)*Math.sin(2*Math.PI*phase);
+  mech.rotation.y=head;mech.position.set(px,0,pz);
+  const side=new T.Vector3(1,0,0).applyAxisAngle(new T.Vector3(0,1,0),head);mech.position.addScaledVector(side,sway);
+  J.wraith.position.y=bob;
+  for(const [s,off] of [['L',0],['R',.5]]){
+    const l=L[s],psi=(phase+off)%1,f=foot(psi,cur);
+    const D={y:(l.A.y+f.u-bob)-l.H.y,z:(l.A.z-f.f)-l.H.z};
+    const r=solve(l,D,l.sign);
+    J['thigh_'+s].rotation.x=r.a;J['knee_'+s].rotation.x=r.b-r.a;J['hock_'+s].rotation.x=r.a-r.b;J['ankle_'+s].rotation.x=-r.a+f.p;
+    const down=psi<cur.d;if(down&&!was[s]&&cur.L>.3)print_(s);was[s]=down;
+    /* arms swing against the legs */
+    const sw=cur.arm*Math.sin(2*Math.PI*(psi+.5));
+    if(J['arm_'+s])J['arm_'+s].rotation.x=sw; if(J['elbow_'+s])J['elbow_'+s].rotation.x=-.12-Math.max(0,sw)*.6-cur.arm*.4;
+  }
+  if(J.hips)J.hips.rotation.z=.035*Math.min(1,cur.L)*Math.sin(2*Math.PI*phase);
+  if(J.torso){J.torso.rotation.y=.06*Math.min(1,cur.L)*Math.sin(2*Math.PI*phase);J.torso.rotation.x=-.04*cur.L/3;}
+  if(J.head)J.head.rotation.x=.5*cur.b*Math.cos(4*Math.PI*(phase-.12));
+  for(const p of prints){p.t+=dt;p.m.material.opacity=Math.max(0,.5-p.t*.03);}
+}
+
+/* ---------- camera: follows the mech; drag to turn around it, pinch or wheel to zoom ---------- */
+let yaw=Q.has('yaw')?+Q.get('yaw'):2.35,pitch=.17,dist=Q.has('d')?+Q.get('d'):14,auto=!Q.has('still');const tgt=new T.Vector3(RAD,3,0);
+const pts=new Map();let pd=0;
+addEventListener('pointerdown',e=>{if(e.target.closest('.bar'))return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});auto=false;});
+addEventListener('pointermove',e=>{const p=pts.get(e.pointerId);if(!p)return;
+  if(pts.size===1){yaw-=(e.clientX-p.x)*.008;pitch=Math.max(.02,Math.min(1.2,pitch+(e.clientY-p.y)*.006));}
+  p.x=e.clientX;p.y=e.clientY;if(pts.size===2){const [a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pd)dist=Math.max(7,Math.min(45,dist*pd/d));pd=d;}});
+const up=e=>{pts.delete(e.pointerId);pd=0;};addEventListener('pointerup',up);addEventListener('pointercancel',up);
+addEventListener('wheel',e=>{dist=Math.max(7,Math.min(45,dist*(1+e.deltaY*.001)));},{passive:true});
+let last=performance.now(),fr=0,ft=0,fps=0;
+const REC=Q.has('rec');      /* recording: time moves only when the recorder asks (smooth video at any speed) */
+function frame(dt){animate(dt);
+    tgt.lerp(new T.Vector3(mech.position.x,3.1,mech.position.z),Math.min(1,dt*4));
+    const y=yaw+mech.rotation.y,d=dist*(cam.aspect<1?1.1:1);
+    cam.position.set(tgt.x+Math.sin(y)*Math.cos(pitch)*d,tgt.y+Math.sin(pitch)*d,tgt.z+Math.cos(y)*Math.cos(pitch)*d);cam.lookAt(tgt);
+    key.position.set(mech.position.x+7,13,mech.position.z+6);key.target.position.copy(mech.position);rim.position.set(mech.position.x-6,7,mech.position.z-9);rim.target.position.copy(mech.position);}
+window.__step=(n,dt)=>{for(let i=0;i<n;i++)frame(dt||1/30);R.render(S,cam);};
+function loop(t){requestAnimationFrame(loop);const dt=Math.min(.05,(t-last)/1000);last=t;if(REC)return;
+  if(ready){frame(dt);}
+  R.render(S,cam);fr++;ft+=dt;if(ft>.5){fps=Math.round(fr/ft);fr=0;ft=0;
+    if(ready)$('stats').innerHTML='<b>'+Math.round(tris).toLocaleString('en-US')+'</b> triangles<br><b>'+speed.toFixed(1)+' m/s</b> · '+gait.toUpperCase()+'<br>'+fps+' fps';}}
+requestAnimationFrame(loop);
+window.__walk={J,L,mech,cam};
+})();
+</script>
+</body></html>

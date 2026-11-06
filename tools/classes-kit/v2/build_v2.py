@@ -185,7 +185,7 @@ def mesh_obj(name, V, F, mat, coll, parent=None, mirror=False):
     if parent: o.parent = parent; o.matrix_parent_inverse = parent.matrix_world.inverted()
     return o
 
-def build(pj, sheet, fine=False):
+def build(pj, sheet, fine=False, lo=False):
     J = json.load(open(pj)); P, SH, JT, Vw = J['parts'], J['shared'], J['joints'], J['view']; ppm = Vw['ppm']
     bpy.ops.wm.read_factory_settings(use_empty=True)
     coll = bpy.data.collections.new('HI'); bpy.context.scene.collection.children.link(coll)
@@ -212,7 +212,7 @@ def build(pj, sheet, fine=False):
         empty('arm_' + S_, jpos('arm', sd), E['torso']); empty('elbow_' + S_, jpos('elbow', sd), E['arm_' + S_]); empty('wrist_' + S_, jpos('wrist', sd), E['elbow_' + S_])
     JN = {'head': 'head', 'torso': 'torso', 'hips': 'hips', 'thigh': 'thigh_', 'knee': 'knee_', 'hock': 'hock_', 'ankle': 'ankle_', 'heel': 'heel_',
           'arm': 'arm_', 'elbow': 'elbow_', 'wrist': 'wrist_', 'toe0': 'toe_%s0', 'toe1': 'toe_%s1', 'toe2': 'toe_%s2'}
-    h = .009 if fine else .015          # voxel size (metres)
+    h = .009 if fine else (.02 if lo else .015)          # voxel size (metres)
     tris = 0; info = {}
     for name, p in P.items():
         view = 'front' if 'front' in p else 'rear'
@@ -221,7 +221,7 @@ def build(pj, sheet, fine=False):
         RS = poly_mask(sp, 'side') & MU['side']
         R = clean_region(R, p.get('tol', 2.2)); RS = clean_region(RS, p.get('tol', 2.2))
         Fd = region_sd(R, view, Vw, ppm, p['kind'] == 'c'); Sdd = region_sd(RS, 'side', Vw, ppm, False)
-        hm = hull_mesh(Fd, Sdd, p.get('k', KN.get(p.get('n', 3), .04)), p.get('h', h), p.get('remap', False)) if Fd and Sdd else None
+        hm = hull_mesh(Fd, Sdd, p.get('k', KN.get(p.get('n', 3), .04)), max(p.get('h', h), .012) if lo else p.get('h', h), p.get('remap', False)) if Fd and Sdd else None
         parts = [hm] if hm else []
         sl = [(0, 0, 0, 0, 0)] * (len(hm[1]) if hm else 0)
         sides = [('R', False), ('L', True)] if p['kind'] == 'm' else [('', False)]
@@ -241,15 +241,18 @@ def build(pj, sheet, fine=False):
         fa = empty('fa_' + S_, ((b.x if sd > 0 else a.x), (a.y + b.y) / 2, (a.z + b.z) / 2), E['elbow_' + S_])
         fa.matrix_world = Matrix.Translation(fa.matrix_world.translation) @ Matrix((x, d, out)).transposed().to_4x4(); bpy.context.view_layer.update()
     a, b = bb('backpack'); empty('bk', (0, a.y, (a.z + b.z) / 2), E['torso'])
-    if fine and TARGET and tris > TARGET:      # the large model: thin the marching-cubes mesh evenly down to the budget
-        r = TARGET / tris
+    tgt = LO_TARGET if lo else (TARGET if fine else 0)
+    if tgt and tris > tgt:      # thin the marching-cubes mesh evenly down to the budget (small parts keep a minimum)
+        r = tgt / tris
         for o in coll.objects:
-            md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = r; md.use_collapse_triangulate = True
+            n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = min(1, max(r, (60 if lo else 0) / max(1, n0))); md.use_collapse_triangulate = True
             bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier='dec')
         tris = sum(len(o.data.polygons) for o in coll.objects)
+    if lo: coll.name = 'LO'
     return tris, info
 
 TARGET = 950000
+LO_TARGET = 7200
 
 def view_iou(sheet, outdir, tag, k=1, title=''):
     """render front / side / rear at the sheet's own scale, score the outline overlap, write an overlay + a board"""
@@ -275,8 +278,8 @@ VIEWS_ = None
 
 if __name__ == '__main__':
     a = sys.argv[sys.argv.index(os.path.abspath(__file__)) + 1:] if os.path.abspath(__file__) in sys.argv else sys.argv[1:]
-    pj, sheet, out = a[:3]; fine = '--fine' in a
-    t = time.time(); tris, info = build(pj, sheet, fine)
+    pj, sheet, out = a[:3]; fine = '--fine' in a; lo = '--lo' in a
+    t = time.time(); tris, info = build(pj, sheet, fine, lo)
     print('triangles', tris, ' build s %.1f' % (time.time() - t))
     for k_, v_ in info.items(): print('  %-9s triangles %6d  z %s' % (k_, v_['slices'], v_['z']))
     bpy.ops.wm.save_as_mainfile(filepath=out)

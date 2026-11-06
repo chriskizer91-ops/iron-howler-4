@@ -21,8 +21,9 @@ if TEX:
     for m in bpy.data.materials:
         if not m.use_nodes: m.use_nodes = True
         nt = m.node_tree; t = nt.nodes.get('ptex') or nt.nodes.new('ShaderNodeTexImage'); t.name = 'ptex'; t.image = img; nt.nodes.active = t
-        nt.links.new(t.outputs['Color'], nt.nodes['Principled BSDF'].inputs['Base Color'])
-sc, cam = SF.setup('HI', textured=bool(TEX))
+        if 'Principled BSDF' in nt.nodes: nt.links.new(t.outputs['Color'], nt.nodes['Principled BSDF'].inputs['Base Color'])
+LOD = 'HI' if 'HI' in bpy.data.collections else 'LO'
+sc, cam = SF.setup(LOD, textured=bool(TEX))
 sh = sc.display.shading; sh.light = 'STUDIO'; sh.show_cavity = True; sh.cavity_type = 'BOTH'
 if not TEX: sh.color_type = 'SINGLE'; sh.single_color = (.6, .6, .62)
 sc.view_settings.exposure = .25 if TEX else 0

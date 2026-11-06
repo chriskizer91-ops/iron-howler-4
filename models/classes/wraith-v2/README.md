@@ -6,7 +6,10 @@ print the sheet (or a sharper upgrade of it) onto the model, rather than spendin
 - `wraithv2_full.glb`: the large model, **949,948 triangles**, 27 traced parts (the right side mirrors the left), the shared
   joints and the five module mounts (fa_L/R forearm saddles, sh_L/R shoulder sockets, bk backbone dock). One UV atlas.
 - `wraithv2_albedo.webp`: sheet 90 printed onto that atlas (2048 × 2048).
-- No combat model yet, and nothing is baked: Christopher decides the next step after seeing V2 blank and printed.
+- `combat/`: the combat model, **7,464 triangles**, with V2 PRINT baked on (colour + normal map, 2048), and a walk recording.
+  Walk test page: https://claude.ai/artifact/YNRKCwkntMSmoMF5EcH5DL (source `tools/classes-kit/v2/walk/index.html`).
+- `sharper-sheet/`: sheet 90 cut into its three views at 1024 × 1536 for a sharper ChatGPT copy, and the prompt.
+- This is now the standard way to build every model: `tools/classes-kit/v2/PIPELINE.md`.
 
 Outline overlap with the sheet: front 91%, side 86%, back 83% (the sheet's back view has the legs a little closer
 together than its front view).
