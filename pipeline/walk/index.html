@@ -69,7 +69,7 @@ function unpack(buf){const j=JSON.parse(new TextDecoder().decode(buf)),s=atob(j.
   return new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();}
 const TL=new T.TextureLoader();
 function tex(n,srgb){const t=TL.load(n);t.flipY=false;t.colorSpace=srgb?T.SRGBColorSpace:T.NoColorSpace;t.anisotropy=8;return t;}
-const M='wraithv2p';
+const M=Q.get('m')||'wraithv2h';
 const orm=tex(M+'_orm.webp',false);
 const mat=new T.MeshStandardMaterial({map:tex(M+'_albedo.webp',true),normalMap:tex(M+'_normal.webp',false),aoMap:orm,roughnessMap:orm,metalnessMap:orm,roughness:1,metalness:1});
 

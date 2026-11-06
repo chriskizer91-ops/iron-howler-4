@@ -1,0 +1,23 @@
+{
+ "guide": "sheet90_guide.json",
+ "images": {
+  "front": "sharper-pictures/hd_front.png",
+  "side": "sharper-pictures/hd_side.png",
+  "rear": "sharper-pictures/hd_rear.png"
+ },
+ "unmirror": [
+  [
+   540,
+   370,
+   655,
+   462
+  ],
+  [
+   330,
+   372,
+   425,
+   440
+  ]
+ ],
+ "H": 6.6
+}

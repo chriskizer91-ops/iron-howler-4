@@ -1,0 +1,35 @@
+{
+ "front": {
+  "image": "sheet90_front.png",
+  "mask": "sheet90_front_mask.png",
+  "ppm": 226.62580864828058,
+  "cu": 512.0,
+  "vg": 1512.9887640449438,
+  "size": [
+   1024,
+   1536
+  ]
+ },
+ "side": {
+  "image": "sheet90_side.png",
+  "mask": "sheet90_side_mask.png",
+  "ppm": 226.62580864828058,
+  "cu": 569.5280898876405,
+  "vg": 1510.1123595505617,
+  "size": [
+   1024,
+   1536
+  ]
+ },
+ "rear": {
+  "image": "sheet90_rear.png",
+  "mask": "sheet90_rear_mask.png",
+  "ppm": 226.62580864828058,
+  "cu": 512.0,
+  "vg": 1510.1123595505617,
+  "size": [
+   1024,
+   1536
+  ]
+ }
+}
