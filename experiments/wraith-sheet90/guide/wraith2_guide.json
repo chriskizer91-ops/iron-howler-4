@@ -1,0 +1,35 @@
+{
+ "front": {
+  "image": "wraith2_front.png",
+  "mask": "wraith2_front_mask.png",
+  "ppm": 212.04063183345616,
+  "cu": 512.0,
+  "vg": 1428,
+  "size": [
+   1024,
+   1536
+  ]
+ },
+ "side": {
+  "image": "wraith2_side.png",
+  "mask": "wraith2_side_mask.png",
+  "ppm": 212.04063183345616,
+  "cu": 476.6149602353112,
+  "vg": 1428,
+  "size": [
+   1024,
+   1536
+  ]
+ },
+ "rear": {
+  "image": "wraith2_rear.png",
+  "mask": "wraith2_rear_mask.png",
+  "ppm": 212.04063183345616,
+  "cu": 512.0,
+  "vg": 1428,
+  "size": [
+   1024,
+   1536
+  ]
+ }
+}

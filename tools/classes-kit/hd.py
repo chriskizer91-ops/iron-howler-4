@@ -112,7 +112,9 @@ def flush():
         o.parent = bpy.data.objects[pn]; o['lod'] = lod; out.append(o)
     ACC.clear(); return out
 
-def LODS(hi, lo): return (('HI',) if hi else ()) + (('LO',) if lo else ())
+LO_ONLY = False                # fast mode for outline fitting: build only the combat (LO) shapes
+
+def LODS(hi, lo): return (('HI',) if hi and not LO_ONLY else ()) + (('LO',) if lo else ())
 
 def count(lod):
     return sum(len(o.data.polygons) and sum(len(p.vertices) - 2 for p in o.data.polygons) for o in coll(lod).objects if o.type == 'MESH')
@@ -230,6 +232,7 @@ def ball(m, r, p, parent, hi=True, lo=True):
         emit(bm, m, parent, p, None, lod)
 
 def rivet(p, n, r, parent, m='steel'):
+    if LO_ONLY: return
     n = Vector(n).normalized()
     bm = bm_lathe([(r, 0), (r, r * .25), (r * .8, r * .5), (r * .4, r * .62)], 8, True, True)
     emit(bm, m, parent, Vector(p), axis_rot(n), 'HI')
@@ -239,6 +242,7 @@ def rivet_row(a, b, n, r, parent, step=.085, m='steel'):
     for i in range(k): rivet(a + (b - a) * (i / (k - 1)), n, r, parent, m)
 
 def bolt(p, n, r, parent, m='steel'):
+    if LO_ONLY: return
     n = Vector(n).normalized(); R = axis_rot(n)
     bm = bm_cyl(r, r * .75, 6)
     top = [f for f in bm.faces if f.normal.z > .9]
@@ -306,6 +310,7 @@ def armour(m, size, c, parent, Rm=None, face=(0, 1, 0), bev=.05, top=(1, 1), bot
         plate('dark', tuple(sz3), frame_pts(c, Rm, *q), parent, .004, Rm, lo=False)
 
 def piston(a, b, r, parent, frac=.5, boot=True, clevis=True, m='gun', lo=False):
+    if LO_ONLY and not lo: return
     a, b = Vector(a), Vector(b); d = b - a; Ln = d.length; Rm = axis_rot(d); q = a + d * frac
     rod(m, a, q, r, parent, 32, lo=lo)
     tube('steel', r * 1.08, r * .5, a + d * (frac - .02), parent, d, 32, lo=False)
@@ -323,12 +328,14 @@ def piston(a, b, r, parent, frac=.5, boot=True, clevis=True, m='gun', lo=False):
             tube('steel', r * .45, r * 2.6, p, parent, Rm @ Vector((1, 0, 0)), 12, lo=False)
 
 def spring(a, b, r, parent, turns=7, wire=None):
+    if LO_ONLY: return
     a, b = Vector(a), Vector(b); d = b - a; Rm = axis_rot(d); Ln = d.length; wire = wire or r * .16
     pts = [a + Rm @ Vector((math.cos(t / 40 * 2 * math.pi * turns) * r, math.sin(t / 40 * 2 * math.pi * turns) * r, Ln * t / (40))) for t in range(41)]
     pts = spline(pts, 3)
     emit(bm_sweep(pts, [wire] * len(pts), 8), 'trim', parent, (0, 0, 0), None, 'HI')
 
 def cable(pts, r, parent, m='rubber', n=1, gap=None, res=10, seg=12, clamps=0):
+    if LO_ONLY: return
     """a hose (or a bundle of n hoses side by side) through the points"""
     P = spline(pts, res); gap = gap or r * 2.3
     t0 = (P[1] - P[0]).normalized(); ref = Vector((0, 0, 1)) if abs(t0.z) < .9 else Vector((1, 0, 0)); side = t0.cross(ref).normalized()
@@ -385,6 +392,7 @@ def vent(c, Rm, w, h, parent, n=None, depth=.08, mf='gun', ms='dark', lo=True, f
     if lo: plate(ms, (w, depth * .6, h), frame_pts(c, Rm, 0, -depth * .2, 0), parent, 0, Rm, hi=False, loseg=0)
 
 def greeble(c, size, parent, seed=1, n=14, Rm=None, ms=('gun', 'dark', 'steel'), lo=False, k=3):
+    if LO_ONLY and not lo: return
     """machinery packed into a gap: motors, blocks, pipes and brackets, kept inside the box c +- size/2"""
     rnd = random.Random(seed); Rm = R3(Rm); c = Vector(c); sx, sy, sz = size
     for i in range(n * k):

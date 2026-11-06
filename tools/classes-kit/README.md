@@ -15,7 +15,7 @@ python3 -I glb_quant.py work/out/strider_combat.glb work/out/strider_combat_q.gl
 python3 -I maps.py work/out/_bake strider bay/                  # strider_albedo / _normal / _orm .webp
 python3 -I pack.py work/out/strider_full_q.glb bay/strider_full # gzip + base64 parts under 18 MB, for the model bay
 python3 -I pack.py work/out/strider_combat_q.glb bay/strider_combat
-python3 -I bay_page.py index_tpl2.html bay/index.html strider:1 # the model bay page with the class chassis that are ready
+python3 -I bay_page.py index_tpl2.html bay/index.html strider:1 # the model bay page (first version; bay_index.html is the page as now published)
 python3 phone_shot.py "http://127.0.0.1:8765/index.html?m=strider&v=full&still" shot.png   # 390 x 844 screenshot (serve bay/ first)
 ```
 
@@ -29,6 +29,29 @@ python3 phone_shot.py "http://127.0.0.1:8765/index.html?m=strider&v=full&still" 
 | `make_cdecals.py` | `tex/classes-decals.webp`: numbers 12 / 09 / 31, white and yellow stripes, plus the Howler sheet's warnings in the same places |
 | `measure.py`, `grid.py`, `measure/` | how the proportions were read off the sheets |
 | `tex/` | the model bay's tiled textures and decal sheets |
+
+## Matching a concept sheet more tightly (the Wraith experiment)
+```
+python3 -I fit_sheet.py wraith sheet.png measure/90.json work/fit 6    # nudges ~90 measurements until the outline overlaps the sheet best -> fit/wraith.json
+python3 -I build_class.py wraith --fit work/wraith2.blend               # build with the fitted measurements, then bake as usual
+python3 -I sheetfit.py score work/wraith2.blend sheet.png measure/90.json work/fit w2 HI    # overlap per view + overlay picture
+python3 -I sheetfit.py board baked.blend sheet.png measure/90.json work/fit "W2 ..." albedo.webp   # sheet | full | combat board
+python3 -I project_sheet.py baked.blend _bake/wraith2_albedo.png sheet90.json work/proj wraith3   # paint the sheet onto the combat atlas
+python3 -I export_combat.py baked.blend wraith3_combat.glb --nodecals   # combat model without its decals (the paint carries them)
+python3 -I projview.py baked.blend wraith3_albedo.png wraith3_map.json sheet.png view.png "title" --nodecals
+python3 -I guide_shots.py baked.blend albedo.webp work/guide wraith2     # front / side / rear guide pictures at a known scale, for repainting
+```
+`sheet90.json`: `{"image": "90_Wraith_Recon-Support.png", "boxes": "measure/90.json", "H": 6.3, "unmirror": [[928,123,969,156]]}`.
+For repainted guide pictures: `{"guide": "wraith2_guide.json", "images": {"front": "...", "side": "...", "rear": "..."}}`.
+
+| File | What it is |
+|---|---|
+| `sheetfit.py` | lines a model up with its sheet view by view (one scale, pixel exact), overlap score, boards |
+| `fit_sheet.py` | the automatic fit: builds only the combat shapes (0.8 s each), keeps every nudge that raises the overlap, smaller nudges each pass |
+| `project_sheet.py` | paints pictures onto the combat atlas: each texel takes its colour from the view that sees it most squarely (depth tested); the side view also paints the other side mirrored, with numbers flipped back; unseen texels are re-tinted to the picture's orange and charcoal |
+| `projview.py`, `guide_shots.py`, `export_combat.py` | preview of a painted model, guide pictures, combat export without decals |
+| `fit/wraith.json` | the Wraith's fitted measurements (W2) |
+| `bay_page.py`, `bay_index.html` | the model bay page; versions of a chassis (W1, W2 ...) show as a small row above the chassis row |
 
 ## Rules learned
 - Rest pose = standing pose, every joint rotation zero, except the `fa_L/R` mounts (fixed rotation so forearm modules sit on the saddle).

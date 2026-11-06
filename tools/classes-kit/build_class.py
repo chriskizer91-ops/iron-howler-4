@@ -3,7 +3,7 @@ same joints. Joint positions come from the approved blockout table (chassis.C); 
 Howler 07 keeps its own script (build_h07.py), which this one grew out of.
 Run:  python3 -I build_class.py strider|wraith|bastion out.blend
 """
-import sys, os, math
+import sys, os, math, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy
 from mathutils import Vector, Matrix, Euler
@@ -17,10 +17,14 @@ ST = {
     # num: the number decal; stripe: decal under the number and on shins/forearms; vents: chest grilles
     'strider': dict(numside=1, ph=.72, hw=.8, lf=.74, th=.5, kneeside=False, num='12', cov=.8, stripe='wstripes', limb_stripes=True, vents=False, chestnum=True, spine=True, mast=False, red=False),
     'wraith': dict(numside=-1, crest=True, chestlamps=True, morestripes=True, mastside=-1, pdx=-.012, lf=.8, th=.65, kneeside=True, num='09', cov=.92, stripe='wstripes', limb_stripes=True, vents=False, chestnum=True, spine=False, mast=True, red=False),
-    'bastion': dict(lf=1.0, th=1.15, kneeside=True, num='31', cov=1.08, stripe='wstripes', limb_stripes=False, vents=True, chestnum=False, spine=False, mast=False, red=True),
+    'bastion': dict(stack=True, lf=1.0, th=1.15, kneeside=True, num='31', cov=1.08, stripe='wstripes', limb_stripes=False, vents=True, chestnum=False, spine=False, mast=False, red=True),
 }
-CID = sys.argv[-2] if len(sys.argv) > 2 and sys.argv[-2] in ST else 'strider'
-P = chassis.C[CID]; H = P['H']; Y = ST[CID]; CV = Y['cov']; TH = Y['th']     # TH: thickness of add-on side plates
+CID = next((x for x in sys.argv if x in ST), 'strider')
+P = chassis.C[CID]
+FIT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fit', CID + '.json')
+if '--fit' in sys.argv and os.path.exists(FIT):          # proportions fitted to the sheet's outlines (fit_sheet.py)
+    _f = json.load(open(FIT)); P = dict(P, **{k: (tuple(v) if isinstance(v, list) else v) for k, v in _f['P'].items()}); ST[CID].update(_f.get('Y', {}))
+H = P['H']; Y = ST[CID]; CV = Y['cov']; TH = Y['th']     # TH: thickness of add-on side plates
 LF = Y['lf']                   # limb size, so the finished (detailed) limbs come out as wide as the approved blockout's
 S3L = lambda t: tuple(v * H * LF for v in t)
 s = lambda v: v * H
@@ -71,7 +75,7 @@ def leg(sd, hips):
     if Y.get('morestripes'): decal(D['wstripes'], tw * CV * .75, tw * .13, at(c, F, 0, td * .3 + td * .25 + .045, -Lt * .14), F @ V(0, 1, 0), th, F @ V(0, 0, -1))
     # ---------------- knee and shin ----------------
     jointcap(kn, sdp * .54, sw * 1.22, k, bolts_=10)
-    armour('org', (sw * 1.05, sdp * .45, sdp * .78), kn + V(0, sdp * .55, sdp * .12), k, rx(-.3), (0, 1, 0), .07, top=(.8, .72), nb=2, seams=1, oct=.12)
+    armour('bred' if Y['red'] else 'org', (sw * 1.05, sdp * .45, sdp * .78), kn + V(0, sdp * .55, sdp * .12), k, rx(-.3), (0, 1, 0), .07, top=(.8, .72), nb=2, seams=1, oct=.12)
     if Y['kneeside']:
         for sx in (-1, 1): armour('org', (.08 * TH, sdp * .7, sdp * .7), kn + V(sx * (sw * .61 + .04 * TH), sdp * .1, sdp * .05), k, None, (sx, 0, 0), .03, nb=2, seams=0, oct=.14, hatch=False)
     F = bframe(kn, hk, (0, .3, 1)); Ls = (hk - kn).length; c = (kn + hk) / 2
@@ -130,7 +134,10 @@ def torso_body(to, hips):
     for sd in (-1, 1):
         armour('org', (.14 * TH, pd * .8, ph * 1.15), (sd * (pw * .43 + .07 * TH), 0, pz), hips, None, (sd, 0, 0), .05, nb=3, seams=1)
         plate('gun', (pw * .2, pd * .6, ph * .5), (sd * pw * .3, pd * .2, pz - ph * .35), hips, .05)
-    armour('org', (pw * .45, .22, ph * 1.1), (0, -pd * .5 - .05, pz - .05), hips, None, (0, -1, 0), .06, bot=(.7, 1), nb=2, seams=1)
+    armour('bred' if Y['red'] else 'org', (pw * .45, .22, ph * 1.1), (0, -pd * .5 - .05, pz - .05), hips, None, (0, -1, 0), .06, bot=(.7, 1), nb=2, seams=1, hatch=not Y['red'], oct=.12 if Y['red'] else None)
+    if Y['red']:
+        nw2 = pw * .22; decal(D[Y['num']], nw2, nw2 / 1.375, (0, -pd * .5 - .05 - .11 - .05, pz + ph * .1), (0, -1, 0), hips)
+        decal(D['wstripes'], nw2 * .9, nw2 * .14, (0, -pd * .5 - .05 - .11 - .05, pz - ph * .28), (0, -1, 0), hips)
     plate('dark', (pw * .92, pd * .92, .1), (0, 0, pz + ph * .55), hips, .03)
     greeble((0, pd * .1, pz - ph * .55), (pw * .4, pd * .5, ph * .4), hips, 31, 10)
     # ---------------- waist: spine column, rams and hoses ----------------
@@ -235,13 +242,18 @@ def shoulder(sd, to):
     Rt = ry(-sd * .14)
     armour('org', (pw2, pd2, ph2 * .28), hc + V(0, 0, ph2 * .36), to, Rt, (0, 0, 1), .08, top=(.86, .86), nb=3, seams=0, oct=.24)
     ox = pw2 * .42 + .075 * TH                    # the outer (number) plate's centre
-    armour('org', (.15 * TH, pd2 * .92, ph2 * .78), hc + V(sd * ox, 0, -ph2 * .05), to, None, (sd, 0, 0), .12 * TH, nb=3, seams=0, oct=.3, hatch=False)
+    armour('bred' if Y['red'] else 'org', (.15 * TH, pd2 * .92, ph2 * .78), hc + V(sd * ox, 0, -ph2 * .05), to, None, (sd, 0, 0), .12 * TH, nb=3, seams=0, oct=.3, hatch=False)
     plate('gun', (.05, pd2 * .7, ph2 * .56), hc + V(sd * (ox + .075 * TH + .02), 0, -ph2 * .05), to, .02, oct=(0, .18), lo=False)
     nw = min(pd2 * .62, ph2 * .62 * 1.375)
     decal(D[Y['num']], nw, nw / 1.375, hc + V(sd * (ox + .075 * TH + .045), 0, ph2 * .06), (sd, 0, 0), to)
     decal(D[Y['stripe']], nw * .85, nw * .14, hc + V(sd * (ox + .075 * TH + .045), 0, -ph2 * .24), (sd, 0, 0), to)
     for fy in (-1, 1):
-        armour('org', (pw2 * .86, .13, ph2 * .58), hc + V(0, fy * pd2 * .47, -ph2 * .06), to, rx(fy * .1), (0, fy, 0), .06, nb=2, seams=1, oct=.14)
+        red_ = Y['red'] and fy > 0
+        armour('bred' if red_ else 'org', (pw2 * .86, .13, ph2 * .58), hc + V(0, fy * pd2 * .47, -ph2 * .06), to, rx(fy * .1), (0, fy, 0), .06, nb=2, seams=0 if red_ else 1, oct=.2 if red_ else .14, hatch=not red_)
+        if red_:
+            nf = pw2 * .5; Rf = rx(.1); cf = hc + V(0, pd2 * .47, -ph2 * .02) + Rf @ V(0, .065 + .05, 0)
+            decal(D[Y['num']], nf, nf / 1.375, cf, Rf @ V(0, 1, 0), to, Rf @ V(0, 0, 1))
+            decal(D['wstripes'], nf * .85, nf * .13, cf + Rf @ V(0, 0, -ph2 * .21), Rf @ V(0, 1, 0), to, Rf @ V(0, 0, 1))
         if Y.get('morestripes') and fy > 0: decal(D['wstripes'], pw2 * .6, pw2 * .1, hc + V(0, pd2 * .47 + .065 + .05, -ph2 * .2), rx(.1) @ V(0, 1, 0), to, rx(.1) @ V(0, 0, 1))
     for i, (dz, k) in enumerate(((-.47, 1.0), (-.6, .8))):
         plate('org', (pw2 * .32 * k, pd2 * .9 * k, ph2 * .3), hc + V(sd * pw2 * (.43 + i * .06), 0, ph2 * dz), to, .05, ry(-sd * (.38 + i * .15)), oct=(0, .1))
@@ -357,6 +369,13 @@ def back(to):
         plate('gun', (sx, .06, sz), V(x, yb - .02, dz + z), to, .015, lo=False)
     plate('gun', (.24, .08, dh * .42), V(0, yb - .04, dz), to, .02)
     lamp(V(0, yb - .09, dz), (.07, .03, dh * .2), to)
+    if Y.get('stack'):
+        for i in range(5):
+            zz = dz - dh * .38 + i * dh * .19
+            plate('gun', (dw * .5, .12, dh * .075), V(0, yb - .08, zz), to, .03, oct=(1, .04))
+            plate('dark', (dw * .3, .04, dh * .03), V(0, yb - .145, zz), to, .01, lo=False)
+            if i % 2: lamp(V(0, yb - .15, zz + dh * .028), (dw * .14, .02, .025), to)
+            for sx in (-1, 1): bolt(V(sx * dw * .22, yb - .145, zz), (0, -1, 0), .025, to)
     for sx in (-1, 1):
         lamp(V(sx * dw * .43, yb - .05, dz), (.05, .04, dh * .14), to)
         bolt_row(V(sx * dw * .3, yb - .04, dz - dh * .3), V(sx * dw * .3, yb - .04, dz + dh * .3), (0, -1, 0), 6, .028, to)
@@ -374,13 +393,15 @@ def back(to):
             for sx in (-1, 1): bolt(V(sx * dw * .2, yb2 - .085, z), (0, -1, 0), .02, to)
         for sx in (-1, 1): cable([V(sx * dw * .3, yb2, top_), V(sx * dw * .38, yb2 - .05, (top_ + pz) / 2), V(sx * dw * .3, yb2, pz + .1)], .028, to, n=2)
     if Y['mast']:
-        mx_, my_, mz_ = s(.11) * Y.get('mastside', 1), dyb + s(.03), dz + dh * .5
-        plate('gun', (s(.06), s(.07), s(.14)), V(mx_, my_, mz_ + s(.07)), to, .03, oct=(2, .03))
-        vent(V(mx_, my_ - s(.035) - .005, mz_ + s(.07)), rz(math.pi), s(.045), s(.09), to, n=5, depth=.03)
-        lamp(V(mx_ - s(.031) * Y.get('mastside', 1), my_, mz_ + s(.12)), (.02, .1, .05), to)
-        rod('steel', V(mx_, my_, mz_ + s(.14)), V(mx_, my_, H * 1.03), s(.005), to, 12, loseg=6)
-        for k2 in range(3): tube('gun', s(.009), .04, V(mx_, my_, mz_ + s(.16) + k2 * (H * 1.03 - mz_ - s(.16)) / 3), to, (0, 0, 1), 12, lo=False)
-        ball('eye', s(.008), V(mx_, my_, H * 1.035), to)
+        # sensor mast: a box on the dock and a thin antenna. mastk: box width, masth: box height, mastt: antenna tip (x H), mastx/masty: place
+        mx_, my_, mz_ = s(Y.get('mastx', .11)) * Y.get('mastside', 1), dyb + s(Y.get('masty', .03)), dz + dh * .5; mk = Y.get('mastk', 1.0)
+        bh = s(.14) * Y.get('masth', 1.0); tip = H * Y.get('mastt', 1.03)
+        plate('gun', (s(.06) * mk, s(.07) * mk, bh), V(mx_, my_, mz_ + bh / 2), to, .03, oct=(2, .03 * mk))
+        vent(V(mx_, my_ - s(.035) * mk - .005, mz_ + bh / 2), rz(math.pi), s(.045) * mk, bh * .64, to, n=5, depth=.03)
+        lamp(V(mx_ - s(.031) * mk * Y.get('mastside', 1), my_, mz_ + bh * .86), (.02, .1 * mk, .05), to)
+        rod('steel', V(mx_, my_, mz_ + bh), V(mx_, my_, tip), s(.005), to, 12, loseg=6)
+        for k2 in range(3): tube('gun', s(.009), .04, V(mx_, my_, mz_ + bh + s(.02) + k2 * (tip - mz_ - bh - s(.02)) / 3), to, (0, 0, 1), 12, lo=False)
+        ball('eye', s(.008), V(mx_, my_, tip + s(.005)), to)
     if 'vents' not in P:
         greeble(V(0, dyb + dd * .9, dz - dh * .45), (dw * .7, dd * .5, .3), to, 71, 8)
         joint('bk', (0, dyb - s(.018), dz), to); return
