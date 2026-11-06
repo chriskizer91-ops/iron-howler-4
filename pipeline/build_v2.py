@@ -20,11 +20,29 @@ S = 4                                                   # sub-pixels per sheet p
 SMOOTH = 1.4                                            # outline smoothing (sheet pixels)
 BOX = {'front': (340, 0, 700, 534), 'side': (800, 0, 1060, 534), 'rear': (1200, 0, 1560, 534)}
 
-def sheet_mask(path):
+def setup_views(J, sheet):
+    """v2.1: an item made from separate view pictures (make_views.py) brings its own boxes, mapping and figure mask.
+    Without them (the Wraith's sheet 90) the built-in boxes are used. Returns the figure mask and the sheet image."""
+    global BOX, S
+    vj = J.get('views')
+    if isinstance(vj, str):
+        vj = json.load(open(vj if os.path.isabs(vj) else os.path.join(os.path.dirname(os.path.abspath(J['_path'])), vj)))
+    if vj:
+        BOX = {k: tuple(v) for k, v in vj['boxes'].items()}
+        J['view'] = dict(vj['view'], ppm=vj['ppm'])
+        if 'top' in J['view']: J['view']['top'].setdefault('vg', J['view']['top']['cv'])
+        S = J.get('S', 2)
+        mp = sheet[:-4] + '_mask.png'
+        im = np.asarray(Image.open(sheet).convert('RGB'))
+        m = np.asarray(Image.open(mp).convert('L')) > 110 if os.path.exists(mp) else sheet_mask(sheet, cut=False)[0]
+        return m, im
+    return sheet_mask(sheet)
+
+def sheet_mask(path, cut=True):
     im = np.asarray(Image.open(path).convert('RGB')).astype(np.int32)
     bg = np.median(im[5:40, -200:-20].reshape(-1, 3), axis=0)
     m = (np.abs(im - bg).sum(2) > 45) | ((im.max(2) - im.min(2)) > 40)
-    m[:52, :492] = False; m[534:] = False                # the title, the lower panels
+    if cut: m[:52, :492] = False; m[534:] = False         # sheet 90: its title, its lower panels
     m = ndimage.binary_opening(m, iterations=1)
     lab, n = ndimage.label(m); sizes = ndimage.sum(m, lab, range(1, n + 1))
     m = np.isin(lab, 1 + np.where(sizes > 40)[0])
@@ -152,7 +170,7 @@ def region_sd(Rm, view, Vw, ppm, sym):
     if sym: w = max(abs(A[0]), abs(A[1])); A = [-w, w]
     return sample, A, Z
 
-def hull_mesh(F, Sd, k, h, remap=True):
+def hull_mesh(F, Sd, k, h, remap=True, T=None):
     """the part's solid: inside where it is inside both outlines; edges rounded by k (metres); marching cubes at h.
     The front view sets the height: the side outline is stretched to the front outline's height range (remap)."""
     from skimage import measure
@@ -168,6 +186,9 @@ def hull_mesh(F, Sd, k, h, remap=True):
     YZy, YZz = np.meshgrid(ys, zsd, indexing='ij'); dS = ss(YZy.ravel(), YZz.ravel()).reshape(len(ys), len(zs))
     k = min(k, .3 * max(1e-3, dF.max()), .3 * max(1e-3, dS.max()))      # thin parts get smaller rounding
     f = -k * np.logaddexp(-dF[:, None, :] / k, -dS[None, :, :] / k)
+    if T is not None:          # v2.1: inside the top outline too (x across, y along)
+        XYx, XYy = np.meshgrid(xs, ys, indexing='ij'); dT = T[0](XYx.ravel(), XYy.ravel()).reshape(len(xs), len(ys))
+        f = -k * np.logaddexp(-f / k, -dT[:, :, None] / k)
     f[0] = f[-1] = -1; f[:, 0] = f[:, -1] = -1; f[:, :, 0] = f[:, :, -1] = -1
     if f.max() <= 0: return None
     V, Fc, _, _ = measure.marching_cubes(f.astype(np.float32), 0.0, spacing=(h, h, h))
@@ -186,11 +207,13 @@ def mesh_obj(name, V, F, mat, coll, parent=None, mirror=False):
     return o
 
 def build(pj, sheet, fine=False, lo=False):
-    J = json.load(open(pj)); P, SH, JT, Vw = J['parts'], J['shared'], J['joints'], J['view']; ppm = Vw['ppm']
+    J = json.load(open(pj)); J['_path'] = pj
+    m, _ = setup_views(J, sheet)
+    P, SH, JT, Vw = J['parts'], J.get('shared', {}), J.get('joints', {}), J['view']; ppm = Vw['ppm']
     bpy.ops.wm.read_factory_settings(use_empty=True)
     coll = bpy.data.collections.new('HI'); bpy.context.scene.collection.children.link(coll)
     clay = bpy.data.materials.new('clay'); clay.diffuse_color = (.62, .62, .64, 1)
-    m, _ = sheet_mask(sheet); MU = {v: upmask(m, v) for v in BOX}
+    MU = {v: upmask(m, v) for v in BOX}
     # joints (shared skeleton names; R = the mech's right = +x = image left in the front view)
     def jpos(j, sd=1):
         q = JT[j]; return Vector((sd * (Vw['front']['cu'] - q['front']) / ppm, (Vw['side']['cu'] - q['side'][0]) / ppm, (Vw['side']['vg'] - q['side'][1]) / ppm))
@@ -203,8 +226,20 @@ def build(pj, sheet, fine=False, lo=False):
         if parent: e.matrix_parent_inverse = parent.matrix_world.inverted()
         bpy.context.view_layer.update()     # keep every world matrix current (children read them)
         E[name] = e; return e
-    root = empty('wraith', (0, 0, 0)); empty('hips', jpos('hips'), root); empty('torso', jpos('torso'), root); empty('head', jpos('head'), E['torso'])
-    for S_, sd in (('R', 1), ('L', -1)):
+    GEN = 'skeleton' in J        # v2.1: joints listed in the parts file
+    def spos(q, sd=1):
+        return Vector((sd * (Vw['front']['cu'] - q['front']) / ppm if 'front' in q else 0, (Vw['side']['cu'] - q['side'][0]) / ppm, (Vw['side']['vg'] - q['side'][1]) / ppm))
+    MIR = set()
+    if GEN:
+        for q in J['skeleton']:
+            par = q.get('parent')
+            for S_, sd in ((('R', 1), ('L', -1)) if q.get('mirror') else (('', 1),)):
+                pn = None if not par else (par + '_' + S_ if (S_ and par in MIR) else par)
+                empty(q['name'] + ('_' + S_ if S_ else ''), spos(q, sd) if 'side' in q else (0, 0, 0), E.get(pn))
+            if q.get('mirror'): MIR.add(q['name'])
+        root = E[J['skeleton'][0]['name']]
+    else: root = empty('wraith', (0, 0, 0)); empty('hips', jpos('hips'), root); empty('torso', jpos('torso'), root); empty('head', jpos('head'), E['torso'])
+    for S_, sd in ((('R', 1), ('L', -1)) if not GEN else ()):
         empty('thigh_' + S_, jpos('thigh', sd), E['hips']); empty('knee_' + S_, jpos('knee', sd), E['thigh_' + S_])
         empty('hock_' + S_, jpos('hock', sd), E['knee_' + S_]); empty('ankle_' + S_, jpos('ankle', sd), E['hock_' + S_])
         for i in range(3): empty('toe_%s%d' % (S_, i), jpos('toe%d' % i, sd), E['ankle_' + S_])
@@ -221,12 +256,17 @@ def build(pj, sheet, fine=False, lo=False):
         RS = poly_mask(sp, 'side') & MU['side']
         R = clean_region(R, p.get('tol', 2.2)); RS = clean_region(RS, p.get('tol', 2.2))
         Fd = region_sd(R, view, Vw, ppm, p['kind'] == 'c'); Sdd = region_sd(RS, 'side', Vw, ppm, False)
-        hm = hull_mesh(Fd, Sdd, p.get('k', KN.get(p.get('n', 3), .04)), max(p.get('h', h), .012) if lo else p.get('h', h), p.get('remap', False)) if Fd and Sdd else None
+        Td = None
+        if 'top' in BOX:       # v2.1: the part's own top outline if traced, else the whole item's top outline
+            RT = (poly_mask(p['top'], 'top') & MU['top']) if p.get('top') else MU['top']
+            Td = region_sd(clean_region(RT, p.get('tol', 2.2)) if p.get('top') else RT, 'top', Vw, ppm, p['kind'] == 'c')
+        hm = hull_mesh(Fd, Sdd, p.get('k', KN.get(p.get('n', 3), .04)), max(p.get('h', h), .012) if lo else p.get('h', h), p.get('remap', False), Td) if Fd and Sdd else None
         parts = [hm] if hm else []
         sl = [(0, 0, 0, 0, 0)] * (len(hm[1]) if hm else 0)
         sides = [('R', False), ('L', True)] if p['kind'] == 'm' else [('', False)]
         for S_, mir in sides:
-            jn = JN[p['j']]; jn = (jn % S_ if '%s' in jn else jn + S_) if jn.endswith('_') or '%s' in jn else jn
+            if GEN: jn = p.get('j', J['skeleton'][0]['name']); jn = jn + '_' + S_ if (S_ and jn in MIR) else jn
+            else: jn = JN[p['j']]; jn = (jn % S_ if '%s' in jn else jn + S_) if jn.endswith('_') or '%s' in jn else jn
             for i, (V, F) in enumerate(parts):
                 o = mesh_obj(name + ('_' + S_ if S_ else '') + ('.%d' % i if i else ''), V, F, clay, coll, E.get(jn), mir); tris += len(F)
         info[name] = dict(slices=len(sl), z=(round(max(Fd[2][0], Sdd[2][0]), 2), round(min(Fd[2][1], Sdd[2][1]), 2)) if Fd and Sdd else None)
@@ -234,13 +274,21 @@ def build(pj, sheet, fine=False, lo=False):
     def bb(prefix):
         pts = [o.matrix_world @ Vector(c) for o in coll.objects if o.name.startswith(prefix) for c in o.bound_box]
         return Vector([min(q[i] for q in pts) for i in range(3)]), Vector([max(q[i] for q in pts) for i in range(3)])
-    for S_, sd in (('R', 1), ('L', -1)):
+    for q in (J.get('mounts', []) if GEN else []):        # v2.1: named mount empties, axes given as three vectors (x, y, z)
+        for S_, sd in ((('R', 1), ('L', -1)) if q.get('mirror') else (('', 1),)):
+            par = q.get('parent', J['skeleton'][0]['name']); par = par + '_' + S_ if (S_ and par in MIR) else par
+            e = empty(q['name'] + ('_' + S_ if S_ else ''), spos(q, sd), E.get(par))
+            if 'axes' in q:
+                ax = [Vector(v) for v in q['axes']]
+                if sd < 0: ax = [Vector((-v.x, v.y, v.z)) for v in ax]; ax[0] = -ax[0]
+                e.matrix_world = Matrix.Translation(e.matrix_world.translation) @ Matrix(ax).transposed().to_4x4(); bpy.context.view_layer.update()
+    for S_, sd in ((('R', 1), ('L', -1)) if not GEN else ()):
         a, b = bb('shmount_' + S_); empty('sh_' + S_, ((a.x + b.x) / 2, (a.y + b.y) / 2, b.z), E['torso'])
         a, b = bb('forearm_' + S_); el, wr = E['elbow_' + S_].matrix_world.translation, E['wrist_' + S_].matrix_world.translation
         d = (wr - el).normalized(); out = Vector((sd, 0, 0)); out = (out - d * out.dot(d)).normalized(); x = d.cross(out)
         fa = empty('fa_' + S_, ((b.x if sd > 0 else a.x), (a.y + b.y) / 2, (a.z + b.z) / 2), E['elbow_' + S_])
         fa.matrix_world = Matrix.Translation(fa.matrix_world.translation) @ Matrix((x, d, out)).transposed().to_4x4(); bpy.context.view_layer.update()
-    a, b = bb('backpack'); empty('bk', (0, a.y, (a.z + b.z) / 2), E['torso'])
+    if not GEN: a, b = bb('backpack'); empty('bk', (0, a.y, (a.z + b.z) / 2), E['torso'])
     tgt = LO_TARGET if lo else (TARGET if fine else 0)
     if tgt and tris > tgt:      # thin the marching-cubes mesh evenly down to the budget (small parts keep a minimum)
         r = tgt / tris
@@ -257,9 +305,9 @@ LO_TARGET = 7200
 def view_iou(sheet, outdir, tag, k=1, title=''):
     """render front / side / rear at the sheet's own scale, score the outline overlap, write an overlay + a board"""
     import sheetfit as SF
-    J_ = VIEWS_; m, im = sheet_mask(sheet); sc, cam = SF.setup('HI'); res = {}; tiles = []
+    J_ = VIEWS_; m, im = VMASK if VMASK is not None else sheet_mask(sheet); sc, cam = SF.setup('HI'); res = {}; tiles = []
     sc.render.film_transparent = True
-    for v in ('front', 'side', 'rear'):
+    for v in [x for x in ('front', 'side', 'rear', 'top') if x in BOX]:
         x0, y0, x1, y1 = BOX[v]; crop = (x0, y0, x1, y1)
         a = SF.render_view(v, crop, J_['ppm'], J_[v]['cu'], J_[v]['vg'], os.path.join(outdir, '_%s_%s.png' % (tag, v)), k)
         if k > 1: a = np.asarray(Image.fromarray(a).resize((x1 - x0, y1 - y0), Image.LANCZOS))
@@ -275,6 +323,7 @@ def view_iou(sheet, outdir, tag, k=1, title=''):
     return res, tiles
 
 VIEWS_ = None
+VMASK = None
 
 if __name__ == '__main__':
     a = sys.argv[sys.argv.index(os.path.abspath(__file__)) + 1:] if os.path.abspath(__file__) in sys.argv else sys.argv[1:]
@@ -285,7 +334,7 @@ if __name__ == '__main__':
     bpy.ops.wm.save_as_mainfile(filepath=out)
     if '--board' in a:
         od = a[a.index('--board') + 1]; os.makedirs(od, exist_ok=True)
-        VIEWS_ = json.load(open(pj))['view']
+        J0 = json.load(open(pj)); J0['_path'] = pj; VMASK = setup_views(J0, sheet); VIEWS_ = J0['view']
         res, tiles = view_iou(sheet, od, 'v2')
         print('IOU', ' '.join('%s %.3f' % (v, res[v]) for v in res), 'mean %.3f' % np.mean(list(res.values())))
         json.dump(res, open(os.path.join(od, 'iou.json'), 'w'))

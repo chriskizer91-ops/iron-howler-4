@@ -95,6 +95,42 @@ In the model bay page (`pipeline/web/model_bay.html`), the full model shows its 
 model uses `<id>_albedo/_normal/_orm.webp`. The walk test page is `pipeline/walk/index.html`. Its leg solver keeps the feet
 planted: the thigh and lower leg turn together, so hip to ankle works as two links.
 
+## v2.1: items made from separate view pictures (the kit, the drone, the foes)
+New items arrive as separate pictures, one per view (from the ChatGPT zip), not as one concept sheet. v2.1 puts them on one
+sheet at a shared scale. From there every step above works the same. Tested on 6 Nov: four test views of the Wraith rebuilt at
+95–98% overlap, top view included.
+
+1. **Check the views agree.** Each side view faces LEFT, and the front and back views aren't mirror images of what the side
+   view shows. Flip any picture drawn the wrong way round.
+2. **Make the sheet:**
+   ```
+   python3 pipeline/make_views.py work/<item> <item> <H> front.png side.png back.png [top.png] [--px 1200] [--flip front,back] [--sideR]
+   ```
+   - `H` = the item's real height in metres (from the zip's README). Every view is scaled so the item is `--px` sheet pixels tall.
+   - The top view (front of the item toward the top of the picture) is scaled to the front view's width.
+   - `--sideR`: the side picture shows the item's RIGHT side. It's flipped to face left for tracing, and printed as the right side.
+   - Writes `<item>_sheet.png`, `<item>_sheet_mask.png` (the outline) and `<item>_views.json` (each view's box and the mapping).
+3. **Trace the parts** on `<item>_sheet.png` (`trace_aid.py` for gridded zooms, using the boxes in `<item>_views.json`), into a
+   v2.1 parts file:
+   ```json
+   {"format": "v2.1", "views": "<item>_views.json", "S": 2,
+    "skeleton": [{"name": "root"},
+                 {"name": "body", "parent": "root", "side": [u, v], "front": u},
+                 {"name": "leg", "parent": "body", "side": [u, v], "front": u, "mirror": true}],
+    "mounts": [{"name": "mount", "parent": "root", "side": [u, v], "front": u, "axes": [[x], [y], [z]]}],
+    "parts": {"hull": {"kind": "c", "j": "body", "n": 4, "front": [[u, v], ...], "side": [[u, v], ...], "top": [[u, v], ...]}}}
+   ```
+   - Joints and mounts are listed parent first. `mirror: true` makes `_R` and `_L` copies, with R = the item's right, the image's
+     left in the front view.
+   - A part's `j` names its joint. Mirrored parts (`kind: "m"`) use the mirrored joint on each side.
+   - `top` is optional. Without it, every part is still kept inside the whole item's top outline, when the item has a top view.
+   - `axes` are the mount's x, y and z directions. On a forearm weapon (a left-arm module): y = forward along the barrel,
+     z = out of the saddle. The mirrored right copy gets mirrored axes.
+4. **Build, board, print and bake** exactly as in steps 3–8 above. The build and the board read the boxes from the parts file. The
+   print settings are `{"views": "<item>_views.json", "H": <H>, "unmirror": [[x0, y0, x1, y1], ...]}` (unmirror boxes in sheet pixels).
+5. Sizes for kit pieces: `build_v2.py` keeps the large model to `TARGET` and the combat model to `LO_TARGET` (edit them per item:
+   60,000–100,000 and under 2,000 for kit pieces).
+
 ## Techniques and why
 - **Two-view solids ("visual hull").** A part is exactly as wide as the front view says and as deep as the side view says, at
   every height, so it matches both drawings. Edges are rounded with a soft-min of the two outline distance fields, and the

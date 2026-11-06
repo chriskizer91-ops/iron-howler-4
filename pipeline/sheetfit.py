@@ -18,7 +18,7 @@ from mathutils import Vector
 
 VIEWS = ('front', 'side', 'rear')
 R = math.radians
-CAM = {'front': ((0, 60, 0), (R(90), 0, R(180))), 'side': ((-60, 0, 0), (R(90), 0, R(-90))), 'rear': ((0, -60, 0), (R(90), 0, 0))}
+CAM = {'front': ((0, 60, 0), (R(90), 0, R(180))), 'side': ((-60, 0, 0), (R(90), 0, R(-90))), 'rear': ((0, -60, 0), (R(90), 0, 0)), 'top': ((0, 0, 60), (0, 0, 0))}
 
 def sheet_masks(path, boxes):
     """the figure's mask on the sheet (title text and labels removed)"""
@@ -72,6 +72,7 @@ def render_view(v, crop, ppm, cu, vg, out, k=1):
     loc, rot = CAM[v]
     if v == 'front': p = (h, 60, z)
     elif v == 'side': p = (-60, h, z)
+    elif v == 'top': p = ((uc - cu) / ppm, (vg - vc) / ppm, 60)      # top: u = cu + x*ppm, v = vg - y*ppm (vg = the row of y = 0)
     else: p = (-h, -60, z)
     cam.location = p; cam.rotation_euler = rot; cam.data.ortho_scale = max(W, Hh) / ppm
     sc.render.filepath = out; bpy.ops.render.render(write_still=True)

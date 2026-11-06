@@ -86,11 +86,13 @@ def view_uvd(v, p, m):
     if v == 'front': return m['cu'] - x * m['ppm'], vv, -y
     if v == 'side': return m['cu'] - y * m['ppm'], vv, x
     if v == 'sideR': return m['cu'] - y * m['ppm'], vv, -x
+    if v == 'top': return m['cu'] + x * m['ppm'], m['vg'] - y * m['ppm'], -z      # v2.1: looking straight down, front at the top
     return m['cu'] + x * m['ppm'], vv, y
 
 UNMIRROR = []      # picture boxes (x0, y0, x1, y1) on the side view holding text
-TOCAM = {'front': (0, 1, 0), 'side': (-1, 0, 0), 'sideR': (1, 0, 0), 'rear': (0, -1, 0)}
-SRC = {'front': 'front', 'side': 'side', 'sideR': 'side', 'rear': 'rear'}
+TOCAM = {'front': (0, 1, 0), 'side': (-1, 0, 0), 'sideR': (1, 0, 0), 'rear': (0, -1, 0), 'top': (0, 0, 1)}
+SRC = {'front': 'front', 'side': 'side', 'sideR': 'side', 'rear': 'rear', 'top': 'top'}
+SIDE_IS_RIGHT = [False]
 
 def register(P, SM, H, search=30):
     """the scale from the side picture's height, then per view the sideways shift that overlaps the outlines best"""
@@ -168,6 +170,19 @@ def guide_sources(I):
         print(v, 'picture lines up with the guide: overlap %.0f%%, size x%.3f, shift %.1f, %.1f px' % (iou * 100, sc, tx, ty), flush=True)
     return out
 
+def views_sources(I):
+    """v2.1: an item's own sheet made by make_views.py: the mapping is exact, nothing to line up"""
+    vp = I['views']; VJ = json.load(open(vp)); d = os.path.dirname(os.path.abspath(vp))
+    sheet = I.get('sheet') or os.path.join(d, VJ['sheet'])
+    img = np.asarray(Image.open(sheet).convert('RGB')); mp = sheet[:-4] + '_mask.png'
+    mask = fill_small_holes(np.asarray(Image.open(mp).convert('L')) > 110) if os.path.exists(mp) else figure_mask(img)
+    out = {}
+    for v, b in VJ['boxes'].items():
+        mv = VJ['view'][v]
+        out[v] = dict(img=img, mask=mask, m=dict(ppm=VJ['ppm'], cu=mv['cu'], vg=mv.get('vg', mv.get('cv')), crop=tuple(b), iou=1.0))
+    SIDE_IS_RIGHT[0] = VJ['view'].get('side', {}).get('is') == 'right'
+    return out
+
 def sheet_sources(img_path, boxes_path, P, H, mapping=None):
     SM, img = figure_masks(img_path, boxes_path); m = mapping or register(P, SM, H)
     return {v: dict(img=img, mask=SM[v]['mask'], m=m[v]) for v in VIEWS}
@@ -175,17 +190,19 @@ def sheet_sources(img_path, boxes_path, P, H, mapping=None):
 def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, power=3.0, eps=.05, k=2):
     bpy.ops.wm.open_mainfile(filepath=blend)
     P, N, U = atlas_triangles(); print('triangles', len(P), flush=True)
-    SR = guide_sources(I) if 'guide' in I else sheet_sources(I['image'], I['boxes'], P, H, mapping)
-    m = {v: SR[v]['m'] for v in VIEWS}
-    print('registration', {v: round(m[v]['iou'], 3) for v in VIEWS}, flush=True)
+    SR = views_sources(I) if 'views' in I else guide_sources(I) if 'guide' in I else sheet_sources(I['image'], I['boxes'], P, H, mapping)
+    VW = [v for v in ('front', 'side', 'rear', 'top') if v in SR]
+    m = {v: SR[v]['m'] for v in VW}
+    print('registration', {v: round(m[v]['iou'], 3) for v in VW}, flush=True)
     # 1. every texel: where it is on the model and which way it faces
     t2 = np.stack([U[..., 0] * size, (1 - U[..., 1]) * size], -1)
     pos, tid = raster(t2, np.concatenate([P, N], -1), size, size, pad=.6)
     cov = tid >= 0; del tid; idx = np.where(cov); tp = pos[idx][:, :3]; tn = pos[idx][:, 3:]; del pos
     tn /= np.maximum(1e-9, np.linalg.norm(tn, axis=1, keepdims=True))
     print('texels on the model', len(tp), flush=True)
-    acc = np.zeros((len(tp), 3), np.float32); wsum = np.zeros(len(tp), np.float32); who = np.zeros((len(tp), 4), np.float32)
-    for j, v in enumerate(('front', 'side', 'sideR', 'rear')):
+    PV = ['front', 'side', 'sideR', 'rear'] + (['top'] if 'top' in m else [])
+    acc = np.zeros((len(tp), 3), np.float32); wsum = np.zeros(len(tp), np.float32); who = np.zeros((len(tp), 5), np.float32)
+    for j, v in enumerate(PV):
         mv = m[SRC[v]]; crop = mv['crop']; W, Hh = crop[2] - crop[0], crop[3] - crop[1]
         # 2. what this view can see: a depth picture of the whole model at 2x the picture's resolution
         u, vv, d = view_uvd(v, P, mv)
@@ -195,7 +212,7 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
         px = np.clip(((tu - crop[0]) * k).astype(int), 0, W * k - 1); py = np.clip(((tv - crop[1]) * k).astype(int), 0, Hh * k - 1)
         vis = td <= zb[py, px] + eps
         f = tn @ np.array(TOCAM[v], float); w = np.where(vis & (f > .05), np.clip(f, 0, 1) ** power, 0)
-        if v == 'sideR':      # numbers painted on the shown side would read backwards on the other side: flip them back
+        if v == ('side' if SIDE_IS_RIGHT[0] else 'sideR'):      # numbers painted on the shown side would read backwards on the other side: flip them back
             for x0_, y0_, x1_, y1_ in UNMIRROR:
                 inb = (tu >= x0_) & (tu <= x1_) & (tv >= y0_) & (tv <= y1_); tu = np.where(inb, x0_ + x1_ - tu, tu)
         src = filled(SR[SRC[v]]['img'], SR[SRC[v]]['mask'], crop)
@@ -210,11 +227,14 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
     # where no picture sees the model, the baked colour is re-tinted to match the picture: each baked colour family
     # (orange armour, charcoal frame, steel ...) takes the typical picture colour of the same family where it IS seen
     bt = base[idx]; fam = family(bt); tinted = bt.copy()
-    figs = np.concatenate([SR[v]['img'][SR[v]['mask']].astype(np.float64) for v in VIEWS])
+    def _fig(v):
+        c = SR[v]['m']['crop']; return SR[v]['img'][c[1]:c[3], c[0]:c[2]][SR[v]['mask'][c[1]:c[3], c[0]:c[2]]].astype(np.float64)
+    figs = np.concatenate([_fig(v) for v in VW])
     sat = lambda c: (c.max(-1) - c.min(-1)) / np.maximum(1, c.max(-1))
     lum = lambda c: c @ np.array([.3, .59, .11])
-    paint = np.median(figs[(sat(figs) > .45) & (figs[:, 0] > figs[:, 2] + 40)], 0)          # the picture's armour colour
-    metal = figs[sat(figs) < .22]; metal_l = np.median(lum(metal)); metal_c = np.median(metal, 0)   # its frame colour
+    metal = figs[sat(figs) < .22]; metal = metal if len(metal) > 50 else figs; metal_l = np.median(lum(metal)); metal_c = np.median(metal, 0)   # its frame colour
+    pp = figs[(sat(figs) > .45) & (figs[:, 0] > figs[:, 2] + 40)]
+    paint = np.median(pp, 0) if len(pp) > 50 else metal_c          # the picture's armour colour (orange on the Wraith's kit)
     fl = {f_: np.median(bt[fam == f_], 0) for f_ in np.unique(fam)}
     grey_l = np.median([lum(c) for c in fl.values() if sat(c) < .35] or [60])
     for f_, c in fl.items():
@@ -229,10 +249,10 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
     out[gap] = out[iy[gap], ix[gap]]
     os.makedirs(outdir, exist_ok=True)
     Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)).save(os.path.join(outdir, name + '_albedo.png'))
-    cv = np.zeros((size, size, 3)); pal = np.array([(255, 140, 0), (40, 140, 255), (40, 200, 120), (220, 60, 200)], float)
+    cv = np.zeros((size, size, 3)); pal = np.array([(255, 140, 0), (40, 140, 255), (40, 200, 120), (220, 60, 200), (240, 240, 60)], float)
     cv[idx] = (who / np.maximum(1e-9, who.sum(1, keepdims=True))) @ pal * alpha
     Image.fromarray(cv.astype(np.uint8)).save(os.path.join(outdir, name + '_cover.png'))
-    json.dump({v: {kk: m[v][kk] for kk in ('ppm', 'cu', 'vg', 'crop', 'iou')} for v in VIEWS}, open(os.path.join(outdir, name + '_map.json'), 'w'), indent=1)
+    json.dump({v: {kk: m[v][kk] for kk in ('ppm', 'cu', 'vg', 'crop', 'iou')} for v in VW}, open(os.path.join(outdir, name + '_map.json'), 'w'), indent=1)
     print('painted %.0f%% of the model surface from the pictures' % (100 * (alpha > .5).mean()), flush=True)
     return m
 
