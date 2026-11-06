@@ -32,8 +32,8 @@ P = {
  'frame': dict(kind='c', j='swivel', n=5, k=.008, remap=True,
                front=[[228, 176], [540, 176], [584, 218], [584, 640], [550, 674], [218, 674], [184, 640], [184, 218]],
                side=[[1008, 168], [1078, 168], [1078, 676], [1008, 676]]),
- # the doors and their hinges (the right door is traced; the left one is its mirror)
- 'door':  dict(kind='m', j='door', n=5, k=.008, remap=True, plan=DOOR_PLAN,
+ # the doors ('leaf_R' / 'leaf_L', on the joints door_R / door_L) and their hinges (the right door is traced; the left one is its mirror)
+ 'leaf':  dict(kind='m', j='door', n=5, k=.008, remap=True, plan=DOOR_PLAN,
                front=[[36, 136], [140, 132], [212, 182], [212, 668], [140, 704], [36, 704]],
                side=[[798, 128], [1014, 128], [1014, 712], [798, 712]]),
  'hinge': dict(kind='m', j='door', round=2, k=.004, remap=True,

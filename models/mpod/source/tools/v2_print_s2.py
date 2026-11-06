@@ -25,6 +25,6 @@ uvb = os.path.join(outdir, name + '_uv.blend'); bpy.ops.wm.save_as_mainfile(file
 base = os.path.join(outdir, '_base.png'); Image.new('RGB', (size, size), (128, 128, 132)).save(base)
 import project_sheet_s2 as PS
 PS.COLL, PS.MAT = 'HI', None
-I = json.load(open(images)); PS.UNMIRROR[:] = I.get('unmirror', []); PS.ALPHA[0] = float(I.get('alpha', .35))
+I = json.load(open(images)); PS.UNMIRROR[:] = I.get('unmirror', []); PS.ALPHA[0] = float(I.get('alpha', .35)); PS.POWER[0] = float(I.get('power', 3.0))
 PS.project(uvb, base, I, outdir, name, float(I.get('H', 6.6)), json.load(open(I['map'])) if 'map' in I else None, size=size)
 print('printed in %.0f s' % (time.time() - t))

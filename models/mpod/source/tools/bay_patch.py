@@ -13,7 +13,10 @@ for l in lines:
     # an existing entry for this id: its line(s) from "  id:{" up to the next entry or the end of MODELS
     m = re.search(r'\n  ' + mid + r':\{.*?(?=\n  (?:/\*|[A-Za-z0-9_]+:\{)|$)', body, flags=re.S)
     if m: body = body[:m.start()] + '\n' + l + body[m.end():]
-    else: body = body + '\n' + l
+    else:
+        body = body.rstrip()
+        if not body.endswith((',', '{')): body += ','        # the entry before may have no trailing comma
+        body = body + '\n' + l
 s = s[:a] + body + s[b:]
 if 'grp:\'kit\'' in s and '>KIT</button>' not in s:
     first = re.search(r"\n  ([A-Za-z0-9_]+):\{[^\n]*grp:'kit'", s).group(1)

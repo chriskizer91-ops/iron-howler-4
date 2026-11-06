@@ -1,4 +1,6 @@
-"""Session 2 copy of pipeline/project_sheet.py. One change: "alpha" in the print settings (default 0.35, the pipeline's value)
+"""Session 2 copy of pipeline/project_sheet.py. Two changes: "power" in the print settings (default 3, the pipeline's) sets
+how strongly the most square-on view wins where two views see a rounded surface (higher = less cross-fading of two
+different pictures). And "alpha" in the print settings (default 0.35, the pipeline's value)
 sets how squarely a view must see a surface before its picture fully replaces the fallback tint. Kit pieces use 0.1, so faces a
 picture sees at a steep angle (an open door's inside, seen from the front) keep the picture's colour instead of fading to grey.
 Paint a concept sheet (or any front / side / rear picture set that lines up with the model) onto the combat model's
@@ -97,6 +99,7 @@ TOCAM = {'front': (0, 1, 0), 'side': (-1, 0, 0), 'sideR': (1, 0, 0), 'rear': (0,
 SRC = {'front': 'front', 'side': 'side', 'sideR': 'side', 'rear': 'rear', 'top': 'top'}
 SIDE_IS_RIGHT = [False]
 ALPHA = [.35]
+POWER = [3.0]       # session 2: how strongly the most square-on view wins where two views see a surface (print setting "power")
 
 def register(P, SM, H, search=30):
     """the scale from the side picture's height, then per view the sideways shift that overlaps the outlines best"""
@@ -192,6 +195,7 @@ def sheet_sources(img_path, boxes_path, P, H, mapping=None):
     return {v: dict(img=img, mask=SM[v]['mask'], m=m[v]) for v in VIEWS}
 
 def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, power=3.0, eps=.05, k=2):
+    power = POWER[0]
     bpy.ops.wm.open_mainfile(filepath=blend)
     P, N, U = atlas_triangles(); print('triangles', len(P), flush=True)
     SR = views_sources(I) if 'views' in I else guide_sources(I) if 'guide' in I else sheet_sources(I['image'], I['boxes'], P, H, mapping)
@@ -205,7 +209,7 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
     tn /= np.maximum(1e-9, np.linalg.norm(tn, axis=1, keepdims=True))
     print('texels on the model', len(tp), flush=True)
     PV = ['front', 'side', 'sideR', 'rear'] + (['top'] if 'top' in m else [])
-    acc = np.zeros((len(tp), 3), np.float32); wsum = np.zeros(len(tp), np.float32); who = np.zeros((len(tp), 5), np.float32)
+    acc = np.zeros((len(tp), 3), np.float32); wsum = np.zeros(len(tp), np.float32); wcov = np.zeros(len(tp), np.float32); who = np.zeros((len(tp), 5), np.float32)
     for j, v in enumerate(PV):
         mv = m[SRC[v]]; crop = mv['crop']; W, Hh = crop[2] - crop[0], crop[3] - crop[1]
         # 2. what this view can see: a depth picture of the whole model at 2x the picture's resolution
@@ -216,6 +220,7 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
         px = np.clip(((tu - crop[0]) * k).astype(int), 0, W * k - 1); py = np.clip(((tv - crop[1]) * k).astype(int), 0, Hh * k - 1)
         vis = td <= zb[py, px] + eps
         f = tn @ np.array(TOCAM[v], float); w = np.where(vis & (f > .05), np.clip(f, 0, 1) ** power, 0)
+        wcov += np.where(vis & (f > .05), np.clip(f, 0, 1) ** 3, 0)      # session 2: how well the pictures cover it (as the pipeline measures)
         if v == ('side' if SIDE_IS_RIGHT[0] else 'sideR'):      # numbers painted on the shown side would read backwards on the other side: flip them back
             for x0_, y0_, x1_, y1_ in UNMIRROR:
                 inb = (tu >= x0_) & (tu <= x1_) & (tv >= y0_) & (tv <= y1_); tu = np.where(inb, x0_ + x1_ - tu, tu)
@@ -226,7 +231,7 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
     del tp, tn
     base = np.asarray(Image.open(base_albedo).convert('RGB')).astype(np.float32)
     if base.shape[0] != size: base = np.asarray(Image.fromarray(base.astype(np.uint8)).resize((size, size), Image.LANCZOS)).astype(np.float32)
-    out = base.copy(); alpha = np.clip(wsum / ALPHA[0], 0, 1)[:, None]
+    out = base.copy(); alpha = np.clip(wcov / ALPHA[0], 0, 1)[:, None]
     proj = acc / np.maximum(1e-9, wsum)[:, None]
     # where no picture sees the model, the baked colour is re-tinted to match the picture: each baked colour family
     # (orange armour, charcoal frame, steel ...) takes the typical picture colour of the same family where it IS seen

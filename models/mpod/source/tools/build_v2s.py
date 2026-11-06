@@ -305,6 +305,8 @@ def build(pj, sheet, fine=False, lo=False):
     h = J.get('h_full', .009) if fine else (J.get('h_lo', .02) if lo else J.get('h_block', .015))          # voxel size (metres); session 2: per item
     KS = J.get('k_scale', 1.0)
     tris = 0; info = {}
+    clash = [n for n in P if n in E or any(n + '_' + s_ in E for s_ in 'RL')]
+    if clash: raise SystemExit('parts named like joints (rename them): %s' % clash)
     for name, p in P.items():
         view = 'front' if 'front' in p else 'rear'
         R = poly_mask(p[view], view) & MU[view]
@@ -353,6 +355,7 @@ def build(pj, sheet, fine=False, lo=False):
         for o in coll.objects:
             n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = min(1, max(r, (60 if lo else 0) / max(1, n0))); md.use_collapse_triangulate = True
             bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier='dec')
+        for o in coll.objects: o.data.validate(); o.data.update()      # session 2: thinning can leave a bad face; repair it before export
         tris = sum(len(o.data.polygons) for o in coll.objects)
     if lo: coll.name = 'LO'
     return tris, info
