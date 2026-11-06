@@ -25,7 +25,12 @@ def figure(im):
     a = im.astype(np.int32)
     edge = np.concatenate([a[:8].reshape(-1, 3), a[-8:].reshape(-1, 3), a[:, :8].reshape(-1, 3), a[:, -8:].reshape(-1, 3)])
     bg = np.median(edge, 0)
-    m = (np.abs(a - bg).sum(2) > 40) | ((a.max(2) - a.min(2)) > 40)
+    if (np.abs(edge - bg).sum(1) == 0).mean() > .9:
+        # one exact background colour (every ChatGPT view so far: 200, 200, 202): the object is every pixel that isn't it.
+        # The looser test below cut pale paint and bright rims off the outline (found by session 2 on the missile pod)
+        m = np.abs(a - bg).sum(2) > 2
+    else:
+        m = (np.abs(a - bg).sum(2) > 40) | ((a.max(2) - a.min(2)) > 40)
     m = ndimage.binary_opening(m, iterations=1)
     lab, n = ndimage.label(m)
     if n:
@@ -33,7 +38,7 @@ def figure(im):
         m = np.isin(lab, 1 + np.where(sizes > max(60, big * .002))[0])
     holes = ndimage.binary_fill_holes(m) & ~m; hl, hn = ndimage.label(holes)
     if hn:
-        hs = ndimage.sum(holes, hl, range(1, hn + 1)); m |= np.isin(hl, 1 + np.where(hs < 400)[0])
+        hs = ndimage.sum(holes, hl, range(1, hn + 1)); m |= np.isin(hl, 1 + np.where(hs < max(400, m.sum() * .015))[0])   # white numbers and stripes are paint, not holes
     ys, xs = np.where(m)
     return m, (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1), bg
 

@@ -93,6 +93,7 @@ UNMIRROR = []      # picture boxes (x0, y0, x1, y1) on the side view holding tex
 TOCAM = {'front': (0, 1, 0), 'side': (-1, 0, 0), 'sideR': (1, 0, 0), 'rear': (0, -1, 0), 'top': (0, 0, 1)}
 SRC = {'front': 'front', 'side': 'side', 'sideR': 'side', 'rear': 'rear', 'top': 'top'}
 SIDE_IS_RIGHT = [False]
+FILL = ['tint']      # how surfaces no picture sees are coloured: 'tint' (the Wraith) or 'nearest' (v2.1 items)
 
 def register(P, SM, H, search=30):
     """the scale from the side picture's height, then per view the sideways shift that overlaps the outlines best"""
@@ -181,6 +182,7 @@ def views_sources(I):
         mv = VJ['view'][v]
         out[v] = dict(img=img, mask=mask, m=dict(ppm=VJ['ppm'], cu=mv['cu'], vg=mv.get('vg', mv.get('cv')), crop=tuple(b), iou=1.0))
     SIDE_IS_RIGHT[0] = VJ['view'].get('side', {}).get('is') == 'right'
+    FILL[0] = I.get('fill', 'nearest')
     return out
 
 def sheet_sources(img_path, boxes_path, P, H, mapping=None):
@@ -219,7 +221,7 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
         col = bilinear(src, tu - crop[0], tv - crop[1])
         acc += col * w[:, None]; wsum += w; who[:, j] = w
         print(v, 'paints', int((w > .2).sum()), 'texels', flush=True)
-    del tp, tn
+    del tn
     base = np.asarray(Image.open(base_albedo).convert('RGB')).astype(np.float32)
     if base.shape[0] != size: base = np.asarray(Image.fromarray(base.astype(np.uint8)).resize((size, size), Image.LANCZOS)).astype(np.float32)
     out = base.copy(); alpha = np.clip(wsum / .35, 0, 1)[:, None]
@@ -242,6 +244,15 @@ def project(blend, base_albedo, I, outdir, name, H, mapping=None, size=2048, pow
         if sat(c) >= .35: tgt = paint * (lum(c) / max(1, lum(paint))) ** .3
         else: tgt = metal_c * np.clip(lum(c) / max(1, grey_l), .5, 1.8)
         tinted[sel] = bt[sel] * np.clip(tgt / np.maximum(4, c), .2, 3)
+    if FILL[0] == 'nearest':     # v2.1: surfaces no picture sees (tops, bottoms) take the colour of the nearest painted surface
+        from scipy.spatial import cKDTree
+        good = alpha[:, 0] > .8
+        if good.sum() > 100 and (~good).any():
+            gi = np.where(good)[0]
+            if len(gi) > 150000: gi = np.random.default_rng(1).choice(gi, 150000, replace=False)     # a sample is plenty, and fast
+            d_, j_ = cKDTree(tp[gi], balanced_tree=False, compact_nodes=False).query(tp[~good], k=4, workers=-1)
+            tinted[~good] = proj[gi][j_].mean(1)
+    del tp
     out[idx] = tinted * (1 - alpha) + proj * alpha
     # 3. spread the painted colour into the gaps between atlas islands (no seams when the texture is shrunk)
     dist, (iy, ix) = ndimage.distance_transform_edt(~cov, return_indices=True)

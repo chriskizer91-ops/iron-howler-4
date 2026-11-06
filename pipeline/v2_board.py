@@ -35,7 +35,7 @@ for v in [x for x in ('front', 'side', 'rear', 'top') if x in BOX]:
     x0, y0, x1, y1 = BOX[v]
     r = SF.render_view(v, (x0, y0, x1, y1), Vw['ppm'], Vw[v]['cu'], Vw[v]['vg'], '/tmp/_v2b_%s.png' % v, 2)
     r = Image.fromarray(r).resize((x1 - x0, y1 - y0), Image.LANCZOS)
-    base = im[y0:y1, x0:x1]; bgc = tuple(int(c) for c in np.median(base.reshape(-1, 3), 0))
+    base = im[y0:y1, x0:x1]; bgc = tuple(int(c) for c in base[3, 3])      # the sheet's own background colour
     bg = Image.new('RGBA', r.size, bgc + (255,)); bg.alpha_composite(r)
     mm = np.asarray(r)[:, :, 3] > 100; shm = mask[y0:y1, x0:x1]
     ov = (base * .35 + 140).astype(np.uint8); ov[mm & shm] = (base[mm & shm] * .5 + 90).astype(np.uint8); ov[shm & ~mm] = (230, 40, 40); ov[mm & ~shm] = (40, 120, 255)
@@ -52,13 +52,13 @@ for az in (-35, 145):
     sc.render.filepath = '/tmp/_v2b_h%d.png' % az; bpy.ops.render.render(write_still=True)
     h = Image.open(sc.render.filepath).convert('RGBA'); bg = Image.new('RGBA', h.size, (34, 36, 40, 255)); bg.alpha_composite(h); hero.append(bg.convert('RGB'))
 F = SF.font
-th0 = rows[0][1].height
-if th0 > 540:            # big v2.1 sheets: shrink the tiles so the board still reads on a phone
-    k_ = 540 / th0; rows = [(v, *[t.resize((max(1, int(t.width * k_)), 540), Image.LANCZOS) for t in (a, b, c)], iou) for v, a, b, c, iou in rows]
+th0 = rows[0][1].height; tw0 = max(r[1].width for r in rows)
+k_ = min(1.0, 540 / th0, 620 / tw0)      # big or wide v2.1 sheets: shrink the tiles so the board still reads on a phone
+if k_ < 1: rows = [(v, *[t.resize((max(1, int(t.width * k_)), max(1, int(t.height * k_))), Image.LANCZOS) for t in (a, b, c)], iou) for v, a, b, c, iou in rows]
 # portrait layout (reads on a phone): one row per view - sheet, model, overlap - then the two three-quarter views
 tw = max(r[1].width for r in rows); th = rows[0][1].height; gap = 10
 W = 20 + 3 * tw + 2 * gap + 20; hh = hero[0].height
-H = 60 + len(rows) * (th + 40) + hh + 70
+H = 60 + len(rows) * (th + 40) + int(hh * min(hero[0].width, (W - 60) // 2) / hero[0].width) + 70
 can = Image.new('RGB', (W, H), (196, 196, 198)); d = ImageDraw.Draw(can)
 d.text((20, 14), title, fill=(25, 25, 25), font=F(26))
 y = 60
@@ -68,6 +68,7 @@ for v, s_, m_, o_, iou in rows:
         ox = x + (tw - t_.width) // 2; can.paste(t_, (ox, y + 26)); d.text((ox, y + 2), lab, fill=(25, 25, 25), font=F(18)); x += tw + gap
     y += th + 40
 x = 20
-for h in hero: can.paste(h.resize((int(h.width * (W - 60) / 2 / h.width), int(h.height * (W - 60) / 2 / h.width))), (x, y)); x += (W - 60) // 2 + 20
+hw_ = min(hero[0].width, (W - 60) // 2)
+for h in hero: can.paste(h.resize((hw_, int(h.height * hw_ / h.width))), (x, y)); x += hw_ + 20
 d.text((20, H - 40), 'red = on the sheet but missing on the model     blue = on the model but not on the sheet', fill=(25, 25, 25), font=F(18))
 can.save(out, quality=88); print('board', out, ' '.join('%s %.3f' % (r[0], r[4]) for r in rows))

@@ -9,3 +9,14 @@
   - `project_sheet.py` / `v2_print.py`: print from an item's view sheet (`{"views": ...}`), including the top view; a right-side
     picture (`--sideR`) prints on the right side;
   - `sheetfit.py`: a top camera; `v2_board.py`: shows every view the item has, frames any size of item.
+- **v2.2 (6 Nov 2026), from the autocannon.** Nothing earlier changes; the Wraith rebuilds the same.
+  - `make_views.py`: when a picture sits on one exact background colour (all 34 ChatGPT views do: 200, 200, 202) the outline is
+    every pixel that isn't that colour. Session 2 found the old test cut pale paint and bright rims off (0.2–4 % of each
+    view; the Lance front loses most). Holes up to 1.5 % of the object (white letters) are filled as paint.
+  - `build_v2.py`: `"zfrom": "side"` (whole item or per part) takes heights from the side view when the front view's are wrong
+    (the autocannon's barrels).
+  - `project_sheet.py`: unseen surfaces of v2.1 items are filled from the nearest printed colour (`"fill": "nearest"`, the
+    default for items; the Wraith keeps its family tint). Print time 27 s.
+  - new `mirror_item.py`: the left/right twin of an item (mesh, joints and mounts mirrored, faces kept outward).
+  - new `fit_check.py`: kit pieces placed on the Wraith at their mounts, rendered from three angles.
+  - `v2_board.py`: model tiles sized and framed from the model, the tile background matched to the sheet.

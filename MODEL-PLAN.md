@@ -130,6 +130,15 @@ sheet at a shared scale. From there every step above works the same. Tested on 6
    print settings are `{"views": "<item>_views.json", "H": <H>, "unmirror": [[x0, y0, x1, y1], ...]}` (unmirror boxes in sheet pixels).
 5. **Triangle budgets** go in the parts file: `"target"` for the large model (default 950,000) and `"lo_target"` for the combat
    model (default 7,200). Kit pieces use 60,000–100,000 and under 2,000.
+6. **When the front and side disagree on heights** (AI pictures do), `"zfrom": "side"` on a part (or on the whole item) takes
+   its heights from the side view instead, and `"remap": true` stretches the other view to fit.
+7. **Left and right twins** (forearm and shoulder modules): build the left one, then `python3 -I pipeline/mirror_item.py
+   left.blend right.blend` for the large and combat models. Print the right one from its own sheet with the pictures as drawn,
+   and put an `unmirror` box over any lettering seen from the right side, so "AC-4" doesn't read backwards.
+8. **Tiers** (several versions of one part in one model): name the copies `t1_`..`t4_`. The bay and the game show one tier and
+   hide the rest. See `models/autocannon/source/tools/ac_tiers.py`.
+9. **Fit check** every kit piece on the Wraith: `python3 -I pipeline/fit_check.py wraith_uv.blend wraith_albedo.png out.jpg
+   item.blend:albedo.png:fa_L` (the item's `mount` empty goes onto the Wraith's mount; add `:t1_,t2_` to hide parts).
 
 ## Techniques and why
 - **Two-view solids ("visual hull").** A part is exactly as wide as the front view says and as deep as the side view says, at
@@ -156,6 +165,10 @@ sheet at a shared scale. From there every step above works the same. Tested on 6
 - Update Blender's view layer after creating each joint, or children read stale positions.
 - Printing at 4096 runs out of memory here (7 GB). 2048 carries the sharper pictures' detail.
 - Both chats publish to the model bay. Before republishing, read the live page and patch that one.
+- ChatGPT's view pictures sit on one exact grey (200, 200, 202). Use that colour for the outline, not "close to the
+  background", or pale paint and bright rims get cut off (`make_views.py` does this by itself since v2.2).
+- The left/right slip: ChatGPT may draw a one-sided part (the forearm clamp) on opposite sides in the front and back views.
+  Check before tracing and flip the view that disagrees with the side view.
 - Timing here (2 cores): blockout 6 s, large model 30 s, print 3.5 minutes, combat 8 s, bake 25 s.
 
 ## Still open

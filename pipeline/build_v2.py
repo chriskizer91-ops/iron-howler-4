@@ -170,19 +170,21 @@ def region_sd(Rm, view, Vw, ppm, sym):
     if sym: w = max(abs(A[0]), abs(A[1])); A = [-w, w]
     return sample, A, Z
 
-def hull_mesh(F, Sd, k, h, remap=True, T=None):
+def hull_mesh(F, Sd, k, h, remap=True, T=None, zfrom='front'):
     """the part's solid: inside where it is inside both outlines; edges rounded by k (metres); marching cubes at h.
     The front view sets the height: the side outline is stretched to the front outline's height range (remap)."""
     from skimage import measure
     fs, FA, FZ = F; ss, SA, SZ = Sd
-    z0, z1 = FZ[0] - 2 * h, FZ[1] + 2 * h          # the front view sets the height
+    MZ, OZ = (FZ, SZ) if zfrom == 'front' else (SZ, FZ)     # v2.1: 'zfrom': 'side' lets the side view set the heights instead
+    z0, z1 = MZ[0] - 2 * h, MZ[1] + 2 * h          # the front view sets the height (by default)
     if z1 <= z0: return None
     xs = np.arange(FA[0] - 2 * h, FA[1] + 2 * h, h); ys = np.arange(SA[0] - 2 * h, SA[1] + 2 * h, h); zs = np.arange(z0, z1, h)
     if min(len(xs), len(ys), len(zs)) < 3: return None
-    XZx, XZz = np.meshgrid(xs, zs, indexing='ij'); dF = fs(XZx.ravel(), XZz.ravel()).reshape(len(xs), len(zs))
-    if remap: zsd = SZ[0] + (zs - FZ[0]) * (SZ[1] - SZ[0]) / max(1e-6, FZ[1] - FZ[0])    # stretch the side outline to the front's heights
+    if remap: zo = OZ[0] + (zs - MZ[0]) * (OZ[1] - OZ[0]) / max(1e-6, MZ[1] - MZ[0])    # stretch the other outline to these heights
     else:                                                                                  # or read it at the same height, held inside its own range
-        e = min(.1 * (SZ[1] - SZ[0]), .03); zsd = np.clip(zs, SZ[0] + e, SZ[1] - e)
+        e = min(.1 * (OZ[1] - OZ[0]), .03); zo = np.clip(zs, OZ[0] + e, OZ[1] - e)
+    zf, zsd = (zs, zo) if zfrom == 'front' else (zo, zs)
+    XZx, XZz = np.meshgrid(xs, zf, indexing='ij'); dF = fs(XZx.ravel(), XZz.ravel()).reshape(len(xs), len(zs))
     YZy, YZz = np.meshgrid(ys, zsd, indexing='ij'); dS = ss(YZy.ravel(), YZz.ravel()).reshape(len(ys), len(zs))
     k = min(k, .3 * max(1e-3, dF.max()), .3 * max(1e-3, dS.max()))      # thin parts get smaller rounding
     f = -k * np.logaddexp(-dF[:, None, :] / k, -dS[None, :, :] / k)
@@ -260,7 +262,8 @@ def build(pj, sheet, fine=False, lo=False):
         if 'top' in BOX:       # v2.1: the part's own top outline if traced, else the whole item's top outline
             RT = (poly_mask(p['top'], 'top') & MU['top']) if p.get('top') else MU['top']
             Td = region_sd(clean_region(RT, p.get('tol', 2.2)) if p.get('top') else RT, 'top', Vw, ppm, p['kind'] == 'c')
-        hm = hull_mesh(Fd, Sdd, p.get('k', KN.get(p.get('n', 3), .04)), max(p.get('h', h), .012) if lo else p.get('h', h), p.get('remap', False), Td) if Fd and Sdd else None
+        hm = hull_mesh(Fd, Sdd, p.get('k', KN.get(p.get('n', 3), .04)), max(p.get('h', h), .012) if lo else p.get('h', h), p.get('remap', False), Td,
+                       p.get('zfrom', J.get('zfrom', 'front'))) if Fd and Sdd else None
         parts = [hm] if hm else []
         sl = [(0, 0, 0, 0, 0)] * (len(hm[1]) if hm else 0)
         sides = [('R', False), ('L', True)] if p['kind'] == 'm' else [('', False)]
