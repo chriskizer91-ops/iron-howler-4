@@ -8,7 +8,7 @@ docking face), B08 (side), B09 (back = the nozzle face), at their own 500 px per
 |---|---|
 | `jetpack_full.glb` | full model for the modification bay: **99,986 triangles**, 7 traced parts (caps, posts, jets and nozzles mirrored) |
 | `jetpack_full_print.png` / `.webp` | the three pictures printed onto the full model (2048) |
-| `jetpack_combat.glb` | combat model for the game: **1,936 triangles**, 12 meshes, same joints and mounts |
+| `jetpack_combat.glb` | combat model for the game: **1,936 triangles**, 11 meshes, same joints and mounts |
 | `jetpack_combat_albedo`, `_normal`, `_orm` | print and surface baked onto the combat model (1024; ORM constant) |
 | `source/parts_jetpack.py`, `parts.json`, `item.json`, `print.json` | traces, joints, mounts, budgets, print settings |
 | `source/jetpack_sheet.png`, `_mask.png`, `jetpack_views.json` | the pictures on one sheet (side picture flipped), the outline, the mapping |
