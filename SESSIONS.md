@@ -6,7 +6,7 @@ way `MODEL-PLAN.md` describes, and saves them to this repo. **All 40 pictures ar
 
 ## The split
 
-| Session | Builds | Images from the zip | Model bay ids |
+| Session | Builds | Pictures (in `art/kit-and-foes/`) | Model bay ids |
 | --- | --- | --- | --- |
 | **1** (the first chat; owns `pipeline/`, `STATUS.md`, `MODEL-PLAN.md` and the design document) | **pipeline v2.1** (done), then the forearm weapons: autocannon tiers I–IV, Lance, Arc, plus a fit check of the kit on the Wraith | A00–A09 | `ac`, `lance`, `arc` |
 | **2** | shoulder and back modules: missile pod, Watcher, jet pack; then the assist drone, docked and flying | B00–B09, C00–C04 | `mpod`, `watcher`, `jetpack`, `drone` |
