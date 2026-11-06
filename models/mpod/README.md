@@ -48,11 +48,15 @@ python3 -I tools/v2_board_s2.py <blend> parts.json mpod_sheet.png board.jpg "tit
 - `build_v2s.py`: `round` (slices are ellipses or rounded boxes, for the swivel base and the hinges), `plan` (a top-down
   outline in metres, for the angled open doors, since there is no top view), and per-item voxel size and edge rounding
   (`h_full`, `h_lo`, `k_scale`) so 1 m pieces aren't rounded like a 6.6 m mech.
-- `v2_print_s2.py` / `project_sheet_s2.py`: an `alpha` print setting (0.1 here, pipeline 0.35), so a face a picture sees at a
+- `v2_print_s2.py` / `project_sheet_s2.py` (rebased on pipeline v2.2): an `alpha` print setting (0.1 here, pipeline 0.35), so a face a picture sees at a
   steep angle (an open door's inside) keeps the picture's colour instead of fading to grey; and a `power` setting (pipeline 3),
-  so on rounded corners the best-facing picture wins instead of two pictures cross-fading (the Watcher uses 6).
+  so on rounded corners the best-facing picture wins instead of two pictures cross-fading (the Watcher uses 6). Session 2's
+  pieces keep `"fill": "tint"` for surfaces no picture sees: v2.2's `nearest` smeared orange and white across the pod's top
+  (`previews/fill_tint_vs_nearest.jpg`).
 - `v2_bake_s2.py`: bake cage and ray length for small items (2.5 cm / 10 cm; pipeline 6 cm / 25 cm).
 - `v2_board_s2.py`: room for the three-quarter views on wide boards, grey tiles.
 - `bay_patch.py`: adds session 2's entries to the shared model bay page without touching anyone else's.
+- `fit_s2.py`: the Wraith from its GLB with session 2's pieces at their mounts, the drone on the jet pack's `drone_dock`
+  (`../drone/previews/fit_all_on_wraith.jpg`).
 - `make_item.py`: runs every step for one item (`source/item.json`); `build_v2s.py` also repairs meshes after thinning and
   refuses a part named like a joint (Blender would rename it `name.001`).
