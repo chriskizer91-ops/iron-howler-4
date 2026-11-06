@@ -289,7 +289,7 @@ def build(pj, sheet, fine=False, lo=False):
         fa = empty('fa_' + S_, ((b.x if sd > 0 else a.x), (a.y + b.y) / 2, (a.z + b.z) / 2), E['elbow_' + S_])
         fa.matrix_world = Matrix.Translation(fa.matrix_world.translation) @ Matrix((x, d, out)).transposed().to_4x4(); bpy.context.view_layer.update()
     if not GEN: a, b = bb('backpack'); empty('bk', (0, a.y, (a.z + b.z) / 2), E['torso'])
-    tgt = LO_TARGET if lo else (TARGET if fine else 0)
+    tgt = J.get('lo_target', LO_TARGET) if lo else (J.get('target', TARGET) if fine else 0)      # v2.1: budgets per item in the parts file
     if tgt and tris > tgt:      # thin the marching-cubes mesh evenly down to the budget (small parts keep a minimum)
         r = tgt / tris
         for o in coll.objects:

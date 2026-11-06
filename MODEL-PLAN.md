@@ -128,8 +128,8 @@ sheet at a shared scale. From there every step above works the same. Tested on 6
      z = out of the saddle. The mirrored right copy gets mirrored axes.
 4. **Build, board, print and bake** exactly as in steps 3–8 above. The build and the board read the boxes from the parts file. The
    print settings are `{"views": "<item>_views.json", "H": <H>, "unmirror": [[x0, y0, x1, y1], ...]}` (unmirror boxes in sheet pixels).
-5. Sizes for kit pieces: `build_v2.py` keeps the large model to `TARGET` and the combat model to `LO_TARGET` (edit them per item:
-   60,000–100,000 and under 2,000 for kit pieces).
+5. **Triangle budgets** go in the parts file: `"target"` for the large model (default 950,000) and `"lo_target"` for the combat
+   model (default 7,200). Kit pieces use 60,000–100,000 and under 2,000.
 
 ## Techniques and why
 - **Two-view solids ("visual hull").** A part is exactly as wide as the front view says and as deep as the side view says, at
