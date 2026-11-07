@@ -8,7 +8,7 @@ checked every one against the code. Two were also measured in the running game w
 
 No finding crashes the game; none were wrong. Repo state reviewed: main at b9ee641.
 
-**All 42 are fixed (7 Nov, commits 0b58dec, fddd013 and the group D commit after them).** Measured in the test browser at Medium,
+**All 42 are fixed (7 Nov, commits 0b58dec, fddd013 and 3bae1e8; test build version 1794073673-99cc).** Measured in the test browser at Medium,
 standing still, before (b9ee641) and after:
 
 | Map | Data sent to the graphics chip per frame | Triangles drawn per frame (picture + shadows) | Draw calls per frame |
