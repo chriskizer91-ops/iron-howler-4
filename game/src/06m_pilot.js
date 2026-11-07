@@ -18,7 +18,8 @@ function assistOn(id){const a=PILOT.assists.find(q=>q.id===id);return !!a&&(PL.a
 /* what a level opens, in words */
 function levelGives(l){const k=Object.keys(PILOT.kit).filter(id=>PILOT.kit[id]===l).map(id=>KIT_INFO[id].name.split(' ').slice(1).join(' '));
   const a=PILOT.assists.filter(q=>q.lv===l).map(q=>q.name);return k.concat(a);}
-function addXP(n,why){if(G.mode!=='play'||!(n>0))return;n=Math.round(n);const sv=SAVE.get(),was=pilotLv(sv.xp||0);sv.xp=(sv.xp||0)+n;SAVE.put(sv);PL.run+=n;pilotRefresh();
+function addXP(n,why){if((G.mode!=='play'&&!(G.mode==='results'&&why==='mission'))||!(n>0))return;   /* the mission bonus comes as the results open */
+  n=Math.round(n*DK.xp);   /* HARD: +25 % (06n_difficulty.js) */const sv=SAVE.get(),was=pilotLv(sv.xp||0);sv.xp=(sv.xp||0)+n;SAVE.put(sv);PL.run+=n;pilotRefresh();
   if(PL.lv>was){for(let l=was+1;l<=PL.lv;l++)PL.ups.push(l);const g=levelGives(PL.lv),kit=Object.keys(PILOT.kit).some(id=>PILOT.kit[id]===PL.lv);
     HUD.banner('PILOT LEVEL '+PL.lv);HUD.msg(g.length?g.join(' + ')+(kit?' UNLOCKED · FIT IT IN THE MOD BAY':' ONLINE'):'LEVEL UP',3.2);
     tone('triangle',520,1040,.35,.07);setTimeout(()=>tone('triangle',780,1560,.4,.07),160);applyAssists();}}
@@ -32,7 +33,7 @@ function applyAssists(){UP.lockK=assistOn('lock')?.75:1;UP.repairK=assistOn('rep
 /* the line under the title, and the results */
 function pilotLine(){const l=PL.lv,nx=PILOT.lv[l],k=nx?(PL.xp-PILOT.lv[l-1])/(nx-PILOT.lv[l-1]):1;
   return '<b>PILOT LV '+l+'</b><span>'+(nx?(nx-PL.xp).toLocaleString('en-US')+' XP TO LV '+(l+1)+(levelGives(l+1).length?' · '+levelGives(l+1).join(' + '):''):'TOP LEVEL')+'</span><i><em style="width:'+(k*100).toFixed(1)+'%"></em></i>';}
-function pilotRows(){const r=[['XP',(PL.run>0?'+':'')+PL.run.toLocaleString('en-US')+' · PILOT LV '+PL.lv]];
+function pilotRows(){const r=[['DIFFICULTY',DK.name],['XP',(PL.run>0?'+':'')+PL.run.toLocaleString('en-US')+' · PILOT LV '+PL.lv]];
   if(PL.ups.length)r.push(['UNLOCKED',PL.ups.map(l=>levelGives(l).join(' + ')||('LV '+l)).join(' · ')]);return r;}
 function titlePilot(){const el=$('tpilot');if(el)el.innerHTML=pilotLine();}
 pilotRefresh();

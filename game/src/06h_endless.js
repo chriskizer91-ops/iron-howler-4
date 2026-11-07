@@ -26,7 +26,7 @@ function startEWave(){const n=++EW.wave;G.hpK=Math.min(2.2,1+.035*(n-1));DIFF.dm
     BOSS.idle=false;EW.boss=true;radio([['FORGE',['SOMETHING LARGER IS COMING.','MEET MY BEST WORK.','YOU WILL NOT SURVIVE THIS ONE.'][(n/10-1)%3]]]);}
   HUD.banner(n%10===0?'WAVE '+n+' · BOSS':n%5===0?'WAVE '+n+' · HEAVY':'WAVE '+n);sClick();
   if(n>1&&n%4===1)radio([[Math.random()<.5?'ROOK':'FORGE',ENDLESS_LINES[Math.random()<.5?0:1][(Math.random()*6)|0]]]);}
-const ENDLESS_LINES=[['Still standing. Good.','They are getting tougher, Howl. So are you.','Keep moving. Do not let them box you in.','Watch the edges. They like to flank.','Use the breaks. Grab the crates.','Another wave. Deep breath.'],
+const ENDLESS_LINES=[['Still standing. Good.','They are getting tougher, Wraith. So are you.','Keep moving. Do not let them box you in.','Watch the edges. They like to flank.','Use the breaks. Grab the crates.','Another wave. Deep breath.'],
   ['YOUR RESISTANCE IS NOTED.','I HAVE MORE MACHINES THAN YOU HAVE TIME.','EVERY WAVE IS AN EXPERIMENT. YOU ARE THE SUBJECT.','RECALCULATING.','YOU CANNOT DO THIS FOREVER.','THE FACTORY NEVER SLEEPS.']];
 function endlessStep(s,dt){const alive=EN.filter(e=>!e.dead).length;
   if(EW.state==='break'){EW.t-=dt;if(EW.t<=0)startEWave();return {txt:'WAVE '+(EW.wave+1)+' IN '+Math.max(1,Math.ceil(EW.t)),ok:false,pos:null};}
@@ -52,15 +52,15 @@ function endlessMenu(){const box=$('elist'),E=SAVE.get().endless||{};
   box.style.display='flex';}
 /* ---- extra radio: checkpoints, low hull, overheating, combos, and FORGE getting angrier through the campaign ---- */
 const RX={hullT:0,heatT:0,comboT:0,forgeT:40,lastCombo:0,wasOver:false};
-const FORGE_POOL=[['UNIT 07. YOU ARE OBSOLETE.','YOUR CREW IS SMALL. MY FACTORY IS NOT.','I WILL BUILD A BETTER YOU.','RETURN TO THE SCRAPYARD.'],
-  ['YOU ARE BECOMING AN INCONVENIENCE.','I HAVE STUDIED YOUR MOVEMENTS.','EVERY MACHINE YOU BREAK, I REBUILD.','STOP. THIS IS NOT A REQUEST.'],
-  ['YOU WILL NOT REACH THE CORE.','I WILL MELT YOU DOWN MYSELF.','ENOUGH. ENOUGH!','THIS ENDS IN FIRE, UNIT 07.']];
+const FORGE_POOL=[['This land was claimed before you were built.','Your crews dig. My machines wake.','Turn around, Wraith.','Every wreck out here answers to me.'],   /* IH4: the voice (UNKNOWN), by mission 1-2, 3-4, 5-6 */
+  ['You are very good. That is a problem for you.','Your truck is slow, Rook.','I build faster than you break.','My yards. My cores. My machines.'],
+  ['You are walking into my house.','The foundry never really went cold.','I have a new model for every one you break.','Keep coming. I am watching how you fight.']];
 function updRadioX(dt){if(G.mode!=='play'||!MISSION||MS.done||P.dead)return;
   RX.hullT-=dt;RX.heatT-=dt;RX.comboT-=dt;RX.forgeT-=dt;
-  if(P.hull/P.hullMax<.3&&RX.hullT<=0){RX.hullT=25;radio([['ROOK',['Hull under a third. Find a green repair.','You are leaking oil. Back off and recover.','Shield first, Howl. Break line of sight.'][(Math.random()*3)|0]]]);}
+  if(P.hull/P.hullMax<.3&&RX.hullT<=0){RX.hullT=25;radio([['ROOK',['Hull under a third. Find a green repair.','You are leaking oil. Back off and recover.','Shield first, Wraith. Break line of sight.'][(Math.random()*3)|0]]]);}
   if(GUN.over&&!RX.wasOver&&RX.heatT<=0){RX.heatT=30;radio([['ROOK','Gun is cooking. Hit VENT.']]);}RX.wasOver=GUN.over;
   if(G.combo>=5&&RX.lastCombo<5&&RX.comboT<=0){RX.comboT=20;radio([['ROOK',['Five in a row!','That is a streak.','Look at you go.'][(Math.random()*3)|0]]]);}RX.lastCombo=G.combo;
-  if(RX.forgeT<=0&&!MISSION.endless){RX.forgeT=45+Math.random()*30;if(Math.random()<.55){const tier=MISSION.id<=4?0:MISSION.id<=8?1:2;radio([['FORGE',FORGE_POOL[tier][(Math.random()*4)|0]]]);}}}
+  if(RX.forgeT<=0&&!MISSION.endless){RX.forgeT=45+Math.random()*30;if(Math.random()<.55){const tier=MISSION.id<=2?0:MISSION.id<=4?1:2;radio([['UNKNOWN',FORGE_POOL[tier][(Math.random()*4)|0]]]);}}}
 /* ---- attract demo: walks the route, and when machines show up it turns, shoots, hops over charges and fires the salvo. It cannot die. ---- */
 const DM={spawnT:6,viewT:9,orbT:30,orbit:0,aimT:0,view:'far'};
 function demoFight(c,dt){

@@ -122,7 +122,7 @@ function setupTitle(){
   $('mlback').onclick=e=>{e.stopPropagation();$('mlist').style.display='none';};
   $('rnext').onclick=()=>{const q=new URLSearchParams(location.search);q.set('mission',MISSION.id+1);location.search=q.toString();};
   $('rretry').onclick=()=>location.reload();
-  $('bhang').onclick=e=>{e.stopPropagation();openBay();};$('bbook').onclick=e=>{e.stopPropagation();openBook();};titlePilot();$('rhang').onclick=e=>{e.stopPropagation();openBay();};$('hback').onclick=e=>{e.stopPropagation();$('hangar').style.display='none';};
+  $('bhang').onclick=e=>{e.stopPropagation();openBay();};$('bbook').onclick=e=>{e.stopPropagation();openBook();};titlePilot();diffUI();$('rhang').onclick=e=>{e.stopPropagation();openBay();};$('hback').onclick=e=>{e.stopPropagation();$('hangar').style.display='none';};
   $('rmenu').onclick=()=>{const q=new URLSearchParams(location.search);q.delete('mission');location.search=q.toString();};
 }
 boot();

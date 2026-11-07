@@ -49,7 +49,7 @@ function los(x,z){const dx=P.x-x,dz=P.z-z,d=Math.hypot(dx,dz),st=Math.ceil(d/3);
 /* ---- spawning ---- */
 function spawnEnemy(id,x,z){const d=EDEF[id],tp=ETPL[id];if(!tp)return null;
   const o=tp.clone(true);const N=n=>o.getObjectByName(n);
-  const e={id,key:id,d,o,x,z,y:hgt(x,z),yaw:Math.atan2(-(P.x-x),-(P.z-z)),hp:d.hp*G.hpK*DIFF.hp,dead:false,spawnT:1.3,st:'move',t:0,cd:1+Math.random()*1.5,
+  const e={id,key:id,d,o,x,z,y:hgt(x,z),yaw:Math.atan2(-(P.x-x),-(P.z-z)),hp:d.hp*G.hpK*DIFF.hp*DK.hp,dead:false,spawnT:1.3,st:'move',t:0,cd:1+Math.random()*1.5,
     kx:0,kz:0,flash:0,phase:Math.random()*10,strafe:Math.random()<.5?1:-1,strT:2+Math.random()*2,vx:0,vz:0};
   if(d.init)d.init(e,N);
   else if(id==='skitter'){e.body=N('body');e.legs=[0,1,2,3].map(i=>N('leg'+i));}
@@ -85,7 +85,7 @@ function killEnemy(e){e.dead=true;S.remove(e.o);if(e.beam)S.remove(e.beam);e.mat
   addScore(Math.round(e.d.score*mult*(G.hpK||1)));G.kills++;addScrap(e.d.scrap||10);pilotKill(e.key||e.id,e.d.score);
   if(Math.random()<e.d.drop)dropPickup(e.x,e.z,Math.random()<(e.d.chip||(e.id==='gunner'?.55:0))?'chip':null);
 }
-function hurtPlayer(dmg,fx,fz){if(P.dead||G.mode!=='play'&&G.mode!=='demo')return;if(G.mode==='demo'){shieldFlash();return;}dmg*=DIFF.dmg;P.regenT=P.regenDelay||3;
+function hurtPlayer(dmg,fx,fz){if(P.dead||G.mode!=='play'&&G.mode!=='demo')return;if(G.mode==='demo'){shieldFlash();return;}dmg*=DIFF.dmg*DK.dmg;P.regenT=P.regenDelay||3;
   const s=Math.min(P.shield,dmg);P.shield-=s;dmg-=s;if(s>0){sShield();shieldFlash();HUD.hit(fx,fz,'s');}
   if(dmg>0){P.hull-=dmg;sHurt();HUD.hit(fx,fz,'h');CAMS.shake=Math.max(CAMS.shake,.3+dmg*.02);}
   if(P.hull<=0){P.hull=0;playerDown();}}
@@ -120,7 +120,7 @@ function updEnemies(dt){
   let alive=0;
   for(const e of EN){if(e.dead)continue;alive++;
     if(e.spawnT>0){e.spawnT-=dt;if(e.spawnT<=0){e.o.visible=true;dustPuff(e.x,e.z,8,e.d.r*.8);}continue;}
-    e.t+=dt;e.cd-=dt;e.flash=Math.max(0,e.flash-dt*7);e.mat.emissive.setRGB(e.flash*1.4,e.flash*.5,e.flash*.3);
+    e.t+=dt;e.cd-=dt*DK.rate;e.flash=Math.max(0,e.flash-dt*7);e.mat.emissive.setRGB(e.flash*1.4,e.flash*.5,e.flash*.3);
     const dx=P.x-e.x,dz=P.z-e.z,dist=Math.hypot(dx,dz)||1,face=Math.atan2(-dx,-dz);let mvx=0,mvz=0,sp=e.d.speed,want=face;
     const tg=truckGoal(e,dist);
     if(tg){mvx=tg[0];mvz=tg[1];sp=tg[2];if(sp)want=Math.atan2(-mvx,-mvz);}

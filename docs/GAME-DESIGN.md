@@ -77,24 +77,28 @@ Ironhowl 3's other machines (Hornet, Lancer, Bulwark, Tank, Mortar) may come bac
 
 ## Missions and levels
 
-Ironhowl 3 had 12 missions across four places, plus an Endless mode; Ironhowl 4's missions will be new, so this is for reference. Mission steps in Ironhowl 3: destroy targets, reach a spot, clear an area, hold a spot for a time, escort Rook's truck, capture points, and boss fights, with checkpoints between steps.
+**Chapter 1 · The Salvage Rush** (written 7 Nov, session 5). 2176: FORGE's old 2126 war zones are full of wrecks worth a fortune, and dig crews cut cores out of them. The wrecks start waking, a voice on the radio (shown as UNKNOWN) claims them, and new machines appear that nobody built in 2126. Who is behind it stays open: the chapter ends at a lit foundry with a factory log that names no one. Rook is on the radio; her backstory, the pilot and the villain are still open.
 
-| # | Ironhowl 3 mission | Place | Goal |
-| --- | --- | --- | --- |
-| 1 | Sunline | farm fields | destroy three relay masts, meet Rook at the truck |
-| 2 | Night Shift | docks, night | get through the container yard, cut the gate controls |
-| 3 | Pinewall | pine woods | find the lost convoy, guard Rook for 60 s |
-| 4 | Hold the Farm | fields, dusk storm | hold the farmhouse for 2.5 minutes |
-| 5 | Container Maze | docks, rain | destroy four spawner pods |
-| 6 | Creekbed | woods, fog | escort Rook's truck to the south road |
-| 7 | Dust Devil | dry fields | boss: the Thresher (knees, then core) |
-| 8 | Tanker Run | docks, sunset | cut three mooring winches; Lancers |
-| 9 | Burning Pines | woods on fire, night | Hornets, then the Stag (antler pods, then chest) |
-| 10 | Storm Front | fields, storm | capture three relays; lightning hits machines too |
-| 11 | Lockdown | docks, night siege | knock out three searchlight towers, then the Maw |
-| 12 | Heart of the Forge | the foundry | four shield pylons, the furnace, then FORGE's eye |
+| # | Mission | Place | Goal | Boss |
+| --- | --- | --- | --- | --- |
+| 1 | Dig Site | farm fields | meet Dig Crew 4, guard the dig for 60 s, knock out the three relay masts | |
+| 2 | Harbor Nine | docks, night | get into the yard, destroy the four spawner pods, reach the crane | |
+| 3 | Pine Wake | pine woods | find Crew 7, guard Rook for 60 s, bring down the Alpha Hound, reach the north ridge | Alpha Hound |
+| 4 | Creek Road | woods, fog | escort Rook's truck to the south road | Brood Skitter (mid-route) |
+| 5 | Storm Relays | fields, storm | capture three relays, then bring down Gunner Prime | Gunner Prime |
+| 6 | Foundry Four | the foundry | enter the yard, hold it for 90 s, break out past two bosses, get back to the gate | Gunner Prime + Alpha Hound (and a Brood Skitter in the hold) |
 
-Endless (Ironhowl 3): waves that keep getting harder; every 5th wave is heavy, every 10th brings the place's boss, supplies drop between waves.
+The places and spots are Ironhowl 3's; the machines are Ironhowl 4's FORGE set. Each mission is a little harder than the one before (enemy damage 80 % to 112 %, health 85 % to 110 %). Mission steps (Ironhowl 3, kept): destroy targets, reach a spot, clear an area, hold a spot for a time, escort Rook's truck, capture points, with checkpoints between steps. Ironhowl 3's 12 missions are no longer in the game (they are in the repo's history).
+
+**Difficulty** (Christopher, 7 Nov: an easy, medium, hard setting). Three buttons on the title screen, saved, used in every mode, on top of each mission's own step:
+
+| Setting | Machines' damage | Machines' health | How often they attack | XP |
+| --- | --- | --- | --- | --- |
+| Easy | 55 % | 75 % | 20 % less often | as Medium |
+| Medium | as designed | as designed | as designed | as designed |
+| Hard | 140 % | 130 % | 20 % more often | +25 % |
+
+Endless (Ironhowl 3): waves that keep getting harder; every 5th wave is heavy and brings one of Ironhowl 4's bosses in turn, every 10th brings the place's Ironhowl 3 boss, supplies drop between waves.
 
 ## Screens
 
