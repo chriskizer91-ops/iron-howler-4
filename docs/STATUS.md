@@ -8,7 +8,8 @@ ChatGPT's pictures and baked.
 Session 1 done: the Wraith with its kit in the field and the modification bay. Session 2 done: the FORGE machines in every
 fight, the three bosses (sandbox waves 7–9, Endless heavy waves), the new spawner pods in mission 5. Session 3 done: the
 Lance's rail shot, the Arc's chain lightning, the Watcher's radar, marks, lock and warnings, the flying assist drone and the
-30 s hover. Next: session 4, the intel brief, the armory book and pilot levels.
+30 s hover. Session 4 done: the intel brief before fights, the armory book and 10 pilot levels (kit unlocks by level, AI
+assists at 6-10). Next: session 5+, new missions and story.
 
 ## What the game has (all in `models/`)
 | Piece | Full model (triangles) | Combat model | Made by |
