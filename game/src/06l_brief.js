@@ -68,7 +68,7 @@ function stageDress(id,sc,mat,dark){const N=n=>sc.getObjectByName(n),e={o:sc,mat
   else if(id==='ahound'){growParts(sc,['horn_R','horn_L','spine1','spine2','spine3','spine4'],2);if(!dark)mat.color.setRGB(1.75,.78,.55);}
   else if(id==='brood'&&!dark){broodPod(e);tintMat(e,'brood');}}
 function stageShow(id,dark){stageInit();const seq=++STG.seq;STG.id=id;STG.pct=-1;
-  const wantFull=QL!=='low'&&!dark&&!!stageFiles(id,true);   /* Ironhowl 3 models have no full version */
+  const wantFull=QL!=='low'&&!window.IH4_LIGHT&&!dark&&!!stageFiles(id,true);   /* Ironhowl 3 models have no full version */
   stageModel(id,false,dark).then(o=>{if(seq!==STG.seq)return;stagePut(o,false);BAY.yaw=.6;BAY.pitch=.12;BAY.auto=true;
     if(wantFull){STG.pct=0;const url=stageFiles(id,true).glb;   /* the percentage follows the download's bytes (the loading manager only counts whole files) */
       GLBP[url]=k=>{if(seq!==STG.seq)return;const n=Math.min(99,Math.round(k*100));if(n!==STG.pct){STG.pct=n;briefSub();}};

@@ -50,8 +50,8 @@ function openBay(){
   if(typeof STG!=='undefined'&&STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayname').querySelector('b').textContent='MODIFICATION BAY';$('bayup').style.display='';$('baydone').textContent='DONE';
   for(const id of ['title','results','down'])$(id).dataset.was=$(id).style.display,$(id).style.display='none';
   $('bay').style.display='block';document.body.classList.add('inbay');bayUI();
-  BAY.full=QL!=='low';
-  if(!BAY.W){$('bayload').style.display='flex';$('baylb').style.width='0';
+  BAY.full=QL!=='low'&&!window.IH4_LIGHT;   /* the light one-file game carries no full-detail models: the bay shows the combat ones */
+  if(!BAY.W){$('bayload').style.display='flex';$('baylb').style.width='0';$('baylt').textContent=BAY.full?'LOADING THE FULL-DETAIL WRAITH':'LOADING THE WRAITH';
     BLM.onProgress=(u,a,b)=>{$('baylb').style.width=(100*a/Math.max(1,b))+'%';};
     /* one load at a time: closing and reopening before it finishes must not start a second Wraith */
     if(!BAY.loading)BAY.loading=buildWraithModel(BAY.full,false,BLM).then(W=>{BAY.W=W;BAY.loading=null;W.root.visible=BAY.mode==='bay';BAY.scene.add(W.root);$('bayload').style.display='none';bayUI();})
