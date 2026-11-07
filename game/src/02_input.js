@@ -12,10 +12,13 @@ addEventListener('keydown',e=>{if(e.repeat)return;KEYS.add(e.code);HIT.add(e.cod
 addEventListener('keyup',e=>KEYS.delete(e.code));
 addEventListener('blur',()=>{KEYS.clear();TS.id=-1;TS.look=-1;TS.jet=false;TS.fire=false;TS.fireId=-1;MOUSE.l=false;});
 addEventListener('mousemove',e=>{if(MOUSE.locked){MOUSE.dx+=e.movementX||0;MOUSE.dy+=e.movementY||0;}});
-document.addEventListener('pointerlockchange',()=>{MOUSE.locked=document.pointerLockElement===cv;if(!MOUSE.locked&&G.mode==='play'&&!G.paused&&!touchy)setPause(true);});
-function lockMouse(){if(touchy||EMBED&&!document.hasFocus())return;try{const p=cv.requestPointerLock();if(p&&p.catch)p.catch(()=>{});}catch(e){}}
+/* IH4: losing the lock while the bay's room is open (an intel brief) is not a reason to pause */
+document.addEventListener('pointerlockchange',()=>{MOUSE.locked=document.pointerLockElement===cv;if(!MOUSE.locked&&G.mode==='play'&&!G.paused&&!touchy&&!BAY.open)setPause(true);});
+function lockMouse(){if(touchy||EMBED&&!document.hasFocus()||BAY.open)return;   /* never during a brief: its buttons need the cursor */
+  try{const p=cv.requestPointerLock();if(p&&p.catch)p.catch(()=>{});}catch(e){}}
 const STICK_R=58;
-function touchStart(e){let field=false;
+function touchStart(e){if(BAY.open)return;   /* IH4: the brief's chips and card scroll, and its drags turn the model, not the camera */
+  let field=false;
   for(const t of e.changedTouches){
     if(t.target.closest&&t.target.closest('button'))continue;field=true;
     if(t.clientX<innerWidth*.45&&TS.id<0){TS.id=t.identifier;TS.ox=t.clientX;TS.oy=t.clientY;TS.ax=TS.ay=0;HUD.stick(true,TS.ox,TS.oy,0,0);}
@@ -24,7 +27,7 @@ function touchStart(e){let field=false;
   /* only block the browser's tap handling for touches on the game itself: blocking it on buttons stopped VIEW, pause and the menu from working */
   if(G.mode==='play'&&field)e.preventDefault();
 }
-function touchMove(e){
+function touchMove(e){if(BAY.open)return;
   for(const t of e.changedTouches){
     if(t.identifier===TS.id){let dx=t.clientX-TS.ox,dy=t.clientY-TS.oy;const d=Math.hypot(dx,dy);
       if(d>STICK_R){/* the stick base follows the thumb so it never runs out of room */TS.ox+=dx/d*(d-STICK_R);TS.oy+=dy/d*(d-STICK_R);dx=t.clientX-TS.ox;dy=t.clientY-TS.oy;}

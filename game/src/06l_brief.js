@@ -67,12 +67,13 @@ function stageShow(id,dark){stageInit();const seq=++STG.seq;STG.id=id;STG.pct=-1
         .catch(err=>{console.warn('full model',id,err);STG.pct=-1;briefSub();});}
     briefSub();}).catch(err=>{console.error('stage',id,err);});}
 /* ---------- opening and closing (the bay's own open/close, in another mode) ---------- */
-function viewOpen(mode){bayInit();stageInit();BAY.mode=mode;BAY.open=true;BAY.prev=G.mode;if(mode!=='brief')G.mode='bay';BAY.changed=false;BAY.sel=null;
+function viewOpen(mode){bayInit();stageInit();jetLoop(0);BAY.mode=mode;BAY.open=true;BAY.prev=G.mode;if(mode!=='brief')G.mode='bay';BAY.changed=false;BAY.sel=null;
   for(const id of ['title','results','down'])$(id).dataset.was=$(id).style.display,$(id).style.display='none';
   $('bay').style.display='block';document.body.classList.add('inbay');$('bayload').style.display='none';
   if(BAY.W)BAY.W.root.visible=false;STG.grp.visible=true;for(const s in BAY.marks)BAY.marks[s].visible=false;
   $('bayup').style.display='none';$('bayscrap').textContent='';if(document.pointerLockElement)document.exitPointerLock();}
-function viewClose(){STG.seq++;stageClear();if(STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayup').style.display='';$('baydone').textContent='DONE';BAY.mode='bay';}
+function viewClose(){STG.seq++;stageClear();STG.id=null;STG.dark=undefined;   /* so the next open shows its model again */
+  if(STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayup').style.display='';$('baydone').textContent='DONE';BAY.mode='bay';}
 
 /* ---------- intel brief ---------- */
 const BRF={list:[],sel:0,sub:'',done:null};

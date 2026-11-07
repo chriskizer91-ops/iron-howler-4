@@ -53,10 +53,13 @@ function openBay(){
   BAY.full=QL!=='low';
   if(!BAY.W){$('bayload').style.display='flex';$('baylb').style.width='0';
     BLM.onProgress=(u,a,b)=>{$('baylb').style.width=(100*a/Math.max(1,b))+'%';};
-    buildWraithModel(BAY.full,false,BLM).then(W=>{BAY.W=W;BAY.scene.add(W.root);$('bayload').style.display='none';bayUI();})
-      .catch(e=>{$('baylt').textContent='COULD NOT LOAD THE BAY MODEL';console.error(e);});}
+    /* one load at a time: closing and reopening before it finishes must not start a second Wraith */
+    if(!BAY.loading)BAY.loading=buildWraithModel(BAY.full,false,BLM).then(W=>{BAY.W=W;BAY.loading=null;W.root.visible=BAY.mode==='bay';BAY.scene.add(W.root);$('bayload').style.display='none';bayUI();})
+      .catch(e=>{BAY.loading=null;$('baylt').textContent='COULD NOT LOAD THE BAY MODEL';console.error(e);});}
 }
-function closeBay(){BAY.open=false;$('bay').style.display='none';document.body.classList.remove('inbay');BAY.cam.clearViewOffset();G.mode=BAY.prev||'title';
+function closeBay(){BAY.open=false;
+  /* drop input that piled up while the room was open (drags, keys), so nothing jumps when play resumes */
+  TS.ldx=TS.ldy=0;TS.look=-1;TS.id=-1;TS.ax=TS.ay=0;TS.fire=false;TS.fireId=-1;TS.jet=false;MOUSE.dx=MOUSE.dy=0;MOUSE.l=false;HIT.clear();if(HUD.stick)HUD.stick(false);$('bay').style.display='none';document.body.classList.remove('inbay');BAY.cam.clearViewOffset();G.mode=BAY.prev||'title';
   for(const id of ['title','results','down'])$(id).style.display=$(id).dataset.was||'none';
   if(BAY.changed&&M){refitKit(M);if(typeof applyUpgrades==='function'&&P)applyUpgrades();}if(G.mode==='title')titlePilot();}
 function setLoadout(slot,id){const sv=SAVE.get();sv.loadout=Object.assign({},loadout(),{[slot]:id});SAVE.put(sv);BAY.changed=true;
@@ -119,5 +122,5 @@ function bayFrame(dt){
     m.visible=!!n;if(!n)continue;
     if(W.holds[B.s]){const bb=new THREE.Box3().setFromObject(W.holds[B.s]);bb.getCenter(p);}else n.getWorldPosition(p);
     m.position.copy(p);m.material.opacity=BAY.sel?(BAY.sel===B.s?1:.35):.85;m.scale.setScalar((BAY.sel===B.s?.55:.42)*(BAY.dist/14)**.5);}
-  R.render(BAY.scene,c);
+  const ex=R.toneMappingExposure;R.toneMappingExposure=1.18;R.render(BAY.scene,c);R.toneMappingExposure=ex;   /* the room has its own light, whatever the map's exposure */
 }

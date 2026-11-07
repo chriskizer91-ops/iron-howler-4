@@ -18,7 +18,8 @@ EDEF.brood=Object.assign({},EDEF.skitter,{hp:900,score:2500,drop:1,scrap:250,sc:
   init(e,N){skInit(e,N);broodPod(e);e.id='skitter';bossBanner(e);e.spawnCd=4;},dress:e=>tintMat(e,'brood'),pose:broodPose});
 /* the sandbox and Endless waves: after Ironhowl 3's six, a boss wave each */
 WAVES.push({ahound:1,hound:2},{gprime:1,skitter:4},{brood:1,hound:1});
-function f4load(id){const d=EDEF[id],[dir,stem]=d.m4,f=kitFiles(dir,stem,false);d.amat=kitMat(f,true);
+function f4load(id){const d=EDEF[id],[dir,stem]=d.m4,f=kitFiles(dir,stem,false);d.amat=kitMat(f,true);if(id==='skitter')spodModel().catch(()=>{});   /* the pod model loads with the machines, not when the first pod appears */
+  
   return loadGLB(f.glb).then(sc=>{dressModel(sc,d.amat);ETPL[id]=sc;sc.updateMatrixWorld(true);
     const J={};sc.traverse(o=>{if(o.name)J[o.name]=J[o.name]||o;});
     if(dir==='fgunner'&&!F4.gunner){const hw=new THREE.Vector3().setFromMatrixPosition(J.hips.matrixWorld).y;F4.gunner={hip0:J.hips.position.y,hipW:hw,tor0:J.torso.position.y,armY:new THREE.Vector3().setFromMatrixPosition(J.arm_R.matrixWorld).y,
@@ -26,10 +27,18 @@ function f4load(id){const d=EDEF[id],[dir,stem]=d.m4,f=kitFiles(dir,stem,false);
   }).catch(e=>console.error('FORGE model',id,e));}
 /* the spawner pod model, for mission pods and the Brood Skitter */
 let SPOD=null;
-function spodModel(){if(!SPOD){const f=kitFiles('spod','spod',false);SPOD={mat:kitMat(f,true),p:loadGLB(f.glb)};}
+function spodModel(){if(!SPOD){const f=kitFiles('spod','spod',false);SPOD={mat:kitMat(f,true),p:loadGLB(f.glb).then(flattenModel)};
+    SPOD.p.catch(err=>{console.warn('spawner pod model',err);SPOD=null;});}   /* a failed load is tried again next time */
   return SPOD.p.then(sc=>dressModel(sc.clone(true),SPOD.mat));}   /* a copy for each pod */
+/* a static model's parts merged into one mesh (the pod: 8 meshes, 16 draws with shadows, become 1 and 2) */
+function flattenModel(sc){sc.updateMatrixWorld(true);const inv=new THREE.Matrix4().copy(sc.matrixWorld).invert(),M_=new THREE.Matrix4(),ms=[];sc.traverse(o=>{if(o.isMesh)ms.push(o);});
+  if(ms.length<2)return sc;const idx=ms.every(o=>o.geometry.index);
+  const gs=ms.map(o=>{const g=idx?o.geometry.clone():o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();for(const n of Object.keys(g.attributes))if(!['position','normal','uv'].includes(n))g.deleteAttribute(n);g.applyMatrix4(M_.multiplyMatrices(inv,o.matrixWorld));return g;});
+  const merged=THREE.mergeGeometries(gs,false);if(!merged)return sc;gs.forEach(g=>g.dispose());
+  const root=new THREE.Group(),mesh=new THREE.Mesh(merged,ms[0].material);mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);return root;}
 /* the mission spawner pods (06f_more.js) wear the model: x2.2 (5.7 m tall), turned to face the player's start, red seams glowing */
-function spodDress(t,g,x,z,parts){spodModel().then(p=>{const m=SPOD.mat.clone();m.onBeforeCompile=sh=>{SPOD.mat.onBeforeCompile&&SPOD.mat.onBeforeCompile(sh);
+function spodDress(t,g,x,z,parts){spodModel().catch(()=>null).then(p=>{if(!p)return;   /* no model: the old pod shapes stay */
+  const m=SPOD.mat.clone();m.onBeforeCompile=sh=>{SPOD.mat.onBeforeCompile&&SPOD.mat.onBeforeCompile(sh);
     sh.fragmentShader=sh.fragmentShader.replace('#include <lights_physical_fragment>','#include <lights_physical_fragment>\n#ifdef USE_MAP\n{vec4 c_=texture2D(map,vMapUv);totalEmissiveRadiance+=vec3(1.,.06,.02)*1.6*smoothstep(.12,.34,c_.r-max(c_.g,c_.b));}\n#endif');};
     m.customProgramCacheKey=()=>'f4pod';p.traverse(o=>{if(o.isMesh)o.material=m;});
     p.scale.setScalar(2.2);p.rotation.y=Math.atan2(-(P.x-x),-(P.z-z));g.add(p);for(const o of parts)o.visible=false;
@@ -70,7 +79,7 @@ function primeArms(e,N){for(const n of ['rotary_a','rotary_b'])for(let i=-1;i<6;
 function growParts(root,names,g){root.traverse(o=>{if(!o.isMesh||!names.some(n=>o.name===n||o.name.startsWith(n+'_')))return;
   o.geometry=o.geometry.clone();o.geometry.computeBoundingBox();const b=o.geometry.boundingBox,px=(b.min.x+b.max.x)/2,pz=(b.min.z+b.max.z)/2,py=b.min.y;
   o.geometry.translate(-px,-py,-pz);o.geometry.scale(g,g,g);o.geometry.translate(px,py,pz);});}
-function broodPod(e){spodModel().then(p=>{if(e.dead)return;p.scale.setScalar(.8/e.d.sc);p.position.set(0,.84,.12);e.o.add(p);});}
+function broodPod(e){spodModel().then(p=>{if(e.dead)return;p.scale.setScalar(.8/e.d.sc);p.position.set(0,.84,.12);e.o.add(p);}).catch(()=>{});}
 function broodPose(e,dt,sp){skPose(e,dt,sp);if(e.spawnT>0||P.dead)return;e.spawnCd-=dt;
   if(e.spawnCd<=0){e.spawnCd=7;if(EN.filter(q=>!q.dead).length<16)for(let i=0;i<2;i++){const a=Math.random()*TAU,c=collide(e.x+Math.cos(a)*5,e.z+Math.sin(a)*5,1.1);const s=spawnEnemy('skitter',c[0],c[1]);if(s)s.spawnT=.4;}
     for(let k=0;k<10;k++)part({x:e.x,y:e.y+3.4,z:e.z,vx:(Math.random()-.5)*6,vy:4+Math.random()*4,vz:(Math.random()-.5)*6,life:.5,s0:1.4,s1:.3,a:1.5,col:[1,.2,.08],glow:true});}}

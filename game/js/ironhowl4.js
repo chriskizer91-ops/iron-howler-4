@@ -48,10 +48,13 @@ addEventListener('keydown',e=>{if(e.repeat)return;KEYS.add(e.code);HIT.add(e.cod
 addEventListener('keyup',e=>KEYS.delete(e.code));
 addEventListener('blur',()=>{KEYS.clear();TS.id=-1;TS.look=-1;TS.jet=false;TS.fire=false;TS.fireId=-1;MOUSE.l=false;});
 addEventListener('mousemove',e=>{if(MOUSE.locked){MOUSE.dx+=e.movementX||0;MOUSE.dy+=e.movementY||0;}});
-document.addEventListener('pointerlockchange',()=>{MOUSE.locked=document.pointerLockElement===cv;if(!MOUSE.locked&&G.mode==='play'&&!G.paused&&!touchy)setPause(true);});
-function lockMouse(){if(touchy||EMBED&&!document.hasFocus())return;try{const p=cv.requestPointerLock();if(p&&p.catch)p.catch(()=>{});}catch(e){}}
+/* IH4: losing the lock while the bay's room is open (an intel brief) is not a reason to pause */
+document.addEventListener('pointerlockchange',()=>{MOUSE.locked=document.pointerLockElement===cv;if(!MOUSE.locked&&G.mode==='play'&&!G.paused&&!touchy&&!BAY.open)setPause(true);});
+function lockMouse(){if(touchy||EMBED&&!document.hasFocus()||BAY.open)return;   /* never during a brief: its buttons need the cursor */
+  try{const p=cv.requestPointerLock();if(p&&p.catch)p.catch(()=>{});}catch(e){}}
 const STICK_R=58;
-function touchStart(e){let field=false;
+function touchStart(e){if(BAY.open)return;   /* IH4: the brief's chips and card scroll, and its drags turn the model, not the camera */
+  let field=false;
   for(const t of e.changedTouches){
     if(t.target.closest&&t.target.closest('button'))continue;field=true;
     if(t.clientX<innerWidth*.45&&TS.id<0){TS.id=t.identifier;TS.ox=t.clientX;TS.oy=t.clientY;TS.ax=TS.ay=0;HUD.stick(true,TS.ox,TS.oy,0,0);}
@@ -60,7 +63,7 @@ function touchStart(e){let field=false;
   /* only block the browser's tap handling for touches on the game itself: blocking it on buttons stopped VIEW, pause and the menu from working */
   if(G.mode==='play'&&field)e.preventDefault();
 }
-function touchMove(e){
+function touchMove(e){if(BAY.open)return;
   for(const t of e.changedTouches){
     if(t.identifier===TS.id){let dx=t.clientX-TS.ox,dy=t.clientY-TS.oy;const d=Math.hypot(dx,dy);
       if(d>STICK_R){/* the stick base follows the thumb so it never runs out of room */TS.ox+=dx/d*(d-STICK_R);TS.oy+=dy/d*(d-STICK_R);dx=t.clientX-TS.ox;dy=t.clientY-TS.oy;}
@@ -1190,9 +1193,11 @@ function spawnEnemy(id,x,z){const d=EDEF[id],tp=ETPL[id];if(!tp)return null;
   else{e.hips=N('hips');e.torso=N('torso');e.armR=N('armR');e.armL=N('armL');e.mzR=N('mzR');e.mzL=N('mzL');
     e.legs=[-1,1].map(sd=>{const s=sd<0?'L':'R';return {thigh:N('thigh_'+s),knee:N('knee_'+s),ankle:N('ankle_'+s),sd};});e.gp=0;}
   /* each enemy gets its own copy of the armour material so it can flash when hit */
-  const base=d.amat||EMAT.egrey;e.mat=base.clone();e.mat.onBeforeCompile=base.onBeforeCompile;e.mat.customProgramCacheKey=base.customProgramCacheKey;
-  o.traverse(m=>{if(m.isMesh&&m.material===base)m.material=e.mat;});if(d.dress)d.dress(e);
-  if(!Q.has('noskin'))skinify(o);   /* speed pass: one skinned mesh per material instead of one mesh per part */
+  /* IH4: materials come from a pool per machine type (a pooled one is already dressed), so the type's shader stays compiled between waves */
+  const base=d.amat||EMAT.egrey,pool=MPOOL.get(id);let fresh=false;e.mat=pool&&pool.pop();
+  if(e.mat)e.mat.emissive.setRGB(0,0,0);else{fresh=true;e.mat=base.clone();e.mat.onBeforeCompile=base.onBeforeCompile;e.mat.customProgramCacheKey=base.customProgramCacheKey;}
+  o.traverse(m=>{if(m.isMesh&&m.material===base)m.material=e.mat;});if(d.dress&&fresh)d.dress(e);
+  if(!Q.has('noskin'))e.skel=skinify(o,id);   /* speed pass: one skinned mesh per material instead of one mesh per part */
   o.scale.setScalar(d.sc||1);o.position.set(x,e.y,z);o.visible=false;S.add(o);EN.push(e);
   return e;}
 /* waves arrive in front of the player, 55-80 m ahead, with a red beacon first */
@@ -1212,7 +1217,7 @@ function startWave(){
 }
 /* ---- damage ---- */
 function hurtEnemy(e,dmg,x,y,z){if(e.dead)return;if(e.d.armor)dmg*=e.d.armor(e,x,z);e.hp-=dmg;e.flash=1;if(e.hp<=0)killEnemy(e);}
-function killEnemy(e){e.dead=true;S.remove(e.o);if(e.beam)S.remove(e.beam);e.mat.dispose();
+function killEnemy(e){e.dead=true;enemyFree(e);
   boom(e.x,e.y+e.d.cy,e.z,e.d.boom||(e.id==='skitter'?.7:e.id==='hound'?1.1:1.5));
   const now=G.t;G.combo=now-G.lastKill<3?G.combo+1:1;G.lastKill=now;const mult=Math.min(3,1+.25*(G.combo-1));
   addScore(Math.round(e.d.score*mult*(G.hpK||1)));G.kills++;addScrap(e.d.scrap||10);pilotKill(e.key||e.id,e.d.score);
@@ -1314,17 +1319,27 @@ function poseEnemy(e,dt,sp){
 
 /* speed pass: merge a machine's parts into one skinned mesh per material. Each joint node becomes a bone, so the animation code is unchanged,
    and a machine costs about 4-6 draw calls instead of about 20 (twice that with shadows). */
-function skinify(root){root.updateMatrixWorld(true);const inv=new THREE.Matrix4().copy(root.matrixWorld).invert(),bones=[],bi=new Map(),groups=new Map();
+/* IH4: the merged meshes of each machine type are made once and shared by every copy (each copy gets its own skeleton);
+   indexed parts stay indexed (a third of the vertices). Materials go back to a pool when a machine is removed. */
+const SKC=new Map(),MPOOL=new Map();
+function enemyFree(e){S.remove(e.o);if(e.beam)S.remove(e.beam);if(e.skel){e.skel.dispose();e.skel=null;}
+  if(e.mat&&!e.matFree){e.matFree=true;const k=e.key||e.id;if(!MPOOL.has(k))MPOOL.set(k,[]);const pl=MPOOL.get(k);if(pl.length<24)pl.push(e.mat);else e.mat.dispose();}}
+function skinify(root,key){root.updateMatrixWorld(true);const inv=new THREE.Matrix4().copy(root.matrixWorld).invert(),bones=[],bi=new Map(),groups=new Map();
   root.traverse(o=>{if(!o.isMesh||o.isSkinnedMesh||!o.visible)return;const p=o.parent;if(!bi.has(p)){bi.set(p,bones.length);bones.push(p);}
     const a=o.geometry.attributes,key=o.material.uuid+(a.color?'c':'')+(a.uv?'u':'');if(!groups.has(key))groups.set(key,{m:o.material,list:[],cast:o.castShadow});groups.get(key).list.push(o);});
-  if(bones.length<2)return;const made=[],M_=new THREE.Matrix4();
-  for(const {m,list,cast} of groups.values()){
-    const gs=list.map(o=>{const g=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();for(const n of Object.keys(g.attributes))if(!['position','normal','uv','color'].includes(n))g.deleteAttribute(n);
+  if(bones.length<2)return null;const made=[],M_=new THREE.Matrix4(),G_=[...groups.values()];
+  const ck=key?key+'|'+bones.length+'|'+G_.map(g=>g.list.length).join(','):null,cached=ck&&SKC.get(ck),store=[];   /* same parts, same bones: same meshes */
+  for(let gi=0;gi<G_.length;gi++){const {m,list,cast}=G_[gi];let merged;
+    if(cached)merged=cached[gi];
+    else{const idx=list.every(o=>o.geometry.index);
+    const gs=list.map(o=>{const g=idx?o.geometry.clone():o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();for(const n of Object.keys(g.attributes))if(!['position','normal','uv','color'].includes(n))g.deleteAttribute(n);
       g.applyMatrix4(M_.multiplyMatrices(inv,o.matrixWorld));const c=g.attributes.position.count,si=new Uint16Array(c*4),sw=new Float32Array(c*4),b=bi.get(o.parent);
       for(let i=0;i<c;i++){si[i*4]=b;sw[i*4]=1;}g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.Float32BufferAttribute(sw,4));return g;});
-    const merged=gs.length>1?THREE.mergeGeometries(gs,false):gs[0];if(!merged)continue;
+    merged=gs.length>1?THREE.mergeGeometries(gs,false):gs[0];}
+    store.push(merged);if(!merged)continue;
     const sm=new THREE.SkinnedMesh(merged,m);sm.castShadow=cast;sm.receiveShadow=true;root.add(sm);made.push(sm);for(const o of list)o.parent.remove(o);}
-  root.updateMatrixWorld(true);const sk=new THREE.Skeleton(bones);for(const sm of made)sm.bind(sk,sm.matrixWorld);}
+  if(ck&&!cached)SKC.set(ck,store);
+  root.updateMatrixWorld(true);const sk=new THREE.Skeleton(bones);for(const sm of made)sm.bind(sk,sm.matrixWorld);return sk;}
 
 /* ---- 06d_missions.js ---- */
 /* ===================== missions: steps (destroy / reach / clear / hold), checkpoints, radio, results =====================
@@ -2069,10 +2084,13 @@ function openBay(){
   BAY.full=QL!=='low';
   if(!BAY.W){$('bayload').style.display='flex';$('baylb').style.width='0';
     BLM.onProgress=(u,a,b)=>{$('baylb').style.width=(100*a/Math.max(1,b))+'%';};
-    buildWraithModel(BAY.full,false,BLM).then(W=>{BAY.W=W;BAY.scene.add(W.root);$('bayload').style.display='none';bayUI();})
-      .catch(e=>{$('baylt').textContent='COULD NOT LOAD THE BAY MODEL';console.error(e);});}
+    /* one load at a time: closing and reopening before it finishes must not start a second Wraith */
+    if(!BAY.loading)BAY.loading=buildWraithModel(BAY.full,false,BLM).then(W=>{BAY.W=W;BAY.loading=null;W.root.visible=BAY.mode==='bay';BAY.scene.add(W.root);$('bayload').style.display='none';bayUI();})
+      .catch(e=>{BAY.loading=null;$('baylt').textContent='COULD NOT LOAD THE BAY MODEL';console.error(e);});}
 }
-function closeBay(){BAY.open=false;$('bay').style.display='none';document.body.classList.remove('inbay');BAY.cam.clearViewOffset();G.mode=BAY.prev||'title';
+function closeBay(){BAY.open=false;
+  /* drop input that piled up while the room was open (drags, keys), so nothing jumps when play resumes */
+  TS.ldx=TS.ldy=0;TS.look=-1;TS.id=-1;TS.ax=TS.ay=0;TS.fire=false;TS.fireId=-1;TS.jet=false;MOUSE.dx=MOUSE.dy=0;MOUSE.l=false;HIT.clear();if(HUD.stick)HUD.stick(false);$('bay').style.display='none';document.body.classList.remove('inbay');BAY.cam.clearViewOffset();G.mode=BAY.prev||'title';
   for(const id of ['title','results','down'])$(id).style.display=$(id).dataset.was||'none';
   if(BAY.changed&&M){refitKit(M);if(typeof applyUpgrades==='function'&&P)applyUpgrades();}if(G.mode==='title')titlePilot();}
 function setLoadout(slot,id){const sv=SAVE.get();sv.loadout=Object.assign({},loadout(),{[slot]:id});SAVE.put(sv);BAY.changed=true;
@@ -2135,7 +2153,7 @@ function bayFrame(dt){
     m.visible=!!n;if(!n)continue;
     if(W.holds[B.s]){const bb=new THREE.Box3().setFromObject(W.holds[B.s]);bb.getCenter(p);}else n.getWorldPosition(p);
     m.position.copy(p);m.material.opacity=BAY.sel?(BAY.sel===B.s?1:.35):.85;m.scale.setScalar((BAY.sel===B.s?.55:.42)*(BAY.dist/14)**.5);}
-  R.render(BAY.scene,c);
+  const ex=R.toneMappingExposure;R.toneMappingExposure=1.18;R.render(BAY.scene,c);R.toneMappingExposure=ex;   /* the room has its own light, whatever the map's exposure */
 }
 
 /* ---- 06j_forge.js ---- */
@@ -2159,7 +2177,8 @@ EDEF.brood=Object.assign({},EDEF.skitter,{hp:900,score:2500,drop:1,scrap:250,sc:
   init(e,N){skInit(e,N);broodPod(e);e.id='skitter';bossBanner(e);e.spawnCd=4;},dress:e=>tintMat(e,'brood'),pose:broodPose});
 /* the sandbox and Endless waves: after Ironhowl 3's six, a boss wave each */
 WAVES.push({ahound:1,hound:2},{gprime:1,skitter:4},{brood:1,hound:1});
-function f4load(id){const d=EDEF[id],[dir,stem]=d.m4,f=kitFiles(dir,stem,false);d.amat=kitMat(f,true);
+function f4load(id){const d=EDEF[id],[dir,stem]=d.m4,f=kitFiles(dir,stem,false);d.amat=kitMat(f,true);if(id==='skitter')spodModel().catch(()=>{});   /* the pod model loads with the machines, not when the first pod appears */
+  
   return loadGLB(f.glb).then(sc=>{dressModel(sc,d.amat);ETPL[id]=sc;sc.updateMatrixWorld(true);
     const J={};sc.traverse(o=>{if(o.name)J[o.name]=J[o.name]||o;});
     if(dir==='fgunner'&&!F4.gunner){const hw=new THREE.Vector3().setFromMatrixPosition(J.hips.matrixWorld).y;F4.gunner={hip0:J.hips.position.y,hipW:hw,tor0:J.torso.position.y,armY:new THREE.Vector3().setFromMatrixPosition(J.arm_R.matrixWorld).y,
@@ -2167,10 +2186,18 @@ function f4load(id){const d=EDEF[id],[dir,stem]=d.m4,f=kitFiles(dir,stem,false);
   }).catch(e=>console.error('FORGE model',id,e));}
 /* the spawner pod model, for mission pods and the Brood Skitter */
 let SPOD=null;
-function spodModel(){if(!SPOD){const f=kitFiles('spod','spod',false);SPOD={mat:kitMat(f,true),p:loadGLB(f.glb)};}
+function spodModel(){if(!SPOD){const f=kitFiles('spod','spod',false);SPOD={mat:kitMat(f,true),p:loadGLB(f.glb).then(flattenModel)};
+    SPOD.p.catch(err=>{console.warn('spawner pod model',err);SPOD=null;});}   /* a failed load is tried again next time */
   return SPOD.p.then(sc=>dressModel(sc.clone(true),SPOD.mat));}   /* a copy for each pod */
+/* a static model's parts merged into one mesh (the pod: 8 meshes, 16 draws with shadows, become 1 and 2) */
+function flattenModel(sc){sc.updateMatrixWorld(true);const inv=new THREE.Matrix4().copy(sc.matrixWorld).invert(),M_=new THREE.Matrix4(),ms=[];sc.traverse(o=>{if(o.isMesh)ms.push(o);});
+  if(ms.length<2)return sc;const idx=ms.every(o=>o.geometry.index);
+  const gs=ms.map(o=>{const g=idx?o.geometry.clone():o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();for(const n of Object.keys(g.attributes))if(!['position','normal','uv'].includes(n))g.deleteAttribute(n);g.applyMatrix4(M_.multiplyMatrices(inv,o.matrixWorld));return g;});
+  const merged=THREE.mergeGeometries(gs,false);if(!merged)return sc;gs.forEach(g=>g.dispose());
+  const root=new THREE.Group(),mesh=new THREE.Mesh(merged,ms[0].material);mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);return root;}
 /* the mission spawner pods (06f_more.js) wear the model: x2.2 (5.7 m tall), turned to face the player's start, red seams glowing */
-function spodDress(t,g,x,z,parts){spodModel().then(p=>{const m=SPOD.mat.clone();m.onBeforeCompile=sh=>{SPOD.mat.onBeforeCompile&&SPOD.mat.onBeforeCompile(sh);
+function spodDress(t,g,x,z,parts){spodModel().catch(()=>null).then(p=>{if(!p)return;   /* no model: the old pod shapes stay */
+  const m=SPOD.mat.clone();m.onBeforeCompile=sh=>{SPOD.mat.onBeforeCompile&&SPOD.mat.onBeforeCompile(sh);
     sh.fragmentShader=sh.fragmentShader.replace('#include <lights_physical_fragment>','#include <lights_physical_fragment>\n#ifdef USE_MAP\n{vec4 c_=texture2D(map,vMapUv);totalEmissiveRadiance+=vec3(1.,.06,.02)*1.6*smoothstep(.12,.34,c_.r-max(c_.g,c_.b));}\n#endif');};
     m.customProgramCacheKey=()=>'f4pod';p.traverse(o=>{if(o.isMesh)o.material=m;});
     p.scale.setScalar(2.2);p.rotation.y=Math.atan2(-(P.x-x),-(P.z-z));g.add(p);for(const o of parts)o.visible=false;
@@ -2211,7 +2238,7 @@ function primeArms(e,N){for(const n of ['rotary_a','rotary_b'])for(let i=-1;i<6;
 function growParts(root,names,g){root.traverse(o=>{if(!o.isMesh||!names.some(n=>o.name===n||o.name.startsWith(n+'_')))return;
   o.geometry=o.geometry.clone();o.geometry.computeBoundingBox();const b=o.geometry.boundingBox,px=(b.min.x+b.max.x)/2,pz=(b.min.z+b.max.z)/2,py=b.min.y;
   o.geometry.translate(-px,-py,-pz);o.geometry.scale(g,g,g);o.geometry.translate(px,py,pz);});}
-function broodPod(e){spodModel().then(p=>{if(e.dead)return;p.scale.setScalar(.8/e.d.sc);p.position.set(0,.84,.12);e.o.add(p);});}
+function broodPod(e){spodModel().then(p=>{if(e.dead)return;p.scale.setScalar(.8/e.d.sc);p.position.set(0,.84,.12);e.o.add(p);}).catch(()=>{});}
 function broodPose(e,dt,sp){skPose(e,dt,sp);if(e.spawnT>0||P.dead)return;e.spawnCd-=dt;
   if(e.spawnCd<=0){e.spawnCd=7;if(EN.filter(q=>!q.dead).length<16)for(let i=0;i<2;i++){const a=Math.random()*TAU,c=collide(e.x+Math.cos(a)*5,e.z+Math.sin(a)*5,1.1);const s=spawnEnemy('skitter',c[0],c[1]);if(s)s.spawnT=.4;}
     for(let k=0;k<10;k++)part({x:e.x,y:e.y+3.4,z:e.z,vx:(Math.random()-.5)*6,vy:4+Math.random()*4,vz:(Math.random()-.5)*6,life:.5,s0:1.4,s1:.3,a:1.5,col:[1,.2,.08],glow:true});}}
@@ -2501,12 +2528,13 @@ function stageShow(id,dark){stageInit();const seq=++STG.seq;STG.id=id;STG.pct=-1
         .catch(err=>{console.warn('full model',id,err);STG.pct=-1;briefSub();});}
     briefSub();}).catch(err=>{console.error('stage',id,err);});}
 /* ---------- opening and closing (the bay's own open/close, in another mode) ---------- */
-function viewOpen(mode){bayInit();stageInit();BAY.mode=mode;BAY.open=true;BAY.prev=G.mode;if(mode!=='brief')G.mode='bay';BAY.changed=false;BAY.sel=null;
+function viewOpen(mode){bayInit();stageInit();jetLoop(0);BAY.mode=mode;BAY.open=true;BAY.prev=G.mode;if(mode!=='brief')G.mode='bay';BAY.changed=false;BAY.sel=null;
   for(const id of ['title','results','down'])$(id).dataset.was=$(id).style.display,$(id).style.display='none';
   $('bay').style.display='block';document.body.classList.add('inbay');$('bayload').style.display='none';
   if(BAY.W)BAY.W.root.visible=false;STG.grp.visible=true;for(const s in BAY.marks)BAY.marks[s].visible=false;
   $('bayup').style.display='none';$('bayscrap').textContent='';if(document.pointerLockElement)document.exitPointerLock();}
-function viewClose(){STG.seq++;stageClear();if(STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayup').style.display='';$('baydone').textContent='DONE';BAY.mode='bay';}
+function viewClose(){STG.seq++;stageClear();STG.id=null;STG.dark=undefined;   /* so the next open shows its model again */
+  if(STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayup').style.display='';$('baydone').textContent='DONE';BAY.mode='bay';}
 
 /* ---------- intel brief ---------- */
 const BRF={list:[],sel:0,sub:'',done:null};
@@ -2802,7 +2830,7 @@ let M=null,CTLX=null;
 function setQuality(q){QL=q;QC=QUAL[q];DYN=1;resize();setShadow();postSetup();S.fog.far=Math.min(QC.fog,LOOKNOW&&LOOKNOW.fogFar||1e9);S.fog.near=S.fog.far*.22;}
 function cycleView(){SET.view=SET.view==='close'?'far':'close';store.set('view',SET.view);HUD.view(SET.view);}
 function setPause(b){G.paused=b;HUD.menu();setVolume();if(!b&&!touchy&&G.mode==='play')lockMouse();if(b)jetLoop(0);}
-function clearFight(){for(const e of EN){S.remove(e.o);if(e.beam)S.remove(e.beam);}bossClearMarks();EN.length=0;BOLTS.length=EBOLTS.length=MISS.length=BEACONS.length=0;for(const p of PK)S.remove(p.g);PK.length=0;}
+function clearFight(){for(const e of EN)enemyFree(e);bossClearMarks();EN.length=0;BOLTS.length=EBOLTS.length=MISS.length=BEACONS.length=0;for(const p of PK)S.remove(p.g);PK.length=0;}
 function resetRun(){P=mkPlayer();CAMS.ready=false;clearFight();Object.assign(GUN,{tier:GUN.base,heat:0,over:false,cd:0,ventCd:0});MSL.ammo=12;SALVO.cd=0;SALVO.left=0;
   Object.assign(G,{score:0,kills:0,combo:0,lastKill:-9,wave:0,hpK:1,breakT:3});if(M)M.root.visible=true;$('down').style.display='none';}
 function playerDown(){if(P.dead)return;P.dead=true;P.thrust=0;boom(P.x,P.y+2.5,P.z,2);boom(P.x+1,P.y+3.5,P.z-1,1.2);if(M)M.root.visible=false;
@@ -2906,7 +2934,7 @@ if(DEV)window.__ih3={WX,MARKS,mortarAt,DIFF,BOSS_DEF,BOSS,MISSIONS,spawnGroup,ma
   ctl(o){CTLX=o;},showcase(o){CAMX=o;},
   /* run the game forward t seconds at 60 steps a second without drawing (for tests) */
   ff(t){const n=Math.round(t*60);for(let i=0;i<n;i++)tick(1/60);},
-  info(){const i=R.info.render;return {calls:i.calls,tris:i.triangles,veg:VEGN.inst,ql:QL,mode:G.mode,x:+P.x.toFixed(1),z:+P.z.toFixed(1),air:P.air,fuel:+P.fuel.toFixed(2),hull:+P.hull.toFixed(0),shield:+P.shield.toFixed(0),tier:GUN.tier,heat:+GUN.heat.toFixed(0),over:GUN.over,msl:MSL.ammo,score:G.score,kills:G.kills,wave:G.wave,enemies:EN.filter(e=>!e.dead).length,bolts:BOLTS.length,ebolts:EBOLTS.length};}};
+  info(){const i=R.info.render;return {geo:R.info.memory.geometries,tex:R.info.memory.textures,prog:R.info.programs?R.info.programs.length:-1,calls:i.calls,tris:i.triangles,veg:VEGN.inst,ql:QL,mode:G.mode,x:+P.x.toFixed(1),z:+P.z.toFixed(1),air:P.air,fuel:+P.fuel.toFixed(2),hull:+P.hull.toFixed(0),shield:+P.shield.toFixed(0),tier:GUN.tier,heat:+GUN.heat.toFixed(0),over:GUN.over,msl:MSL.ammo,score:G.score,kills:G.kills,wave:G.wave,enemies:EN.filter(e=>!e.dead).length,bolts:BOLTS.length,ebolts:EBOLTS.length};}};
 /* title screen: mission briefing when a mission is loaded, otherwise the sandbox map buttons and the mission list */
 function setupTitle(){
   if(MISSION){$('maps').style.display='none';$('bmis').style.display='none';$('bend').style.display='none';$('tsub').textContent=MISSION.endless?'ENDLESS · '+MAPS[MISSION.map].name:'MISSION '+MISSION.id+' · '+MISSION.name;
@@ -2915,12 +2943,12 @@ function setupTitle(){
   $('bmis').onclick=e=>{e.stopPropagation();missionMenu();};
   $('bend').onclick=e=>{e.stopPropagation();endlessMenu();};$('elback').onclick=e=>{e.stopPropagation();$('elist').style.display='none';};
   $('mfps').onclick=e=>{e.stopPropagation();SET.fps=!SET.fps;store.set('fps',SET.fps?1:0);fpsLabel();};fpsLabel();
-  $('bmenu').onclick=e=>{e.stopPropagation();const q=new URLSearchParams(location.search);q.delete('mission');location.search=q.toString();};
+  $('bmenu').onclick=e=>{e.stopPropagation();const q=new URLSearchParams(location.search);q.delete('mission');q.delete('endless');location.search=q.toString();};
   $('mlback').onclick=e=>{e.stopPropagation();$('mlist').style.display='none';};
   $('rnext').onclick=()=>{const q=new URLSearchParams(location.search);q.set('mission',MISSION.id+1);location.search=q.toString();};
   $('rretry').onclick=()=>location.reload();
   $('bhang').onclick=e=>{e.stopPropagation();openBay();};$('bbook').onclick=e=>{e.stopPropagation();openBook();};titlePilot();diffUI();$('rhang').onclick=e=>{e.stopPropagation();openBay();};$('hback').onclick=e=>{e.stopPropagation();$('hangar').style.display='none';};
-  $('rmenu').onclick=()=>{const q=new URLSearchParams(location.search);q.delete('mission');location.search=q.toString();};
+  $('rmenu').onclick=()=>{const q=new URLSearchParams(location.search);q.delete('mission');q.delete('endless');location.search=q.toString();};   /* IH4: MENU leaves Endless too */
 }
 boot();
 document.querySelectorAll('#maps button').forEach(b=>b.classList.toggle('sel',b.dataset.map===MAPID));

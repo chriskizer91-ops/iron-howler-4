@@ -57,9 +57,11 @@ function spawnEnemy(id,x,z){const d=EDEF[id],tp=ETPL[id];if(!tp)return null;
   else{e.hips=N('hips');e.torso=N('torso');e.armR=N('armR');e.armL=N('armL');e.mzR=N('mzR');e.mzL=N('mzL');
     e.legs=[-1,1].map(sd=>{const s=sd<0?'L':'R';return {thigh:N('thigh_'+s),knee:N('knee_'+s),ankle:N('ankle_'+s),sd};});e.gp=0;}
   /* each enemy gets its own copy of the armour material so it can flash when hit */
-  const base=d.amat||EMAT.egrey;e.mat=base.clone();e.mat.onBeforeCompile=base.onBeforeCompile;e.mat.customProgramCacheKey=base.customProgramCacheKey;
-  o.traverse(m=>{if(m.isMesh&&m.material===base)m.material=e.mat;});if(d.dress)d.dress(e);
-  if(!Q.has('noskin'))skinify(o);   /* speed pass: one skinned mesh per material instead of one mesh per part */
+  /* IH4: materials come from a pool per machine type (a pooled one is already dressed), so the type's shader stays compiled between waves */
+  const base=d.amat||EMAT.egrey,pool=MPOOL.get(id);let fresh=false;e.mat=pool&&pool.pop();
+  if(e.mat)e.mat.emissive.setRGB(0,0,0);else{fresh=true;e.mat=base.clone();e.mat.onBeforeCompile=base.onBeforeCompile;e.mat.customProgramCacheKey=base.customProgramCacheKey;}
+  o.traverse(m=>{if(m.isMesh&&m.material===base)m.material=e.mat;});if(d.dress&&fresh)d.dress(e);
+  if(!Q.has('noskin'))e.skel=skinify(o,id);   /* speed pass: one skinned mesh per material instead of one mesh per part */
   o.scale.setScalar(d.sc||1);o.position.set(x,e.y,z);o.visible=false;S.add(o);EN.push(e);
   return e;}
 /* waves arrive in front of the player, 55-80 m ahead, with a red beacon first */
@@ -79,7 +81,7 @@ function startWave(){
 }
 /* ---- damage ---- */
 function hurtEnemy(e,dmg,x,y,z){if(e.dead)return;if(e.d.armor)dmg*=e.d.armor(e,x,z);e.hp-=dmg;e.flash=1;if(e.hp<=0)killEnemy(e);}
-function killEnemy(e){e.dead=true;S.remove(e.o);if(e.beam)S.remove(e.beam);e.mat.dispose();
+function killEnemy(e){e.dead=true;enemyFree(e);
   boom(e.x,e.y+e.d.cy,e.z,e.d.boom||(e.id==='skitter'?.7:e.id==='hound'?1.1:1.5));
   const now=G.t;G.combo=now-G.lastKill<3?G.combo+1:1;G.lastKill=now;const mult=Math.min(3,1+.25*(G.combo-1));
   addScore(Math.round(e.d.score*mult*(G.hpK||1)));G.kills++;addScrap(e.d.scrap||10);pilotKill(e.key||e.id,e.d.score);
@@ -181,14 +183,24 @@ function poseEnemy(e,dt,sp){
 
 /* speed pass: merge a machine's parts into one skinned mesh per material. Each joint node becomes a bone, so the animation code is unchanged,
    and a machine costs about 4-6 draw calls instead of about 20 (twice that with shadows). */
-function skinify(root){root.updateMatrixWorld(true);const inv=new THREE.Matrix4().copy(root.matrixWorld).invert(),bones=[],bi=new Map(),groups=new Map();
+/* IH4: the merged meshes of each machine type are made once and shared by every copy (each copy gets its own skeleton);
+   indexed parts stay indexed (a third of the vertices). Materials go back to a pool when a machine is removed. */
+const SKC=new Map(),MPOOL=new Map();
+function enemyFree(e){S.remove(e.o);if(e.beam)S.remove(e.beam);if(e.skel){e.skel.dispose();e.skel=null;}
+  if(e.mat&&!e.matFree){e.matFree=true;const k=e.key||e.id;if(!MPOOL.has(k))MPOOL.set(k,[]);const pl=MPOOL.get(k);if(pl.length<24)pl.push(e.mat);else e.mat.dispose();}}
+function skinify(root,key){root.updateMatrixWorld(true);const inv=new THREE.Matrix4().copy(root.matrixWorld).invert(),bones=[],bi=new Map(),groups=new Map();
   root.traverse(o=>{if(!o.isMesh||o.isSkinnedMesh||!o.visible)return;const p=o.parent;if(!bi.has(p)){bi.set(p,bones.length);bones.push(p);}
     const a=o.geometry.attributes,key=o.material.uuid+(a.color?'c':'')+(a.uv?'u':'');if(!groups.has(key))groups.set(key,{m:o.material,list:[],cast:o.castShadow});groups.get(key).list.push(o);});
-  if(bones.length<2)return;const made=[],M_=new THREE.Matrix4();
-  for(const {m,list,cast} of groups.values()){
-    const gs=list.map(o=>{const g=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();for(const n of Object.keys(g.attributes))if(!['position','normal','uv','color'].includes(n))g.deleteAttribute(n);
+  if(bones.length<2)return null;const made=[],M_=new THREE.Matrix4(),G_=[...groups.values()];
+  const ck=key?key+'|'+bones.length+'|'+G_.map(g=>g.list.length).join(','):null,cached=ck&&SKC.get(ck),store=[];   /* same parts, same bones: same meshes */
+  for(let gi=0;gi<G_.length;gi++){const {m,list,cast}=G_[gi];let merged;
+    if(cached)merged=cached[gi];
+    else{const idx=list.every(o=>o.geometry.index);
+    const gs=list.map(o=>{const g=idx?o.geometry.clone():o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();for(const n of Object.keys(g.attributes))if(!['position','normal','uv','color'].includes(n))g.deleteAttribute(n);
       g.applyMatrix4(M_.multiplyMatrices(inv,o.matrixWorld));const c=g.attributes.position.count,si=new Uint16Array(c*4),sw=new Float32Array(c*4),b=bi.get(o.parent);
       for(let i=0;i<c;i++){si[i*4]=b;sw[i*4]=1;}g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.Float32BufferAttribute(sw,4));return g;});
-    const merged=gs.length>1?THREE.mergeGeometries(gs,false):gs[0];if(!merged)continue;
+    merged=gs.length>1?THREE.mergeGeometries(gs,false):gs[0];}
+    store.push(merged);if(!merged)continue;
     const sm=new THREE.SkinnedMesh(merged,m);sm.castShadow=cast;sm.receiveShadow=true;root.add(sm);made.push(sm);for(const o of list)o.parent.remove(o);}
-  root.updateMatrixWorld(true);const sk=new THREE.Skeleton(bones);for(const sm of made)sm.bind(sk,sm.matrixWorld);}
+  if(ck&&!cached)SKC.set(ck,store);
+  root.updateMatrixWorld(true);const sk=new THREE.Skeleton(bones);for(const sm of made)sm.bind(sk,sm.matrixWorld);return sk;}
