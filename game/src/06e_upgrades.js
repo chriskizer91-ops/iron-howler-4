@@ -25,6 +25,7 @@ function applyUpgrades(){
   P.hullMax=[100,120,140,160,180,200][h];P.hull=P.hullMax;UP.repair=h>=4?55:h>=2?45:35;
   GUN.tier=GUN.base;
   if(!hasKit('mpod')){MSL.ammo=0;MSL.max=0;}   /* Ironhowl 4: missiles come from the MP-9 pod */
+  UP.dmgK0=UP.dmgK;applyAssists();   /* Ironhowl 4: the AI assists from pilot levels (06m_pilot.js) */
 }
 function hangar(){
   const box=$('hangar');

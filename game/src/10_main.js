@@ -12,10 +12,11 @@ function playerDown(){if(P.dead)return;P.dead=true;P.thrust=0;boom(P.x,P.y+2.5,P
   G.mode='down';G.downT=2.4;
   if(MISSION){const can=missionDown();$('dscore').textContent=can?'REPAIRS LEFT '+MS.repairs:'NO REPAIRS LEFT';$('dgo').textContent=can?'TAP TO REPAIR AT THE CHECKPOINT':'';if(!can)G.downT=99;return;}
   $('dgo').textContent='TAP TO GO AGAIN';const best=+store.get('best',0);if(G.score>best)store.set('best',G.score);
-  $('dscore').textContent='SCORE '+G.score.toLocaleString('en-US')+'  ·  WAVE '+G.wave+'  ·  BEST '+Math.max(best,G.score).toLocaleString('en-US');
+  $('dscore').textContent='SCORE '+G.score.toLocaleString('en-US')+'  ·  WAVE '+G.wave+'  ·  BEST '+Math.max(best,G.score).toLocaleString('en-US')+'  ·  +'+PL.run.toLocaleString('en-US')+' XP · PILOT LV '+PL.lv;
   ARC.over(G.score,Math.min(60,Math.floor(G.score/400)+G.wave));}
 function fpsLabel(){$('mfps').textContent='FRAME RATE: '+(SET.fps?'ON':'OFF');$('fps').style.display=SET.fps?'block':'none';}
-function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();if(MISSION)startMission();
+function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();pilotRunStart();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();if(MISSION)startMission();
+  else briefMaybe(WAVES[0],'WAVE 1');   /* IH4: the intel brief before the sandbox's first wave */
   if(!touchy){lockMouse();HUD.hint('WASD MOVE · MOUSE AIM · SPACE JET HOP, HOLD TO HOVER · V CAMERA · ESC PAUSE',9);}else HUD.hint('LEFT THUMB MOVES · RIGHT THUMB AIMS · JET TO HOP, HOLD TO HOVER',7);}
 function startDemo(){resetRun();G.mode='demo';G.paused=false;G.demoI=1;$('title').style.display='none';HUD.menu();Object.assign(DM,{spawnT:4,viewT:9,orbT:20,orbit:0,view:'far'});CAMX=null;$('attract').style.display='block';}
 /* attract mode: walk the trail, hop now and then */
@@ -121,7 +122,7 @@ function setupTitle(){
   $('mlback').onclick=e=>{e.stopPropagation();$('mlist').style.display='none';};
   $('rnext').onclick=()=>{const q=new URLSearchParams(location.search);q.set('mission',MISSION.id+1);location.search=q.toString();};
   $('rretry').onclick=()=>location.reload();
-  $('bhang').onclick=e=>{e.stopPropagation();openBay();};$('rhang').onclick=e=>{e.stopPropagation();openBay();};$('hback').onclick=e=>{e.stopPropagation();$('hangar').style.display='none';};
+  $('bhang').onclick=e=>{e.stopPropagation();openBay();};$('bbook').onclick=e=>{e.stopPropagation();openBook();};titlePilot();$('rhang').onclick=e=>{e.stopPropagation();openBay();};$('hback').onclick=e=>{e.stopPropagation();$('hangar').style.display='none';};
   $('rmenu').onclick=()=>{const q=new URLSearchParams(location.search);q.delete('mission');location.search=q.toString();};
 }
 boot();

@@ -21,7 +21,7 @@ const KIT_INFO={
 const BAY_SLOTS=[{s:'fa_L',n:'LEFT ARM',o:['ac','ln','ar']},{s:'fa_R',n:'RIGHT ARM',o:['ac','ln','ar']},{s:'sh_L',n:'LEFT SHOULDER',o:['watcher','mpod',null]},
   {s:'sh_R',n:'RIGHT SHOULDER',o:['mpod','watcher',null]},{s:'bk',n:'BACK',o:['jetpack']},{s:'drone',n:'DRONE',o:['drone',null]}];
 const BAY={open:false,scene:null,cam:null,W:null,yaw:.55,pitch:.1,dist:14,ty:3.3,tgt:new THREE.Vector3(0,3.3,0),want:{x:0,y:3.3,z:0,d:14},sel:null,changed:false,
-  marks:{},auto:true,prev:null,full:true};
+  marks:{},auto:true,prev:null,full:true,mode:'bay'};   /* mode: bay, brief or book (06l_brief.js) */
 const BLM=new THREE.LoadingManager();
 function bayInit(){
   if(BAY.scene)return;const sc=new THREE.Scene();sc.background=new THREE.Color(0x07080a);
@@ -46,7 +46,8 @@ function bayInit(){
   bayInput();
 }
 function openBay(){
-  bayInit();BAY.open=true;BAY.prev=G.mode;G.mode='bay';BAY.changed=false;BAY.sel=null;BAY.auto=true;
+  bayInit();BAY.open=true;BAY.prev=G.mode;G.mode='bay';BAY.changed=false;BAY.sel=null;BAY.auto=true;BAY.mode='bay';BAY.want={x:0,y:3.3,z:0,d:14};
+  if(typeof STG!=='undefined'&&STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayname').querySelector('b').textContent='MODIFICATION BAY';$('bayup').style.display='';$('baydone').textContent='DONE';
   for(const id of ['title','results','down'])$(id).dataset.was=$(id).style.display,$(id).style.display='none';
   $('bay').style.display='block';document.body.classList.add('inbay');bayUI();
   BAY.full=QL!=='low';
@@ -57,11 +58,11 @@ function openBay(){
 }
 function closeBay(){BAY.open=false;$('bay').style.display='none';document.body.classList.remove('inbay');BAY.cam.clearViewOffset();G.mode=BAY.prev||'title';
   for(const id of ['title','results','down'])$(id).style.display=$(id).dataset.was||'none';
-  if(BAY.changed&&M){refitKit(M);if(typeof applyUpgrades==='function'&&P)applyUpgrades();}}
+  if(BAY.changed&&M){refitKit(M);if(typeof applyUpgrades==='function'&&P)applyUpgrades();}if(G.mode==='title')titlePilot();}
 function setLoadout(slot,id){const sv=SAVE.get();sv.loadout=Object.assign({},loadout(),{[slot]:id});SAVE.put(sv);BAY.changed=true;
   if(BAY.W)refitModel(BAY.W,loadout(),BAY.full,false,BLM).then(bayUI);bayUI();}
 /* the screen: slot names along the bottom, the chosen slot's card above them */
-function bayUI(){
+function bayUI(){if(BAY.mode!=='bay')return;   /* a late refit must not redraw over the brief or the book */
   const L=loadout();$('bayscrap').textContent='SCRAP '+(scrap()).toLocaleString('en-US');
   $('bayslots').innerHTML='<button data-s=""'+(BAY.sel?'':' class="on"')+'>WRAITH</button>'+BAY_SLOTS.map(B=>'<button data-s="'+B.s+'"'+(BAY.sel===B.s?' class="on"':'')+'>'+B.n+'</button>').join('');
   $('bayslots').querySelectorAll('button').forEach(b=>b.onclick=e=>{e.stopPropagation();baySelect(b.dataset.s||null);});
@@ -69,13 +70,17 @@ function bayUI(){
   const card=$('baycard');
   if(!BAY.sel){$('baysub').textContent='WRAITH · TAP A MOUNT TO CHANGE ITS KIT';
     const hull=[100,120,140,160,180,200][upgLv('hull')],sh=[60,80,100,120,140,160][upgLv('shield')],cells=upgLv('jets')>=4?4:upgLv('jets')>=1?3:2;
+    const nx=PILOT.lv[PL.lv];
     card.innerHTML='<b>WRAITH · RECON SUPPORT</b><span class="role">The player\'s mech. 6.6 m tall, five mounts for kit.</span>'+
-      statRows([['HULL',hull],['SHIELD',sh],['FUEL CELLS',cells],['GUN TIER',['I','II','III','IV'][Math.min(3,upgLv('gun'))]],['ARMS',name(L.fa_L)+' · '+name(L.fa_R)],['SHOULDERS',name(L.sh_L)+' · '+name(L.sh_R)]]);return;}
+      statRows([['PILOT','LV '+PL.lv+(nx?' · '+(nx-PL.xp).toLocaleString('en-US')+' XP TO LV '+(PL.lv+1):' · TOP LEVEL')],['HULL',hull],['SHIELD',sh],['FUEL CELLS',cells],['GUN TIER',['I','II','III','IV'][Math.min(3,upgLv('gun'))]],['ARMS',name(L.fa_L)+' · '+name(L.fa_R)],['SHOULDERS',name(L.sh_L)+' · '+name(L.sh_R)]])+
+      '<button class="tgl'+(PL.all?' on':'')+'">TEST: UNLOCK ALL · '+(PL.all?'ON':'OFF')+'</button>';
+    card.querySelector('.tgl').onclick=e=>{e.stopPropagation();const sv=SAVE.get();sv.unlockAll=!sv.unlockAll;SAVE.put(sv);pilotRefresh();BAY.changed=true;
+      if(BAY.W)refitModel(BAY.W,loadout(),BAY.full,false,BLM).then(bayUI);bayUI();};return;}
   const B=BAY_SLOTS.find(q=>q.s===BAY.sel),cur=L[B.s]||null,I=cur?KIT_INFO[cur]:null;
   $('baysub').textContent=B.n;
-  card.innerHTML='<div class="opts">'+B.o.map(o=>'<button data-o="'+(o||'')+'"'+(o===cur?' class="on"':'')+'>'+(o?KIT_INFO[o].name.split(' ').slice(1).join(' '):'EMPTY')+'</button>').join('')+'</div>'+
+  card.innerHTML='<div class="opts">'+B.o.map(o=>{const lk=!kitOpen(o);return '<button data-o="'+(o||'')+'"'+(o===cur?' class="on"':lk?' class="lock" disabled':'')+'>'+(o?KIT_INFO[o].name.split(' ').slice(1).join(' '):'EMPTY')+(lk?' · LV '+PILOT.kit[o]:'')+'</button>';}).join('')+'</div>'+
     (I?'<b>'+I.name+'</b><span class="role">'+I.role+'</span>'+statRows(I.stats)+'<span class="live">'+I.live+'</span>':'<span class="role">Nothing on this mount.</span>');
-  card.querySelectorAll('.opts button').forEach(b=>b.onclick=e=>{e.stopPropagation();const o=b.dataset.o||null;if(o!==cur)setLoadout(B.s,o);});
+  card.querySelectorAll('.opts button').forEach(b=>b.onclick=e=>{e.stopPropagation();const o=b.dataset.o||null;if(o!==cur&&kitOpen(o))setLoadout(B.s,o);});
   function name(id){return id?KIT_INFO[id].name.split(' ').slice(1).join(' '):'EMPTY';}
 }
 function statRows(r){return '<div class="stats">'+r.map(([a,b])=>'<span>'+a+'</span><b>'+b+'</b>').join('')+'</div>';}
@@ -93,7 +98,7 @@ function bayInput(){const pts=new Map();let pd=0,down=null;
     if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)<10&&performance.now()-down.t<400)bayTap(e.clientX,e.clientY);down=null;};
   addEventListener('pointerup',up);addEventListener('pointercancel',up);
   cv.addEventListener('wheel',e=>{if(BAY.open)BAY.want.d=clamp(BAY.want.d*(1+e.deltaY*.001),3,24);},{passive:true});
-  $('baydone').onclick=e=>{e.stopPropagation();closeBay();};$('bayup').onclick=e=>{e.stopPropagation();hangar();};
+  $('baydone').onclick=e=>{e.stopPropagation();if(BAY.mode==='brief')briefDone();else{if(BAY.mode==='book')viewClose();closeBay();}};$('bayup').onclick=e=>{e.stopPropagation();hangar();};
   $('hback').addEventListener('click',()=>{if(BAY.open)bayUI();});}
 function bayTap(x,y){const v=new THREE.Vector3(),r=cv.getBoundingClientRect();let best=null,bd=46;
   for(const s in BAY.marks){const m=BAY.marks[s];if(!m.visible)continue;v.copy(m.position).project(BAY.cam);
@@ -103,12 +108,13 @@ function bayFrame(dt){
   const c=BAY.cam,w=cv.clientWidth||innerWidth,h=cv.clientHeight||innerHeight;if(Math.abs(c.aspect-w/h)>.001){c.aspect=w/h;c.fov=w<h?50:38;c.updateProjectionMatrix();}
   if(BAY.auto)BAY.yaw+=dt*.18;
   const k=damp(5,dt);BAY.tgt.x+=(BAY.want.x-BAY.tgt.x)*k;BAY.tgt.y+=(BAY.want.y-BAY.tgt.y)*k;BAY.tgt.z+=(BAY.want.z-BAY.tgt.z)*k;BAY.dist+=(BAY.want.d-BAY.dist)*k;
-  const d=BAY.dist*(c.aspect<1?(BAY.sel?1.15:1.3):1),ty=BAY.tgt.y-(c.aspect>1.2&&!BAY.sel?BAY.dist*.055:0);
+  const d=BAY.dist*(c.aspect<1?(BAY.mode!=='bay'?1.5:BAY.sel?1.15:1.3):1),ty=BAY.tgt.y-(c.aspect>1.2&&!BAY.sel?BAY.dist*(BAY.mode==='bay'?.055:.1):0);   /* the brief and book lift the model clear of the card */
   if(c.aspect<1)c.setViewOffset(w,h,0,h*.16,w,h);else c.clearViewOffset();   /* phone: the model sits above the card */
   c.position.set(BAY.tgt.x+Math.sin(BAY.yaw)*Math.cos(BAY.pitch)*d,ty+Math.sin(BAY.pitch)*d,BAY.tgt.z+Math.cos(BAY.yaw)*Math.cos(BAY.pitch)*d);c.lookAt(BAY.tgt.x,ty,BAY.tgt.z);
   /* rings sit on the mounts; the chosen one is brighter, the others dim */
   const W=BAY.W,L=loadout(),p=new THREE.Vector3();
   for(const B of BAY_SLOTS){const m=BAY.marks[B.s];let n=null;
+    if(BAY.mode!=='bay'){m.visible=false;continue;}
     if(W){if(B.s==='drone')n=W.holds.drone||(W.holds.bk&&W.holds.bk.getObjectByName('drone_dock'));else n=W.holds[B.s]||W.J[B.s];}
     m.visible=!!n;if(!n)continue;
     if(W.holds[B.s]){const bb=new THREE.Box3().setFromObject(W.holds[B.s]);bb.getCenter(p);}else n.getWorldPosition(p);

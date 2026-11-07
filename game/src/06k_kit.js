@@ -148,6 +148,8 @@ function updDrone(dt){const h=M&&M.ready&&M.W&&M.W.holds.drone;
     _kb.set(P.x+(Math.random()-.5)*1.5,P.y+3+Math.random()*1.5,P.z+(Math.random()-.5)*1.5);beam(_ka,_kb,.05,[.3,1.6,.55],.07);
     if(Math.random()<dt*14)part({x:_kb.x,y:_kb.y,z:_kb.z,vx:0,vy:1,vz:0,life:.5,s0:.4,s1:.1,a:1.4,col:[.4,1,.5],glow:true});
     DR.rep+=dt;if(DR.rep>2.5){DR.rep=0;HUD.msg('DRONE REPAIRING',1);}}
+  /* FIELD REPAIR (pilot level 8): it also mends the hull during a fight, 1 a second */
+  if(near&&!goHome&&assistOn('repair')&&P.hull<P.hullMax){P.hull=Math.min(P.hullMax,P.hull+dt);if(Math.random()<dt*3){const rp=h.getObjectByName('repair')||h;rp.getWorldPosition(_ka);_kb.set(P.x,P.y+3.5,P.z);beam(_ka,_kb,.04,[.3,1.4,.5],.08);}}
   /* its shield: enemy shots that pass close hit the drone instead */
   if(DR.st==='fly')for(let i=EBOLTS.length-1;i>=0;i--){const b=EBOLTS[i],dx=b.x-h.position.x,dy=b.y-h.position.y,dz=b.z-h.position.z;if(dx*dx+dy*dy+dz*dz<1.1){
     DR.sh-=b.dmg;EBOLTS.splice(i,1);sparks(b.x,b.y,b.z,5,[.5,.8,1]);if(DR.sh<=0){DR.sh=0;DR.st='home';HUD.msg('DRONE SHIELD DOWN · RETURNING',1.4);sShield();}}}
@@ -186,5 +188,5 @@ function kitHud(){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitH
     el.style.display='block';el.style.transform='translate('+((_ka.x*.5+.5)*innerWidth).toFixed(0)+'px,'+((-_ka.y*.5+.5)*innerHeight).toFixed(0)+'px)';
     const lk=e.lk||0,cls='mk'+(e.d.boss?' boss':'')+(lk>=1?' lock':lk>.02?' locking':'')+(DR.tg===e?' dr':'');if(el.className!==cls)el.className=cls;
     el.style.setProperty('--lk',lk.toFixed(2));});}
-if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas});
-  Object.defineProperties(I,{M:{get:()=>M},AIM:{get:()=>AIM}});}   /* getters: M is made later */
+if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas,kill:e=>hurtEnemy(e,1e6,e.x,e.y,e.z),openBook,briefMaybe});
+  Object.defineProperties(I,{M:{get:()=>M},AIM:{get:()=>AIM},PL:{get:()=>PL}});}   /* getters: M is made later */

@@ -84,7 +84,7 @@ function unlocked(){return Math.max(1,SAVE.get().unlocked||1);}
 const TARGETS=[];
 function addTarget(o){o.hp=o.hpMax;o.dead=false;TARGETS.push(o);return o;}
 function hitTargets(x0,y0,z0,x1,y1,z1){for(const t of TARGETS){if(t.dead)continue;for(const s of t.spheres){if(segSphere(x0,y0,z0,x1,y1,z1,s[0],s[1],s[2],s[3])>=0)return t;}}return null;}
-function hurtTarget(t,d){if(t.dead)return;if(t.immune&&t.immune()){if(Math.random()<.3)sparks(t.x,t.y+3,t.z,3,[.8,.9,1]);return;}t.hp-=d;t.flash=1;if(t.hp<=0){t.dead=true;boom(t.x,t.y+3,t.z,1.8);setTimeout(()=>boom(t.x+1,t.y+6,t.z,1.2),250);addScore(300);addScrap(40);if(t.die)t.die();}}
+function hurtTarget(t,d){if(t.dead)return;if(t.immune&&t.immune()){if(Math.random()<.3)sparks(t.x,t.y+3,t.z,3,[.8,.9,1]);return;}t.hp-=d;t.flash=1;if(t.hp<=0){t.dead=true;boom(t.x,t.y+3,t.z,1.8);setTimeout(()=>boom(t.x+1,t.y+6,t.z,1.2),250);addScore(300);addScrap(40);if(t.spawn!=null)pilotKill('spod',300);if(t.die)t.die();}}
 function makeConsole(x,z){const y=hgt(x,z),g=new THREE.Group();g.position.set(x,y,z);
   const body=new THREE.Mesh(sbox(2.6,3.2,1.8),tmat('12-rusted-steel-plate',{rep:[2,2]}));body.position.y=1.6;body.castShadow=body.receiveShadow=true;g.add(body);
   const lamp=new THREE.MeshBasicMaterial({color:new THREE.Color(1,.12,.05).multiplyScalar(4)});
@@ -157,11 +157,11 @@ function updMission(dt){
   if(ok){addScore(500);beginStep(MS.step+1);}
 }
 function finishMission(won){if(MISSION.endless)return endlessOver();if(MS.done)return;MS.done=true;G.mode='results';
-  const time=MS.time|0,bonus=won?2000+Math.max(0,600-time)*5+MS.repairs*400:0;if(won){addScore(bonus);addScrap(150+MS.repairs*25);}const got=bankScrap();
+  const time=MS.time|0,bonus=won?2000+Math.max(0,600-time)*5+MS.repairs*400:0;if(won){addScore(bonus);addScrap(150+MS.repairs*25);addXP(bonus/2,'mission');}const got=bankScrap();
   const sv=SAVE.get();sv.best=sv.best||{};if(won){sv.unlocked=Math.max(sv.unlocked||1,MISSION.id+1);}sv.best[MISSION.id]=Math.max(sv.best[MISSION.id]||0,G.score);SAVE.put(sv);
   const tickets=Math.min(80,Math.floor(G.score/400)+(won?10:0));ARC.over(G.score,tickets);
   $('rtitle').textContent=won?'MISSION COMPLETE':'MISSION FAILED';$('rtitle').className='logo'+(won?'':' bad');
-  $('rstats').innerHTML=[['MISSION',MISSION.id+' · '+MISSION.name],['SCORE',G.score.toLocaleString('en-US')],['TIME',Math.floor(time/60)+':'+String(time%60).padStart(2,'0')],['KILLS',G.kills],['REPAIRS LEFT',MS.repairs],['SCRAP',got+' (TOTAL '+scrap()+')'],['TICKETS',tickets]].map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join('');
+  $('rstats').innerHTML=[['MISSION',MISSION.id+' · '+MISSION.name],['SCORE',G.score.toLocaleString('en-US')],['TIME',Math.floor(time/60)+':'+String(time%60).padStart(2,'0')],['KILLS',G.kills],['REPAIRS LEFT',MS.repairs],['SCRAP',got+' (TOTAL '+scrap()+')'],['TICKETS',tickets]].concat(pilotRows()).map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join('');
   $('rnext').style.display=won&&MISSIONS.find(m=>m.id===MISSION.id+1)?'':'none';$('results').style.display='flex';jetLoop(0);
 }
 /* falling in a mission: repair at the last checkpoint (3 repairs per mission), then the mission is lost */
@@ -170,7 +170,9 @@ function repairAtCheckpoint(){MS.repairs--;const cp=MS.cp||{step:0,x:MISSION.sta
   clearFight();P=mkPlayer();applyUpgrades();P.x=cp.x;P.z=cp.z;P.y=hgt(cp.x,cp.z);P.yaw=P.legYaw=cp.yaw;CAMS.ready=false;if(M)M.root.visible=true;
   P.hull=P.hullMax;P.shield=P.shieldMax;P.cells=P.cells;GUN.tier=Math.max(GUN.base,(cp.tier||1)-1);GUN.heat=0;GUN.over=false;$('down').style.display='none';G.mode='play';
   for(const t of MS.objs)if(!t.dead){t.hp=t.hpMax;}beginStep(cp.step);HUD.msg('REPAIRED · '+MS.repairs+' LEFT',2);}
-function startMission(){MS.scrap=0;MS.built={};MS.escort=null;MS.wpos=null;MS.done=false;MS.repairs=3;MS.cp=null;MS.time=0;RADIO.length=0;P.x=MISSION.start[0];P.z=MISSION.start[1];P.y=hgt(P.x,P.z);P.yaw=P.legYaw=MISSION.start[2];CAMS.ready=false;beginStep(0);}
+function startMission(){MS.scrap=0;MS.built={};MS.escort=null;MS.wpos=null;MS.done=false;MS.repairs=3;MS.cp=null;MS.time=0;RADIO.length=0;P.x=MISSION.start[0];P.z=MISSION.start[1];P.y=hgt(P.x,P.z);P.yaw=P.legYaw=MISSION.start[2];CAMS.ready=false;beginStep(0);
+  /* IH4: the intel brief for the whole mission: every machine in its steps, with how many (and its spawner pods) */
+  if(!MISSION.endless){const c={};for(const s of MISSION.steps){for(const w of [s.wave].concat(s.waves||[]))if(w)for(const id in w)c[id]=(c[id]||0)+w[id];if(s.spawners)c.spod=(c.spod||0)+s.spawners.length;}briefMaybe(c,'MISSION '+MISSION.id,true);}}
 /* mission list on the title screen */
 function missionMenu(){const box=$('mlist'),u=unlocked(),best=SAVE.get().best||{};
   box.querySelector('.cards').innerHTML=MISSIONS.map(m=>{const lock=m.id>u;return '<button class="mcard'+(lock?' lock':'')+'" data-id="'+m.id+'"'+(lock?' disabled':'')+'><b>'+m.id+' · '+m.name+'</b><span>'+

@@ -7,7 +7,7 @@ repo, out = sys.argv[1], sys.argv[2]
 G = os.path.join(repo, 'game')
 IH4 = {'wraith-v2-hd': ['wraith_v2'], 'autocannon': ['ac_L', 'ac_R'], 'lance': ['ln_L', 'ln_R'], 'arc': ['ar_L', 'ar_R'],
        'mpod': ['mpod'], 'watcher': ['watcher'], 'jetpack': ['jetpack'], 'drone': ['drone']}
-FOES = {'fgunner': 'fgunner', 'fhound': 'fhound', 'fskitter': 'fskitter', 'spod': 'spod'}   # the FORGE machines: field files only
+FOES = {'fgunner': 'fgunner', 'fhound': 'fhound', 'fskitter': 'fskitter', 'spod': 'spod'}   # the FORGE machines
 ORM = {'autocannon': 'ac_combat_orm', 'lance': 'ln_combat_orm', 'arc': 'ar_combat_orm'}
 n = 0; size = 0
 def put(src, rel):
@@ -29,7 +29,8 @@ for d, stems in IH4.items():
         o = ORM.get(d, st + '_combat_orm') + '.webp'
         if not os.path.exists(os.path.join(out, 'm4', d, o)): put(os.path.join(repo, 'models', d, o), 'm4/%s/%s' % (d, o))
 for d, st in FOES.items():
-    for f in (st + '_combat.glb', st + '_combat_albedo.webp', st + '_combat_normal.webp', st + '_combat_orm.webp'):
+    for f in (st + '_combat.glb', st + '_combat_albedo.webp', st + '_combat_normal.webp', st + '_combat_orm.webp',
+              st + '_full.glb', st + '_full_print.webp'):   # full models: the intel brief and the armory book
         put(os.path.join(repo, 'models', d, f), 'm4/%s/%s' % (d, f))
 put(os.path.join(G, 'js', 'three-ih3.min.js'), 'js/three-ih3.min.js'); put(os.path.join(G, 'js', 'ironhowl4.js'), 'js/ironhowl4.js')
 shim = """<script>/* test build: models come as .glb.json (gzip + base64); unpack them for the GLTF loader */

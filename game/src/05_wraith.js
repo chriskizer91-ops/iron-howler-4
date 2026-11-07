@@ -15,7 +15,9 @@ const KIT={
 const WRAITH={dir:'wraith-v2-hd',stem:'wraith_v2'};
 const SLOTS=['fa_L','fa_R','sh_L','sh_R','bk','drone'];
 const LOAD_DEF={fa_L:'ac',fa_R:'ac',sh_L:'watcher',sh_R:'mpod',bk:'jetpack',drone:'drone'};
-function loadout(){let s={};try{s=(SAVE.get().loadout)||{};}catch(e){}return Object.assign({},LOAD_DEF,s);}
+function loadout(){let s={};try{s=(SAVE.get().loadout)||{};}catch(e){}const L=Object.assign({},LOAD_DEF,s);
+  /* kit not yet opened by your pilot level (06m_pilot.js): arms fall back to the autocannon, the rest to empty */
+  if(typeof kitOpen==='function')for(const k of SLOTS)if(L[k]&&!kitOpen(L[k]))L[k]=k.startsWith('fa')?'ac':null;return L;}
 function hasKit(id){const L=loadout();return SLOTS.some(k=>L[k]===id);}
 function kitStem(id,slot){const k=KIT[id];return k.stem||(slot&&slot.endsWith('_R')?k.R:k.L);}
 /* files: combat model and its maps, or the full model and its print */

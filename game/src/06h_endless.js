@@ -20,7 +20,7 @@ function endlessWave(n){const w={},add=(id,k)=>{w[id]=(w[id]||0)+k;};
 function endlessBegin(){MS.repairs=0;Object.assign(EW,{wave:0,state:'break',t:6,boss:false,queue:[],qt:0});DIFF.dmg=.9;DIFF.hp=1;G.hpK=1;
   radio([['ROOK','Endless. They keep coming, and every wave is a little worse.'],['ROOK','Supplies drop between waves. Every tenth wave, something big.']]);}
 function startEWave(){const n=++EW.wave;G.hpK=Math.min(2.2,1+.035*(n-1));DIFF.dmg=Math.min(1.6,.9+.025*(n-1));
-  const w=endlessWave(n),list=[];for(const id in w)for(let i=0;i<w[id];i++)list.push(id);list.sort(()=>Math.random()-.5);
+  if(n>1)addXP(100+50*(n-1),'wave');const w=endlessWave(n),list=[];briefMaybe(w,'WAVE '+n);for(const id in w)for(let i=0;i<w[id];i++)list.push(id);list.sort(()=>Math.random()-.5);
   EW.queue=[];for(let i=0;i<list.length;i+=6){const g={};for(const id of list.slice(i,i+6))g[id]=(g[id]||0)+1;EW.queue.push(g);}EW.qt=0;EW.state='fight';
   if(n%10===0&&MISSION.boss){if(BOSS.o&&BOSS.kind!=='forge')S.remove(BOSS.o);if(!(MISSION.boss==='forge'&&BOSS.o&&!BOSS.dead)){BOSS_DEF[MISSION.boss].make(...MISSION.bossAt);}
     BOSS.idle=false;EW.boss=true;radio([['FORGE',['SOMETHING LARGER IS COMING.','MEET MY BEST WORK.','YOU WILL NOT SURVIVE THIS ONE.'][(n/10-1)%3]]]);}
@@ -43,7 +43,7 @@ function endlessOver(){if(MS.done)return;MS.done=true;G.mode='results';const tim
   const tickets=Math.min(80,Math.floor(G.score/400)+Math.floor(EW.wave/5)*2);ARC.over(G.score,tickets);
   $('rtitle').textContent='WAVE '+EW.wave;$('rtitle').className='logo';
   $('rstats').innerHTML=[['ARENA',MAPS[MISSION.map].name],['REACHED WAVE',EW.wave],['SCORE',G.score.toLocaleString('en-US')],['BEST',best.score.toLocaleString('en-US')+' · WAVE '+best.wave],
-    ['KILLS',G.kills],['TIME',Math.floor(time/60)+':'+String(time%60).padStart(2,'0')],['SCRAP',got+' (TOTAL '+scrap()+')'],['TICKETS',tickets]].map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join('');
+    ['KILLS',G.kills],['TIME',Math.floor(time/60)+':'+String(time%60).padStart(2,'0')],['SCRAP',got+' (TOTAL '+scrap()+')'],['TICKETS',tickets]].concat(pilotRows()).map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join('');
   $('rnext').style.display='none';$('results').style.display='flex';jetLoop(0);}
 function endlessMenu(){const box=$('elist'),E=SAVE.get().endless||{};
   box.querySelector('.cards').innerHTML=['field','woods','docks','foundry'].map(m=>{const b=E[m];return '<button class="mcard" data-map="'+m+'"><b>'+MAPS[m].name+'</b><span>'+

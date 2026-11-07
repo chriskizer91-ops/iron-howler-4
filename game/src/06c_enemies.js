@@ -49,7 +49,7 @@ function los(x,z){const dx=P.x-x,dz=P.z-z,d=Math.hypot(dx,dz),st=Math.ceil(d/3);
 /* ---- spawning ---- */
 function spawnEnemy(id,x,z){const d=EDEF[id],tp=ETPL[id];if(!tp)return null;
   const o=tp.clone(true);const N=n=>o.getObjectByName(n);
-  const e={id,d,o,x,z,y:hgt(x,z),yaw:Math.atan2(-(P.x-x),-(P.z-z)),hp:d.hp*G.hpK*DIFF.hp,dead:false,spawnT:1.3,st:'move',t:0,cd:1+Math.random()*1.5,
+  const e={id,key:id,d,o,x,z,y:hgt(x,z),yaw:Math.atan2(-(P.x-x),-(P.z-z)),hp:d.hp*G.hpK*DIFF.hp,dead:false,spawnT:1.3,st:'move',t:0,cd:1+Math.random()*1.5,
     kx:0,kz:0,flash:0,phase:Math.random()*10,strafe:Math.random()<.5?1:-1,strT:2+Math.random()*2,vx:0,vz:0};
   if(d.init)d.init(e,N);
   else if(id==='skitter'){e.body=N('body');e.legs=[0,1,2,3].map(i=>N('leg'+i));}
@@ -71,8 +71,8 @@ function spawnSpot(){const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
     if(Math.hypot(x-P.x,z-P.z)<35)continue;const k=navCell(x,z);if(k<0||NAV.block[k])continue;return [x,z];}
   const B=BND();return [clamp(P.x-Math.sin(P.yaw)*60,B.x0+4,B.x1-4),clamp(P.z-Math.cos(P.yaw)*60,B.z0+4,B.z1-4)];}
 function startWave(){
-  const w=WAVES[G.wave%WAVES.length];G.hpK=1+Math.floor(G.wave/WAVES.length)*.3;G.wave++;
-  HUD.banner('WAVE '+G.wave);
+  const w=WAVES[G.wave%WAVES.length];G.hpK=1+Math.floor(G.wave/WAVES.length)*.3;if(G.wave>0)addXP(100+50*G.wave,'wave');G.wave++;
+  HUD.banner('WAVE '+G.wave);briefMaybe(w,'WAVE '+G.wave);   /* IH4: an intel brief when the wave brings a machine not yet briefed (06l_brief.js) */
   for(const id in w){const [cx,cz]=spawnSpot();BEACONS.push({x:cx,z:cz,t:1.3});
     for(let i=0;i<w[id];i++){const a=Math.random()*TAU,r=Math.random()*(id==='skitter'?6:4)+(i?2:0);let x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;
       const cl=collide(x,z,EDEF[id].r);spawnEnemy(id,cl[0],cl[1]);}}
@@ -82,7 +82,7 @@ function hurtEnemy(e,dmg,x,y,z){if(e.dead)return;if(e.d.armor)dmg*=e.d.armor(e,x
 function killEnemy(e){e.dead=true;S.remove(e.o);if(e.beam)S.remove(e.beam);e.mat.dispose();
   boom(e.x,e.y+e.d.cy,e.z,e.d.boom||(e.id==='skitter'?.7:e.id==='hound'?1.1:1.5));
   const now=G.t;G.combo=now-G.lastKill<3?G.combo+1:1;G.lastKill=now;const mult=Math.min(3,1+.25*(G.combo-1));
-  addScore(Math.round(e.d.score*mult*(G.hpK||1)));G.kills++;addScrap(e.d.scrap||10);
+  addScore(Math.round(e.d.score*mult*(G.hpK||1)));G.kills++;addScrap(e.d.scrap||10);pilotKill(e.key||e.id,e.d.score);
   if(Math.random()<e.d.drop)dropPickup(e.x,e.z,Math.random()<(e.d.chip||(e.id==='gunner'?.55:0))?'chip':null);
 }
 function hurtPlayer(dmg,fx,fz){if(P.dead||G.mode!=='play'&&G.mode!=='demo')return;if(G.mode==='demo'){shieldFlash();return;}dmg*=DIFF.dmg;P.regenT=P.regenDelay||3;

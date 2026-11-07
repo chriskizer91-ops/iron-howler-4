@@ -105,6 +105,12 @@ body.inbay>*:not(#bay):not(#gl):not(#hangar):not(script){visibility:hidden!impor
 #baycard .opts{display:flex;gap:4px;flex-wrap:wrap}#baycard .opts button{background:#ffffff12;padding:7px 11px}
 #baycard .stats{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:10.5px}#baycard .stats span{color:#ffffff80;letter-spacing:.12em}#baycard .stats b{color:#fff;font-size:10.5px;letter-spacing:.06em}
 #baycard .live{color:#7cf0ff;font-size:9.5px;letter-spacing:.14em}
+/* IH4 session 4: pilot line, locked kit, the book's dim chips, the test switch */
+#tpilot{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:center;gap:4px 10px;margin:10px auto 0;max-width:min(420px,88vw);font-size:10.5px;letter-spacing:.14em}
+#tpilot b{color:#ffb347}#tpilot span{color:#ffffff99}#tpilot i{flex:0 0 100%;height:3px;border-radius:2px;background:#ffffff1a;overflow:hidden}#tpilot em{display:block;height:100%;background:#ffb347}
+#baycard .opts button.lock{opacity:.38;cursor:default}#bayslots button.dim{color:#ffffff55}#bayslots .sep{flex:0 0 1px;margin:4px 3px;background:#ffffff26}
+#baycard .tgl{all:unset;cursor:pointer;align-self:flex-start;margin-top:2px;padding:5px 9px;border-radius:999px;border:1px solid #ffffff2a;color:#ffffff70;font-size:9.5px;letter-spacing:.14em}#baycard .tgl.on{border-color:#7cf0ff;color:#7cf0ff}
+#baycard .cls{font-style:normal;color:#ffb347cc;letter-spacing:.12em;font-size:9.5px;margin-right:4px}
 #bayload{display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#ffffffa0;font-size:11px;letter-spacing:.2em;pointer-events:none}
 #bayload .t{width:min(240px,60vw);height:3px;background:#ffffff1a;border-radius:2px;overflow:hidden}#baylb{height:100%;width:0;background:#ffb347;transition:width .15s}
 #dev{position:fixed;left:12px;top:40px;font:11px monospace;color:#7f7;pointer-events:none;text-shadow:0 0 3px #000}
@@ -129,7 +135,7 @@ body.inbay>*:not(#bay):not(#gl):not(#hangar):not(script){visibility:hidden!impor
 <div id="elist" class="ov"><div class="sub">ENDLESS</div><div class="cards"></div><button id="elback">BACK</button></div>
 <div id="attract">IRONHOWL 4 · PRESS START</div><div id="fps"></div>
 <div id="title" class="ov"><div class="logo">IRONHOWL 4</div><div class="sub" id="tsub">SANDBOX · PICK A PLACE</div><div id="tbrief"></div>
-  <div class="trow"><button id="bmis" style="display:none">MISSIONS</button><button id="bend">ENDLESS</button><button id="bhang">MOD BAY</button></div><div id="maps"><button data-map="woods">WOODS</button><button data-map="field">FIELD</button><button data-map="docks">DOCKS</button><button data-map="foundry">FOUNDRY</button></div><button id="bmenu" style="display:none">MENU</button>
+  <div class="trow"><button id="bmis" style="display:none">MISSIONS</button><button id="bend">ENDLESS</button><button id="bhang">MOD BAY</button><button id="bbook">ARMORY</button></div><div id="tpilot"></div><div id="maps"><button data-map="woods">WOODS</button><button data-map="field">FIELD</button><button data-map="docks">DOCKS</button><button data-map="foundry">FOUNDRY</button></div><button id="bmenu" style="display:none">MENU</button>
   <div class="go" id="tgo">CLICK OR TAP TO START</div>
   <div class="keys desk">WASD MOVE · MOUSE AIM · CLICK FIRE · RIGHT CLICK MISSILES · Q SALVO · R VENT · SPACE JET HOP (HOLD TO HOVER) · V CAMERA</div>
   <div class="keys tch">LEFT THUMB MOVES · RIGHT THUMB AIMS · HOLD FIRE AND DRAG IT TO AIM · PLAY SIDEWAYS</div></div>

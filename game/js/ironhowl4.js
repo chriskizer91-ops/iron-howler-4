@@ -785,7 +785,9 @@ const KIT={
 const WRAITH={dir:'wraith-v2-hd',stem:'wraith_v2'};
 const SLOTS=['fa_L','fa_R','sh_L','sh_R','bk','drone'];
 const LOAD_DEF={fa_L:'ac',fa_R:'ac',sh_L:'watcher',sh_R:'mpod',bk:'jetpack',drone:'drone'};
-function loadout(){let s={};try{s=(SAVE.get().loadout)||{};}catch(e){}return Object.assign({},LOAD_DEF,s);}
+function loadout(){let s={};try{s=(SAVE.get().loadout)||{};}catch(e){}const L=Object.assign({},LOAD_DEF,s);
+  /* kit not yet opened by your pilot level (06m_pilot.js): arms fall back to the autocannon, the rest to empty */
+  if(typeof kitOpen==='function')for(const k of SLOTS)if(L[k]&&!kitOpen(L[k]))L[k]=k.startsWith('fa')?'ac':null;return L;}
 function hasKit(id){const L=loadout();return SLOTS.some(k=>L[k]===id);}
 function kitStem(id,slot){const k=KIT[id];return k.stem||(slot&&slot.endsWith('_R')?k.R:k.L);}
 /* files: combat model and its maps, or the full model and its print */
@@ -1058,7 +1060,8 @@ function updGun(c,dt){
     if(M.ready&&AC.length&&Math.random()<dt*14){const A=AC[Math.random()*AC.length|0];A.muzzle.getWorldPosition(_w);part({x:_w.x,y:_w.y,z:_w.z,vx:(Math.random()-.5),vy:1.5+Math.random(),vz:(Math.random()-.5),life:1.2,s0:.4,s1:1.6,a:.35,col:[.85,.85,.88],drag:1});}}
   MFL.intensity=GUN.flash*90;
   /* vent: dump all heat with a steam blast that shoves close enemies back */
-  if(c.vent&&GUN.ventCd<=0&&!P.dead){GUN.ventCd=GUN.ventCool||8;GUN.heat=0;GUN.over=false;sVent();CAMS.shake=Math.max(CAMS.shake,.35);
+  /* IH4 AUTO-VENT (pilot level 6): vents by itself at 92 % heat */
+  if((c.vent||assistOn('vent')&&GUN.heat>=92&&!GUN.over)&&GUN.ventCd<=0&&!P.dead){GUN.ventCd=GUN.ventCool||8;GUN.heat=0;GUN.over=false;sVent();CAMS.shake=Math.max(CAMS.shake,.35);
     for(let i=0;i<10;i++){const a=Math.random()*TAU;part({x:P.x+Math.cos(a)*1.5,y:P.y+2+Math.random()*2,z:P.z+Math.sin(a)*1.5,vx:Math.cos(a)*3,vy:2+Math.random()*2,vz:Math.sin(a)*3,life:1.6,s0:2,s1:6,a:.8,col:[1,1,1],img:4,drag:1.5,grav:-.6});}
     for(let i=0;i<26;i++){const a=Math.random()*TAU,s=4+Math.random()*7;part({x:P.x+Math.cos(a)*1.2,y:P.y+1.5+Math.random()*2,z:P.z+Math.sin(a)*1.2,vx:Math.cos(a)*s,vy:.5+Math.random()*2,vz:Math.sin(a)*s,life:1.4+Math.random(),s0:1,s1:4.2,a:.4,col:[.92,.93,.95],drag:2.2,grav:-.4});}
     for(const e of EN){if(e.dead)continue;const dx=e.x-P.x,dz=e.z-P.z,d=Math.hypot(dx,dz)||1;if(d<10){hurtEnemy(e,15,e.x,e.y+1,e.z);e.kx+=dx/d*16*(1-d/12);e.kz+=dz/d*16*(1-d/12);}}}
@@ -1179,7 +1182,7 @@ function los(x,z){const dx=P.x-x,dz=P.z-z,d=Math.hypot(dx,dz),st=Math.ceil(d/3);
 /* ---- spawning ---- */
 function spawnEnemy(id,x,z){const d=EDEF[id],tp=ETPL[id];if(!tp)return null;
   const o=tp.clone(true);const N=n=>o.getObjectByName(n);
-  const e={id,d,o,x,z,y:hgt(x,z),yaw:Math.atan2(-(P.x-x),-(P.z-z)),hp:d.hp*G.hpK*DIFF.hp,dead:false,spawnT:1.3,st:'move',t:0,cd:1+Math.random()*1.5,
+  const e={id,key:id,d,o,x,z,y:hgt(x,z),yaw:Math.atan2(-(P.x-x),-(P.z-z)),hp:d.hp*G.hpK*DIFF.hp,dead:false,spawnT:1.3,st:'move',t:0,cd:1+Math.random()*1.5,
     kx:0,kz:0,flash:0,phase:Math.random()*10,strafe:Math.random()<.5?1:-1,strT:2+Math.random()*2,vx:0,vz:0};
   if(d.init)d.init(e,N);
   else if(id==='skitter'){e.body=N('body');e.legs=[0,1,2,3].map(i=>N('leg'+i));}
@@ -1201,8 +1204,8 @@ function spawnSpot(){const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
     if(Math.hypot(x-P.x,z-P.z)<35)continue;const k=navCell(x,z);if(k<0||NAV.block[k])continue;return [x,z];}
   const B=BND();return [clamp(P.x-Math.sin(P.yaw)*60,B.x0+4,B.x1-4),clamp(P.z-Math.cos(P.yaw)*60,B.z0+4,B.z1-4)];}
 function startWave(){
-  const w=WAVES[G.wave%WAVES.length];G.hpK=1+Math.floor(G.wave/WAVES.length)*.3;G.wave++;
-  HUD.banner('WAVE '+G.wave);
+  const w=WAVES[G.wave%WAVES.length];G.hpK=1+Math.floor(G.wave/WAVES.length)*.3;if(G.wave>0)addXP(100+50*G.wave,'wave');G.wave++;
+  HUD.banner('WAVE '+G.wave);briefMaybe(w,'WAVE '+G.wave);   /* IH4: an intel brief when the wave brings a machine not yet briefed (06l_brief.js) */
   for(const id in w){const [cx,cz]=spawnSpot();BEACONS.push({x:cx,z:cz,t:1.3});
     for(let i=0;i<w[id];i++){const a=Math.random()*TAU,r=Math.random()*(id==='skitter'?6:4)+(i?2:0);let x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;
       const cl=collide(x,z,EDEF[id].r);spawnEnemy(id,cl[0],cl[1]);}}
@@ -1212,7 +1215,7 @@ function hurtEnemy(e,dmg,x,y,z){if(e.dead)return;if(e.d.armor)dmg*=e.d.armor(e,x
 function killEnemy(e){e.dead=true;S.remove(e.o);if(e.beam)S.remove(e.beam);e.mat.dispose();
   boom(e.x,e.y+e.d.cy,e.z,e.d.boom||(e.id==='skitter'?.7:e.id==='hound'?1.1:1.5));
   const now=G.t;G.combo=now-G.lastKill<3?G.combo+1:1;G.lastKill=now;const mult=Math.min(3,1+.25*(G.combo-1));
-  addScore(Math.round(e.d.score*mult*(G.hpK||1)));G.kills++;addScrap(e.d.scrap||10);
+  addScore(Math.round(e.d.score*mult*(G.hpK||1)));G.kills++;addScrap(e.d.scrap||10);pilotKill(e.key||e.id,e.d.score);
   if(Math.random()<e.d.drop)dropPickup(e.x,e.z,Math.random()<(e.d.chip||(e.id==='gunner'?.55:0))?'chip':null);
 }
 function hurtPlayer(dmg,fx,fz){if(P.dead||G.mode!=='play'&&G.mode!=='demo')return;if(G.mode==='demo'){shieldFlash();return;}dmg*=DIFF.dmg;P.regenT=P.regenDelay||3;
@@ -1410,7 +1413,7 @@ function unlocked(){return Math.max(1,SAVE.get().unlocked||1);}
 const TARGETS=[];
 function addTarget(o){o.hp=o.hpMax;o.dead=false;TARGETS.push(o);return o;}
 function hitTargets(x0,y0,z0,x1,y1,z1){for(const t of TARGETS){if(t.dead)continue;for(const s of t.spheres){if(segSphere(x0,y0,z0,x1,y1,z1,s[0],s[1],s[2],s[3])>=0)return t;}}return null;}
-function hurtTarget(t,d){if(t.dead)return;if(t.immune&&t.immune()){if(Math.random()<.3)sparks(t.x,t.y+3,t.z,3,[.8,.9,1]);return;}t.hp-=d;t.flash=1;if(t.hp<=0){t.dead=true;boom(t.x,t.y+3,t.z,1.8);setTimeout(()=>boom(t.x+1,t.y+6,t.z,1.2),250);addScore(300);addScrap(40);if(t.die)t.die();}}
+function hurtTarget(t,d){if(t.dead)return;if(t.immune&&t.immune()){if(Math.random()<.3)sparks(t.x,t.y+3,t.z,3,[.8,.9,1]);return;}t.hp-=d;t.flash=1;if(t.hp<=0){t.dead=true;boom(t.x,t.y+3,t.z,1.8);setTimeout(()=>boom(t.x+1,t.y+6,t.z,1.2),250);addScore(300);addScrap(40);if(t.spawn!=null)pilotKill('spod',300);if(t.die)t.die();}}
 function makeConsole(x,z){const y=hgt(x,z),g=new THREE.Group();g.position.set(x,y,z);
   const body=new THREE.Mesh(sbox(2.6,3.2,1.8),tmat('12-rusted-steel-plate',{rep:[2,2]}));body.position.y=1.6;body.castShadow=body.receiveShadow=true;g.add(body);
   const lamp=new THREE.MeshBasicMaterial({color:new THREE.Color(1,.12,.05).multiplyScalar(4)});
@@ -1483,11 +1486,11 @@ function updMission(dt){
   if(ok){addScore(500);beginStep(MS.step+1);}
 }
 function finishMission(won){if(MISSION.endless)return endlessOver();if(MS.done)return;MS.done=true;G.mode='results';
-  const time=MS.time|0,bonus=won?2000+Math.max(0,600-time)*5+MS.repairs*400:0;if(won){addScore(bonus);addScrap(150+MS.repairs*25);}const got=bankScrap();
+  const time=MS.time|0,bonus=won?2000+Math.max(0,600-time)*5+MS.repairs*400:0;if(won){addScore(bonus);addScrap(150+MS.repairs*25);addXP(bonus/2,'mission');}const got=bankScrap();
   const sv=SAVE.get();sv.best=sv.best||{};if(won){sv.unlocked=Math.max(sv.unlocked||1,MISSION.id+1);}sv.best[MISSION.id]=Math.max(sv.best[MISSION.id]||0,G.score);SAVE.put(sv);
   const tickets=Math.min(80,Math.floor(G.score/400)+(won?10:0));ARC.over(G.score,tickets);
   $('rtitle').textContent=won?'MISSION COMPLETE':'MISSION FAILED';$('rtitle').className='logo'+(won?'':' bad');
-  $('rstats').innerHTML=[['MISSION',MISSION.id+' · '+MISSION.name],['SCORE',G.score.toLocaleString('en-US')],['TIME',Math.floor(time/60)+':'+String(time%60).padStart(2,'0')],['KILLS',G.kills],['REPAIRS LEFT',MS.repairs],['SCRAP',got+' (TOTAL '+scrap()+')'],['TICKETS',tickets]].map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join('');
+  $('rstats').innerHTML=[['MISSION',MISSION.id+' · '+MISSION.name],['SCORE',G.score.toLocaleString('en-US')],['TIME',Math.floor(time/60)+':'+String(time%60).padStart(2,'0')],['KILLS',G.kills],['REPAIRS LEFT',MS.repairs],['SCRAP',got+' (TOTAL '+scrap()+')'],['TICKETS',tickets]].concat(pilotRows()).map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join('');
   $('rnext').style.display=won&&MISSIONS.find(m=>m.id===MISSION.id+1)?'':'none';$('results').style.display='flex';jetLoop(0);
 }
 /* falling in a mission: repair at the last checkpoint (3 repairs per mission), then the mission is lost */
@@ -1496,7 +1499,9 @@ function repairAtCheckpoint(){MS.repairs--;const cp=MS.cp||{step:0,x:MISSION.sta
   clearFight();P=mkPlayer();applyUpgrades();P.x=cp.x;P.z=cp.z;P.y=hgt(cp.x,cp.z);P.yaw=P.legYaw=cp.yaw;CAMS.ready=false;if(M)M.root.visible=true;
   P.hull=P.hullMax;P.shield=P.shieldMax;P.cells=P.cells;GUN.tier=Math.max(GUN.base,(cp.tier||1)-1);GUN.heat=0;GUN.over=false;$('down').style.display='none';G.mode='play';
   for(const t of MS.objs)if(!t.dead){t.hp=t.hpMax;}beginStep(cp.step);HUD.msg('REPAIRED · '+MS.repairs+' LEFT',2);}
-function startMission(){MS.scrap=0;MS.built={};MS.escort=null;MS.wpos=null;MS.done=false;MS.repairs=3;MS.cp=null;MS.time=0;RADIO.length=0;P.x=MISSION.start[0];P.z=MISSION.start[1];P.y=hgt(P.x,P.z);P.yaw=P.legYaw=MISSION.start[2];CAMS.ready=false;beginStep(0);}
+function startMission(){MS.scrap=0;MS.built={};MS.escort=null;MS.wpos=null;MS.done=false;MS.repairs=3;MS.cp=null;MS.time=0;RADIO.length=0;P.x=MISSION.start[0];P.z=MISSION.start[1];P.y=hgt(P.x,P.z);P.yaw=P.legYaw=MISSION.start[2];CAMS.ready=false;beginStep(0);
+  /* IH4: the intel brief for the whole mission: every machine in its steps, with how many (and its spawner pods) */
+  if(!MISSION.endless){const c={};for(const s of MISSION.steps){for(const w of [s.wave].concat(s.waves||[]))if(w)for(const id in w)c[id]=(c[id]||0)+w[id];if(s.spawners)c.spod=(c.spod||0)+s.spawners.length;}briefMaybe(c,'MISSION '+MISSION.id,true);}}
 /* mission list on the title screen */
 function missionMenu(){const box=$('mlist'),u=unlocked(),best=SAVE.get().best||{};
   box.querySelector('.cards').innerHTML=MISSIONS.map(m=>{const lock=m.id>u;return '<button class="mcard'+(lock?' lock':'')+'" data-id="'+m.id+'"'+(lock?' disabled':'')+'><b>'+m.id+' · '+m.name+'</b><span>'+
@@ -1532,6 +1537,7 @@ function applyUpgrades(){
   P.hullMax=[100,120,140,160,180,200][h];P.hull=P.hullMax;UP.repair=h>=4?55:h>=2?45:35;
   GUN.tier=GUN.base;
   if(!hasKit('mpod')){MSL.ammo=0;MSL.max=0;}   /* Ironhowl 4: missiles come from the MP-9 pod */
+  UP.dmgK0=UP.dmgK;applyAssists();   /* Ironhowl 4: the AI assists from pilot levels (06m_pilot.js) */
 }
 function hangar(){
   const box=$('hangar');
@@ -1966,7 +1972,7 @@ function endlessWave(n){const w={},add=(id,k)=>{w[id]=(w[id]||0)+k;};
 function endlessBegin(){MS.repairs=0;Object.assign(EW,{wave:0,state:'break',t:6,boss:false,queue:[],qt:0});DIFF.dmg=.9;DIFF.hp=1;G.hpK=1;
   radio([['ROOK','Endless. They keep coming, and every wave is a little worse.'],['ROOK','Supplies drop between waves. Every tenth wave, something big.']]);}
 function startEWave(){const n=++EW.wave;G.hpK=Math.min(2.2,1+.035*(n-1));DIFF.dmg=Math.min(1.6,.9+.025*(n-1));
-  const w=endlessWave(n),list=[];for(const id in w)for(let i=0;i<w[id];i++)list.push(id);list.sort(()=>Math.random()-.5);
+  if(n>1)addXP(100+50*(n-1),'wave');const w=endlessWave(n),list=[];briefMaybe(w,'WAVE '+n);for(const id in w)for(let i=0;i<w[id];i++)list.push(id);list.sort(()=>Math.random()-.5);
   EW.queue=[];for(let i=0;i<list.length;i+=6){const g={};for(const id of list.slice(i,i+6))g[id]=(g[id]||0)+1;EW.queue.push(g);}EW.qt=0;EW.state='fight';
   if(n%10===0&&MISSION.boss){if(BOSS.o&&BOSS.kind!=='forge')S.remove(BOSS.o);if(!(MISSION.boss==='forge'&&BOSS.o&&!BOSS.dead)){BOSS_DEF[MISSION.boss].make(...MISSION.bossAt);}
     BOSS.idle=false;EW.boss=true;radio([['FORGE',['SOMETHING LARGER IS COMING.','MEET MY BEST WORK.','YOU WILL NOT SURVIVE THIS ONE.'][(n/10-1)%3]]]);}
@@ -1989,7 +1995,7 @@ function endlessOver(){if(MS.done)return;MS.done=true;G.mode='results';const tim
   const tickets=Math.min(80,Math.floor(G.score/400)+Math.floor(EW.wave/5)*2);ARC.over(G.score,tickets);
   $('rtitle').textContent='WAVE '+EW.wave;$('rtitle').className='logo';
   $('rstats').innerHTML=[['ARENA',MAPS[MISSION.map].name],['REACHED WAVE',EW.wave],['SCORE',G.score.toLocaleString('en-US')],['BEST',best.score.toLocaleString('en-US')+' · WAVE '+best.wave],
-    ['KILLS',G.kills],['TIME',Math.floor(time/60)+':'+String(time%60).padStart(2,'0')],['SCRAP',got+' (TOTAL '+scrap()+')'],['TICKETS',tickets]].map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join('');
+    ['KILLS',G.kills],['TIME',Math.floor(time/60)+':'+String(time%60).padStart(2,'0')],['SCRAP',got+' (TOTAL '+scrap()+')'],['TICKETS',tickets]].concat(pilotRows()).map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b></div>').join('');
   $('rnext').style.display='none';$('results').style.display='flex';jetLoop(0);}
 function endlessMenu(){const box=$('elist'),E=SAVE.get().endless||{};
   box.querySelector('.cards').innerHTML=['field','woods','docks','foundry'].map(m=>{const b=E[m];return '<button class="mcard" data-map="'+m+'"><b>'+MAPS[m].name+'</b><span>'+
@@ -2046,7 +2052,7 @@ const KIT_INFO={
 const BAY_SLOTS=[{s:'fa_L',n:'LEFT ARM',o:['ac','ln','ar']},{s:'fa_R',n:'RIGHT ARM',o:['ac','ln','ar']},{s:'sh_L',n:'LEFT SHOULDER',o:['watcher','mpod',null]},
   {s:'sh_R',n:'RIGHT SHOULDER',o:['mpod','watcher',null]},{s:'bk',n:'BACK',o:['jetpack']},{s:'drone',n:'DRONE',o:['drone',null]}];
 const BAY={open:false,scene:null,cam:null,W:null,yaw:.55,pitch:.1,dist:14,ty:3.3,tgt:new THREE.Vector3(0,3.3,0),want:{x:0,y:3.3,z:0,d:14},sel:null,changed:false,
-  marks:{},auto:true,prev:null,full:true};
+  marks:{},auto:true,prev:null,full:true,mode:'bay'};   /* mode: bay, brief or book (06l_brief.js) */
 const BLM=new THREE.LoadingManager();
 function bayInit(){
   if(BAY.scene)return;const sc=new THREE.Scene();sc.background=new THREE.Color(0x07080a);
@@ -2071,7 +2077,8 @@ function bayInit(){
   bayInput();
 }
 function openBay(){
-  bayInit();BAY.open=true;BAY.prev=G.mode;G.mode='bay';BAY.changed=false;BAY.sel=null;BAY.auto=true;
+  bayInit();BAY.open=true;BAY.prev=G.mode;G.mode='bay';BAY.changed=false;BAY.sel=null;BAY.auto=true;BAY.mode='bay';BAY.want={x:0,y:3.3,z:0,d:14};
+  if(typeof STG!=='undefined'&&STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayname').querySelector('b').textContent='MODIFICATION BAY';$('bayup').style.display='';$('baydone').textContent='DONE';
   for(const id of ['title','results','down'])$(id).dataset.was=$(id).style.display,$(id).style.display='none';
   $('bay').style.display='block';document.body.classList.add('inbay');bayUI();
   BAY.full=QL!=='low';
@@ -2082,11 +2089,11 @@ function openBay(){
 }
 function closeBay(){BAY.open=false;$('bay').style.display='none';document.body.classList.remove('inbay');BAY.cam.clearViewOffset();G.mode=BAY.prev||'title';
   for(const id of ['title','results','down'])$(id).style.display=$(id).dataset.was||'none';
-  if(BAY.changed&&M){refitKit(M);if(typeof applyUpgrades==='function'&&P)applyUpgrades();}}
+  if(BAY.changed&&M){refitKit(M);if(typeof applyUpgrades==='function'&&P)applyUpgrades();}if(G.mode==='title')titlePilot();}
 function setLoadout(slot,id){const sv=SAVE.get();sv.loadout=Object.assign({},loadout(),{[slot]:id});SAVE.put(sv);BAY.changed=true;
   if(BAY.W)refitModel(BAY.W,loadout(),BAY.full,false,BLM).then(bayUI);bayUI();}
 /* the screen: slot names along the bottom, the chosen slot's card above them */
-function bayUI(){
+function bayUI(){if(BAY.mode!=='bay')return;   /* a late refit must not redraw over the brief or the book */
   const L=loadout();$('bayscrap').textContent='SCRAP '+(scrap()).toLocaleString('en-US');
   $('bayslots').innerHTML='<button data-s=""'+(BAY.sel?'':' class="on"')+'>WRAITH</button>'+BAY_SLOTS.map(B=>'<button data-s="'+B.s+'"'+(BAY.sel===B.s?' class="on"':'')+'>'+B.n+'</button>').join('');
   $('bayslots').querySelectorAll('button').forEach(b=>b.onclick=e=>{e.stopPropagation();baySelect(b.dataset.s||null);});
@@ -2094,13 +2101,17 @@ function bayUI(){
   const card=$('baycard');
   if(!BAY.sel){$('baysub').textContent='WRAITH · TAP A MOUNT TO CHANGE ITS KIT';
     const hull=[100,120,140,160,180,200][upgLv('hull')],sh=[60,80,100,120,140,160][upgLv('shield')],cells=upgLv('jets')>=4?4:upgLv('jets')>=1?3:2;
+    const nx=PILOT.lv[PL.lv];
     card.innerHTML='<b>WRAITH · RECON SUPPORT</b><span class="role">The player\'s mech. 6.6 m tall, five mounts for kit.</span>'+
-      statRows([['HULL',hull],['SHIELD',sh],['FUEL CELLS',cells],['GUN TIER',['I','II','III','IV'][Math.min(3,upgLv('gun'))]],['ARMS',name(L.fa_L)+' · '+name(L.fa_R)],['SHOULDERS',name(L.sh_L)+' · '+name(L.sh_R)]]);return;}
+      statRows([['PILOT','LV '+PL.lv+(nx?' · '+(nx-PL.xp).toLocaleString('en-US')+' XP TO LV '+(PL.lv+1):' · TOP LEVEL')],['HULL',hull],['SHIELD',sh],['FUEL CELLS',cells],['GUN TIER',['I','II','III','IV'][Math.min(3,upgLv('gun'))]],['ARMS',name(L.fa_L)+' · '+name(L.fa_R)],['SHOULDERS',name(L.sh_L)+' · '+name(L.sh_R)]])+
+      '<button class="tgl'+(PL.all?' on':'')+'">TEST: UNLOCK ALL · '+(PL.all?'ON':'OFF')+'</button>';
+    card.querySelector('.tgl').onclick=e=>{e.stopPropagation();const sv=SAVE.get();sv.unlockAll=!sv.unlockAll;SAVE.put(sv);pilotRefresh();BAY.changed=true;
+      if(BAY.W)refitModel(BAY.W,loadout(),BAY.full,false,BLM).then(bayUI);bayUI();};return;}
   const B=BAY_SLOTS.find(q=>q.s===BAY.sel),cur=L[B.s]||null,I=cur?KIT_INFO[cur]:null;
   $('baysub').textContent=B.n;
-  card.innerHTML='<div class="opts">'+B.o.map(o=>'<button data-o="'+(o||'')+'"'+(o===cur?' class="on"':'')+'>'+(o?KIT_INFO[o].name.split(' ').slice(1).join(' '):'EMPTY')+'</button>').join('')+'</div>'+
+  card.innerHTML='<div class="opts">'+B.o.map(o=>{const lk=!kitOpen(o);return '<button data-o="'+(o||'')+'"'+(o===cur?' class="on"':lk?' class="lock" disabled':'')+'>'+(o?KIT_INFO[o].name.split(' ').slice(1).join(' '):'EMPTY')+(lk?' · LV '+PILOT.kit[o]:'')+'</button>';}).join('')+'</div>'+
     (I?'<b>'+I.name+'</b><span class="role">'+I.role+'</span>'+statRows(I.stats)+'<span class="live">'+I.live+'</span>':'<span class="role">Nothing on this mount.</span>');
-  card.querySelectorAll('.opts button').forEach(b=>b.onclick=e=>{e.stopPropagation();const o=b.dataset.o||null;if(o!==cur)setLoadout(B.s,o);});
+  card.querySelectorAll('.opts button').forEach(b=>b.onclick=e=>{e.stopPropagation();const o=b.dataset.o||null;if(o!==cur&&kitOpen(o))setLoadout(B.s,o);});
   function name(id){return id?KIT_INFO[id].name.split(' ').slice(1).join(' '):'EMPTY';}
 }
 function statRows(r){return '<div class="stats">'+r.map(([a,b])=>'<span>'+a+'</span><b>'+b+'</b>').join('')+'</div>';}
@@ -2118,7 +2129,7 @@ function bayInput(){const pts=new Map();let pd=0,down=null;
     if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)<10&&performance.now()-down.t<400)bayTap(e.clientX,e.clientY);down=null;};
   addEventListener('pointerup',up);addEventListener('pointercancel',up);
   cv.addEventListener('wheel',e=>{if(BAY.open)BAY.want.d=clamp(BAY.want.d*(1+e.deltaY*.001),3,24);},{passive:true});
-  $('baydone').onclick=e=>{e.stopPropagation();closeBay();};$('bayup').onclick=e=>{e.stopPropagation();hangar();};
+  $('baydone').onclick=e=>{e.stopPropagation();if(BAY.mode==='brief')briefDone();else{if(BAY.mode==='book')viewClose();closeBay();}};$('bayup').onclick=e=>{e.stopPropagation();hangar();};
   $('hback').addEventListener('click',()=>{if(BAY.open)bayUI();});}
 function bayTap(x,y){const v=new THREE.Vector3(),r=cv.getBoundingClientRect();let best=null,bd=46;
   for(const s in BAY.marks){const m=BAY.marks[s];if(!m.visible)continue;v.copy(m.position).project(BAY.cam);
@@ -2128,12 +2139,13 @@ function bayFrame(dt){
   const c=BAY.cam,w=cv.clientWidth||innerWidth,h=cv.clientHeight||innerHeight;if(Math.abs(c.aspect-w/h)>.001){c.aspect=w/h;c.fov=w<h?50:38;c.updateProjectionMatrix();}
   if(BAY.auto)BAY.yaw+=dt*.18;
   const k=damp(5,dt);BAY.tgt.x+=(BAY.want.x-BAY.tgt.x)*k;BAY.tgt.y+=(BAY.want.y-BAY.tgt.y)*k;BAY.tgt.z+=(BAY.want.z-BAY.tgt.z)*k;BAY.dist+=(BAY.want.d-BAY.dist)*k;
-  const d=BAY.dist*(c.aspect<1?(BAY.sel?1.15:1.3):1),ty=BAY.tgt.y-(c.aspect>1.2&&!BAY.sel?BAY.dist*.055:0);
+  const d=BAY.dist*(c.aspect<1?(BAY.mode!=='bay'?1.5:BAY.sel?1.15:1.3):1),ty=BAY.tgt.y-(c.aspect>1.2&&!BAY.sel?BAY.dist*(BAY.mode==='bay'?.055:.1):0);   /* the brief and book lift the model clear of the card */
   if(c.aspect<1)c.setViewOffset(w,h,0,h*.16,w,h);else c.clearViewOffset();   /* phone: the model sits above the card */
   c.position.set(BAY.tgt.x+Math.sin(BAY.yaw)*Math.cos(BAY.pitch)*d,ty+Math.sin(BAY.pitch)*d,BAY.tgt.z+Math.cos(BAY.yaw)*Math.cos(BAY.pitch)*d);c.lookAt(BAY.tgt.x,ty,BAY.tgt.z);
   /* rings sit on the mounts; the chosen one is brighter, the others dim */
   const W=BAY.W,L=loadout(),p=new THREE.Vector3();
   for(const B of BAY_SLOTS){const m=BAY.marks[B.s];let n=null;
+    if(BAY.mode!=='bay'){m.visible=false;continue;}
     if(W){if(B.s==='drone')n=W.holds.drone||(W.holds.bk&&W.holds.bk.getObjectByName('drone_dock'));else n=W.holds[B.s]||W.J[B.s];}
     m.visible=!!n;if(!n)continue;
     if(W.holds[B.s]){const bb=new THREE.Box3().setFromObject(W.holds[B.s]);bb.getCenter(p);}else n.getWorldPosition(p);
@@ -2391,6 +2403,8 @@ function updDrone(dt){const h=M&&M.ready&&M.W&&M.W.holds.drone;
     _kb.set(P.x+(Math.random()-.5)*1.5,P.y+3+Math.random()*1.5,P.z+(Math.random()-.5)*1.5);beam(_ka,_kb,.05,[.3,1.6,.55],.07);
     if(Math.random()<dt*14)part({x:_kb.x,y:_kb.y,z:_kb.z,vx:0,vy:1,vz:0,life:.5,s0:.4,s1:.1,a:1.4,col:[.4,1,.5],glow:true});
     DR.rep+=dt;if(DR.rep>2.5){DR.rep=0;HUD.msg('DRONE REPAIRING',1);}}
+  /* FIELD REPAIR (pilot level 8): it also mends the hull during a fight, 1 a second */
+  if(near&&!goHome&&assistOn('repair')&&P.hull<P.hullMax){P.hull=Math.min(P.hullMax,P.hull+dt);if(Math.random()<dt*3){const rp=h.getObjectByName('repair')||h;rp.getWorldPosition(_ka);_kb.set(P.x,P.y+3.5,P.z);beam(_ka,_kb,.04,[.3,1.4,.5],.08);}}
   /* its shield: enemy shots that pass close hit the drone instead */
   if(DR.st==='fly')for(let i=EBOLTS.length-1;i>=0;i--){const b=EBOLTS[i],dx=b.x-h.position.x,dy=b.y-h.position.y,dz=b.z-h.position.z;if(dx*dx+dy*dy+dz*dz<1.1){
     DR.sh-=b.dmg;EBOLTS.splice(i,1);sparks(b.x,b.y,b.z,5,[.5,.8,1]);if(DR.sh<=0){DR.sh=0;DR.st='home';HUD.msg('DRONE SHIELD DOWN · RETURNING',1.4);sShield();}}}
@@ -2429,8 +2443,169 @@ function kitHud(){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitH
     el.style.display='block';el.style.transform='translate('+((_ka.x*.5+.5)*innerWidth).toFixed(0)+'px,'+((-_ka.y*.5+.5)*innerHeight).toFixed(0)+'px)';
     const lk=e.lk||0,cls='mk'+(e.d.boss?' boss':'')+(lk>=1?' lock':lk>.02?' locking':'')+(DR.tg===e?' dr':'');if(el.className!==cls)el.className=cls;
     el.style.setProperty('--lk',lk.toFixed(2));});}
-if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas});
-  Object.defineProperties(I,{M:{get:()=>M},AIM:{get:()=>AIM}});}   /* getters: M is made later */
+if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas,kill:e=>hurtEnemy(e,1e6,e.x,e.y,e.z),openBook,briefMaybe});
+  Object.defineProperties(I,{M:{get:()=>M},AIM:{get:()=>AIM},PL:{get:()=>PL}});}   /* getters: M is made later */
+
+/* ---- 06l_brief.js ---- */
+/* ===================== Ironhowl 4: the intel brief and the armory book (session 4) =====================
+   Both use the modification bay's room (06i_bay.js): the same lights, floor, camera and touch controls (drag to turn,
+   pinch or wheel to zoom), with a model on the stage instead of the Wraith.
+   INTEL BRIEF: before a run, and later in a run when a wave brings a machine you haven't been briefed on (every boss),
+     the game stops and shows the machines headed your way: a chip for each kind with how many are coming, the full-detail
+     model turning, and its card. No timer: DEPLOY starts the fight.
+   ARMORY BOOK (title screen): a card for every kit piece (locked ones say the pilot level that opens them) and for every
+     machine; a machine's card is filled in the first time you destroy one, until then it stands as a dark shape.
+   Full-detail models load in the background: the combat model shows at once, the full one replaces it when it arrives
+   (on Low quality the combat model stays). */
+const FOE_INFO={
+  skitter:{name:'SKITTER',cls:'FORGE SWARM DRONE',size:'0.9 m tall, 1.9 m across',atk:'zap, 4 a hit, close range',
+    fight:'Rushes in, zaps at close range, springs back and comes again. Comes in swarms.',tip:'Hover above 3 m and it can’t reach you. The Arc clears a swarm.'},
+  hound:{name:'HOUND',cls:'FORGE PACK HUNTER',size:'2.4 m tall, 4.5 m long',atk:'charge, 18 a hit',
+    fight:'Fast. Crouches, then charges in a straight line; backs off and charges again.',tip:'When it crouches, step aside or hop. Hovering keeps you out of reach.'},
+  gunner:{name:'GUNNER',cls:'FORGE HEAVY',size:'about 5 m tall',atk:'arm cannon, bursts of 3 × 8',
+    fight:'Keeps 24–42 m away and fires bursts from its arm cannon.',tip:'Close in fast, or out-range it with the Lance.'},
+  spod:{name:'SPAWNER POD',cls:'FORGE FACTORY',size:'2.6 m tall, 2 m across',atk:'none: prints Skitters',hp:320,speed:0,scrap:0,
+    fight:'Keeps printing Skitters until it is destroyed.',tip:'Destroy the pod first or the swarm never ends.'},
+  ahound:{name:'ALPHA HOUND',cls:'BOSS · PACK LEADER',size:'about 4 m tall',atk:'charge, 30 a hit',
+    fight:'A Hound 1.7 times the size, rust red, with horns and spine blades twice as big. Leads a pack.',tip:'Clear its Hounds, then keep moving: it charges harder and faster.'},
+  gprime:{name:'GUNNER PRIME',cls:'BOSS · HEAVY',size:'about 9 m tall',atk:'two cannons, bursts of 6 × 12',
+    fight:'A Gunner 1.8 times the size in bone white, with the heavy cannon on both arms.',tip:'Use cover between bursts. Missiles and the Lance from range.'},
+  brood:{name:'BROOD SKITTER',cls:'BOSS · SWARM MOTHER',size:'about 2.7 m tall',atk:'zap, and prints Skitters',
+    fight:'A Skitter three times the size, black with glowing seams. The pod on its back prints 2 Skitters every 7 s.',tip:'Kill it fast before the swarm grows. The Arc hits it and its brood together.'},
+  hornet:{name:'HORNET',cls:'FORGE FLYER · IRONHOWL 3 MODEL',size:'about 2 m across',atk:'stinger',
+    fight:'Circles high up, dives, fires its stinger, climbs away.',tip:'Hit it as it dives. Missiles lock on easily.'},
+  lancer:{name:'LANCER',cls:'FORGE SNIPER · IRONHOWL 3 MODEL',size:'about 6 m tall',atk:'one heavy shot',
+    fight:'Keeps its distance, paints you with a red line for 1.6 s, then fires where the line ended.',tip:'Move, hop or put cover in the way when the line locks.'},
+  bulwark:{name:'BULWARK',cls:'FORGE SHIELD · IRONHOWL 3 MODEL',size:'about 5 m tall',atk:'gun behind a shield',
+    fight:'A big shield in front: shots from the front do almost nothing.',tip:'Walk round it, hop over, or use missiles.'},
+  tank:{name:'TANK',cls:'FORGE ARMOUR · IRONHOWL 3 MODEL',size:'about 7 m long',atk:'heavy cannon',
+    fight:'Slow turret, heavy cannon. The front armour takes a third of the damage.',tip:'Hit it from the side or the back.'},
+  mortar:{name:'MORTAR CRAWLER',cls:'FORGE ARTILLERY · IRONHOWL 3 MODEL',size:'six legs, about 6 m long',atk:'shells on red discs',
+    fight:'Stays 50–90 m away and lobs shells that land on red discs.',tip:'Step off the red discs, then close in.'}};
+const BOOK_KIT=['ac','ln','ar','mpod','watcher','jetpack','drone'],BOOK_FOES=['skitter','hound','gunner','spod','ahound','gprime','brood','hornet','lancer','bulwark','tank','mortar'];
+const FOE_ORDER=['gprime','ahound','brood','tank','mortar','bulwark','lancer','gunner','hornet','hound','spod','skitter'];
+const STG={grp:null,id:null,obj:null,seq:0,pct:-1};
+let RUNSEEN=new Set();   /* machines briefed in this run */
+
+/* ---------- the stage: one model, scaled so its biggest side fits the room, standing on the floor ---------- */
+function stageInit(){bayInit();if(STG.grp)return;STG.grp=new THREE.Group();BAY.scene.add(STG.grp);}
+function stageClear(){if(!STG.obj)return;STG.grp.remove(STG.obj);if(STG.obj.userData.full)STG.obj.traverse(o=>{if(o.isMesh)o.geometry.dispose();});STG.obj=null;}
+function stagePut(o,full){stageClear();const b=new THREE.Box3().setFromObject(o),s=b.getSize(new THREE.Vector3());
+  const k=4.2/Math.max(s.y,s.x*.78,s.z*.78,.01);o.scale.multiplyScalar(k);o.position.y-=b.min.y*k;o.userData.full=full;STG.obj=o;STG.grp.add(o);
+  BAY.want={x:0,y:s.y*k*.5,z:0,d:11.5};}
+/* build a model for the stage: a machine (EDEF id or the spawner pod) or a kit piece; dark = a shape not yet known */
+function stageModel(id,full,dark){
+  const f=stageFiles(id,full);let p;
+  if(f)p=loadGLB(f.glb,full?BLM:undefined).then(sc=>{const mat=dark?darkMat():kitMat(f,false).clone();dressModel(sc,mat);stageDress(id,sc,mat,dark);return sc;});
+  else if(ETPL[id])p=Promise.resolve(ETPL[id].clone(true)).then(sc=>{if(dark)sc.traverse(o=>{if(o.isMesh)o.material=darkMat();});return sc;});   /* Ironhowl 3 models */
+  else p=Promise.reject(new Error('no model for '+id));
+  return p;}
+function stageFiles(id,full){if(KIT[id])return kitFiles(KIT[id].dir,kitStem(id,'fa_R'),full,KIT[id].orm);
+  if(id==='spod')return kitFiles('spod','spod',full);const d=EDEF[id];if(d&&d.m4){const base=d.m4;return kitFiles(base[0],base[1],full);}return null;}
+let DARKM=null;function darkMat(){return DARKM||(DARKM=new THREE.MeshStandardMaterial({color:0x141518,roughness:.35,metalness:.85}));}
+/* the bosses get the same changes as in the field (06j_forge.js) */
+function stageDress(id,sc,mat,dark){const N=n=>sc.getObjectByName(n),e={o:sc,mat,d:EDEF[id]||{},dead:false};
+  if(id==='gprime'){gnInit(e,N);primeArms(e,N);if(!dark)tintMat(e,'bone');}
+  else if(id==='ahound'){growParts(sc,['horn_R','horn_L','spine1','spine2','spine3','spine4'],2);if(!dark)mat.color.setRGB(1.75,.78,.55);}
+  else if(id==='brood'&&!dark){broodPod(e);tintMat(e,'brood');}}
+function stageShow(id,dark){stageInit();const seq=++STG.seq;STG.id=id;STG.pct=-1;
+  const wantFull=QL!=='low'&&!dark&&!!stageFiles(id,true);   /* Ironhowl 3 models have no full version */
+  stageModel(id,false,dark).then(o=>{if(seq!==STG.seq)return;stagePut(o,false);BAY.yaw=.6;BAY.pitch=.12;BAY.auto=true;
+    if(wantFull){STG.pct=0;BLM.onProgress=(u,a,b)=>{if(seq===STG.seq){STG.pct=Math.round(100*a/Math.max(1,b));briefSub();}};
+      stageModel(id,true,false).then(F=>{if(seq!==STG.seq){F.traverse(q=>{if(q.isMesh)q.geometry.dispose();});return;}stagePut(F,true);STG.pct=-1;briefSub();})
+        .catch(err=>{console.warn('full model',id,err);STG.pct=-1;briefSub();});}
+    briefSub();}).catch(err=>{console.error('stage',id,err);});}
+/* ---------- opening and closing (the bay's own open/close, in another mode) ---------- */
+function viewOpen(mode){bayInit();stageInit();BAY.mode=mode;BAY.open=true;BAY.prev=G.mode;if(mode!=='brief')G.mode='bay';BAY.changed=false;BAY.sel=null;
+  for(const id of ['title','results','down'])$(id).dataset.was=$(id).style.display,$(id).style.display='none';
+  $('bay').style.display='block';document.body.classList.add('inbay');$('bayload').style.display='none';
+  if(BAY.W)BAY.W.root.visible=false;STG.grp.visible=true;for(const s in BAY.marks)BAY.marks[s].visible=false;
+  $('bayup').style.display='none';$('bayscrap').textContent='';if(document.pointerLockElement)document.exitPointerLock();}
+function viewClose(){STG.seq++;stageClear();if(STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayup').style.display='';$('baydone').textContent='DONE';BAY.mode='bay';}
+
+/* ---------- intel brief ---------- */
+const BRF={list:[],sel:0,sub:'',done:null};
+/* comp: {machine id: how many}. Returns true if a brief opened. */
+function briefMaybe(comp,label,force){if(G.mode!=='play'||BAY.open)return false;const ids=Object.keys(comp).filter(id=>comp[id]>0&&FOE_INFO[id]);
+  const fresh=ids.filter(id=>!RUNSEEN.has(id));if(!fresh.length&&!force)return false;ids.forEach(id=>RUNSEEN.add(id));
+  const list=ids.map(id=>({id,n:comp[id],fresh:fresh.includes(id)})).sort((a,b)=>FOE_ORDER.indexOf(a.id)-FOE_ORDER.indexOf(b.id));
+  const tot=list.reduce((a,q)=>a+q.n,0);BRF.list=list;BRF.sel=Math.max(0,list.findIndex(q=>q.fresh));
+  const fn=list.filter(q=>q.fresh&&EDEF[q.id]&&EDEF[q.id].boss).map(q=>FOE_INFO[q.id].name);BRF.after=fn[0]||label||'';
+  BRF.sub=(label?label+' · ':'')+(fn.length?fn.join(', ')+' INBOUND':tot+(tot===1?' MACHINE':' MACHINES')+' HEADED YOUR WAY');
+  viewOpen('brief');$('bayname').querySelector('b').textContent='INTEL BRIEF';$('baydone').textContent='DEPLOY';
+  if(fn.length)sBriefBoss();else sClick();briefUI();return true;}
+function briefSub(){if(!BAY.open)return;if(BAY.mode==='brief')$('baysub').textContent=BRF.sub+(STG.pct>=0?' · FULL DETAIL '+STG.pct+'%':'');
+  else if(BAY.mode==='book')$('baysub').textContent=BOOK.sub+(STG.pct>=0?' · FULL DETAIL '+STG.pct+'%':'');}
+function briefUI(){const L=BRF.list,q=L[BRF.sel];
+  $('bayslots').innerHTML=L.map((it,i)=>'<button data-i="'+i+'"'+(i===BRF.sel?' class="on"':'')+'>'+it.n+' × '+FOE_INFO[it.id].name+(it.fresh&&EDEF[it.id]&&EDEF[it.id].boss?' ★':'')+'</button>').join('');
+  $('bayslots').querySelectorAll('button').forEach(b=>b.onclick=e=>{e.stopPropagation();BRF.sel=+b.dataset.i;briefUI();});
+  const on=$('bayslots').querySelector('.on');if(on)on.scrollIntoView({inline:'center',block:'nearest'});
+  $('baycard').innerHTML=foeCard(q.id,q.n);if(STG.id!==q.id)stageShow(q.id,false);briefSub();}
+function foeCard(id,n){const I=FOE_INFO[id],d=EDEF[id]||{},hp=I.hp||d.hp,sp=I.speed!=null?I.speed:d.speed,scr=I.scrap!=null?I.scrap:d.scrap;
+  return '<b>'+I.name+'</b><span class="role"><i class="cls">'+I.cls+'</i> '+I.fight+'</span>'+
+    statRows([['HIT POINTS',(hp||0).toLocaleString('en-US')],['TOP SPEED',sp?sp+' m/s':'does not move'],['ATTACK',I.atk],['SIZE',I.size],['SCRAP',scr?scr+' a wreck':'—']].concat(n?[['COMING',n]]:[]))+
+    '<span class="live">'+I.tip+'</span>';}
+function briefDone(){viewClose();closeBay();if(!touchy&&G.mode==='play')lockMouse();if(BRF.after)HUD.banner(BRF.after);   /* the banner it covered */if(BRF.done){const f=BRF.done;BRF.done=null;f();}}
+function sBriefBoss(){thump(70,30,.6,.35,0,0);tone('sawtooth',220,110,.5,.05);}
+
+/* ---------- armory book ---------- */
+const BOOK={tab:'kit',sel:'ac',sub:''};
+function openBook(){viewOpen('book');$('bayname').querySelector('b').textContent='ARMORY BOOK';bookUI();}
+function bookUI(){const sv=SAVE.get(),beat=sv.beaten||{},open=BOOK_KIT.filter(k=>kitOpen(k)).length,met=BOOK_FOES.filter(k=>beat[k]).length;
+  BOOK.sub='KIT '+open+' OF '+BOOK_KIT.length+' OPEN · MACHINES '+met+' OF '+BOOK_FOES.length+' BEATEN';
+  const chip=(id,txt,lock)=>'<button data-k="'+id+'"'+(BOOK.sel===id?' class="on"':lock?' class="dim"':'')+'>'+txt+'</button>';
+  $('bayslots').innerHTML=BOOK_KIT.map(k=>chip(k,KIT_INFO[k].name.split(' ').slice(1).join(' '),!kitOpen(k))).join('')+'<i class="sep"></i>'+
+    BOOK_FOES.map(k=>chip(k,beat[k]?FOE_INFO[k].name:'???',!beat[k])).join('');
+  $('bayslots').querySelectorAll('button').forEach(b=>b.onclick=e=>{e.stopPropagation();BOOK.sel=b.dataset.k;bookUI();});
+  const on=$('bayslots').querySelector('.on');if(on)on.scrollIntoView({inline:'center',block:'nearest'});
+  const id=BOOK.sel,isKit=!!KIT_INFO[id];let dark=false,html='';
+  if(isKit){const I=KIT_INFO[id],lv=PILOT.kit[id]||1,L=loadout(),on_=SLOTS.filter(s=>L[s]===id).map(s=>(BAY_SLOTS.find(b=>b.s===s)||{n:s}).n);
+    html='<b>'+I.name+'</b><span class="role">'+I.role+'</span>'+statRows(I.stats)+'<span class="live">'+
+      (kitOpen(id)?(on_.length?'FITTED: '+on_.join(' · '):'OPEN · FIT IT IN THE MOD BAY'):'UNLOCKS AT PILOT LEVEL '+lv+' · '+Math.max(0,PILOT.lv[lv-1]-PL.xp).toLocaleString('en-US')+' XP TO GO')+'</span>';
+    dark=!kitOpen(id);}
+  else if(beat[id])html=foeCard(id)+'<span class="live">DESTROYED: '+(beat[id]===true?1:beat[id]).toLocaleString('en-US')+'</span>';
+  else{dark=true;html='<b>???</b><span class="role">NOT YET BEATEN. Destroy one to add its card.</span>';}
+  $('baycard').innerHTML=html;if(STG.id!==id||STG.dark!==dark){STG.dark=dark;stageShow(id,dark);}briefSub();}
+
+/* ---- 06m_pilot.js ---- */
+/* ===================== Ironhowl 4: pilot levels (session 4) =====================
+   XP comes from every machine you destroy (its score, without the combo), every wave you clear (100 + 50 a wave) and every
+   mission you finish (half its bonus), in every mode. 10 levels. Levels 2-5 open kit for the modification bay, levels 6-10
+   bring AI assists (on by themselves once earned). Saved in hd-ironhowl4-save: xp, beaten (machines destroyed, for the
+   armory book), unlockAll (the bay's TEST: UNLOCK ALL switch, for trying everything before you've earned it). */
+const PILOT={lv:[0,2000,5000,9000,14000,20000,27000,35000,44000,54000],   /* XP at the start of levels 1..10 */
+  kit:{ac:1,mpod:1,jetpack:1,ln:2,watcher:3,ar:4,drone:5},
+  assists:[{lv:6,id:'vent',name:'AUTO-VENT',fx:'The autocannon vents by itself just before it overheats.'},
+    {lv:7,id:'lock',name:'LOCK ASSIST',fx:'Missile lock 25% faster.'},
+    {lv:8,id:'repair',name:'FIELD REPAIR',fx:'The drone also repairs during fights (1 hull a second), and 3 a second after.'},
+    {lv:9,id:'hover',name:'HOVER RESERVE',fx:'Hover tank 45 s.'},
+    {lv:10,id:'ace',name:'ACE',fx:'Every weapon +10% damage.'}]};
+const PL={xp:0,lv:1,all:false,run:0,ups:[]};
+function pilotRefresh(){const sv=SAVE.get();PL.xp=sv.xp||0;PL.all=!!sv.unlockAll;PL.lv=pilotLv(PL.xp);}
+function pilotLv(x){let l=1;for(let i=1;i<PILOT.lv.length;i++)if(x>=PILOT.lv[i])l=i+1;return l;}
+function kitOpen(id){return !id||PL.all||PL.lv>=(PILOT.kit[id]||1);}
+function assistOn(id){const a=PILOT.assists.find(q=>q.id===id);return !!a&&(PL.all||PL.lv>=a.lv);}
+/* what a level opens, in words */
+function levelGives(l){const k=Object.keys(PILOT.kit).filter(id=>PILOT.kit[id]===l).map(id=>KIT_INFO[id].name.split(' ').slice(1).join(' '));
+  const a=PILOT.assists.filter(q=>q.lv===l).map(q=>q.name);return k.concat(a);}
+function addXP(n,why){if(G.mode!=='play'||!(n>0))return;n=Math.round(n);const sv=SAVE.get(),was=pilotLv(sv.xp||0);sv.xp=(sv.xp||0)+n;SAVE.put(sv);PL.run+=n;pilotRefresh();
+  if(PL.lv>was){for(let l=was+1;l<=PL.lv;l++)PL.ups.push(l);const g=levelGives(PL.lv),kit=Object.keys(PILOT.kit).some(id=>PILOT.kit[id]===PL.lv);
+    HUD.banner('PILOT LEVEL '+PL.lv);HUD.msg(g.length?g.join(' + ')+(kit?' UNLOCKED · FIT IT IN THE MOD BAY':' ONLINE'):'LEVEL UP',3.2);
+    tone('triangle',520,1040,.35,.07);setTimeout(()=>tone('triangle',780,1560,.4,.07),160);applyAssists();}}
+/* a machine destroyed: XP, and its card for the armory book */
+function pilotKill(key,score){if(G.mode!=='play')return;const sv=SAVE.get();sv.beaten=sv.beaten||{};sv.beaten[key]=(+sv.beaten[key]||0)+1;SAVE.put(sv);addXP(score);}
+function pilotRunStart(){PL.run=0;PL.ups=[];RUNSEEN=new Set();pilotRefresh();
+  /* a level reached last run may have opened kit that the default loadout carries: fit it now */
+  if(M&&M.W){const L=loadout();if(SLOTS.some(s=>(M.W.kit[s]||null)!==(L[s]||null)))refitKit(M);}}
+/* the AI assists that work through numbers (the others are checked where they act) */
+function applyAssists(){UP.lockK=assistOn('lock')?.75:1;UP.repairK=assistOn('repair')?1.5:1;UP.hoverK=assistOn('hover')?1.5:1;UP.dmgK=(UP.dmgK0||1)*(assistOn('ace')?1.1:1);}
+/* the line under the title, and the results */
+function pilotLine(){const l=PL.lv,nx=PILOT.lv[l],k=nx?(PL.xp-PILOT.lv[l-1])/(nx-PILOT.lv[l-1]):1;
+  return '<b>PILOT LV '+l+'</b><span>'+(nx?(nx-PL.xp).toLocaleString('en-US')+' XP TO LV '+(l+1)+(levelGives(l+1).length?' · '+levelGives(l+1).join(' + '):''):'TOP LEVEL')+'</span><i><em style="width:'+(k*100).toFixed(1)+'%"></em></i>';}
+function pilotRows(){const r=[['XP',(PL.run>0?'+':'')+PL.run.toLocaleString('en-US')+' · PILOT LV '+PL.lv]];
+  if(PL.ups.length)r.push(['UNLOCKED',PL.ups.map(l=>levelGives(l).join(' + ')||('LV '+l)).join(' · ')]);return r;}
+function titlePilot(){const el=$('tpilot');if(el)el.innerHTML=pilotLine();}
+pilotRefresh();
 
 /* ---- 07_fx.js ---- */
 /* ===================== particles: one system, smoke blends normally, glow adds light (premultiplied alpha) ===================== */
@@ -2632,10 +2807,11 @@ function playerDown(){if(P.dead)return;P.dead=true;P.thrust=0;boom(P.x,P.y+2.5,P
   G.mode='down';G.downT=2.4;
   if(MISSION){const can=missionDown();$('dscore').textContent=can?'REPAIRS LEFT '+MS.repairs:'NO REPAIRS LEFT';$('dgo').textContent=can?'TAP TO REPAIR AT THE CHECKPOINT':'';if(!can)G.downT=99;return;}
   $('dgo').textContent='TAP TO GO AGAIN';const best=+store.get('best',0);if(G.score>best)store.set('best',G.score);
-  $('dscore').textContent='SCORE '+G.score.toLocaleString('en-US')+'  ·  WAVE '+G.wave+'  ·  BEST '+Math.max(best,G.score).toLocaleString('en-US');
+  $('dscore').textContent='SCORE '+G.score.toLocaleString('en-US')+'  ·  WAVE '+G.wave+'  ·  BEST '+Math.max(best,G.score).toLocaleString('en-US')+'  ·  +'+PL.run.toLocaleString('en-US')+' XP · PILOT LV '+PL.lv;
   ARC.over(G.score,Math.min(60,Math.floor(G.score/400)+G.wave));}
 function fpsLabel(){$('mfps').textContent='FRAME RATE: '+(SET.fps?'ON':'OFF');$('fps').style.display=SET.fps?'block':'none';}
-function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();if(MISSION)startMission();
+function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();pilotRunStart();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();if(MISSION)startMission();
+  else briefMaybe(WAVES[0],'WAVE 1');   /* IH4: the intel brief before the sandbox's first wave */
   if(!touchy){lockMouse();HUD.hint('WASD MOVE · MOUSE AIM · SPACE JET HOP, HOLD TO HOVER · V CAMERA · ESC PAUSE',9);}else HUD.hint('LEFT THUMB MOVES · RIGHT THUMB AIMS · JET TO HOP, HOLD TO HOVER',7);}
 function startDemo(){resetRun();G.mode='demo';G.paused=false;G.demoI=1;$('title').style.display='none';HUD.menu();Object.assign(DM,{spawnT:4,viewT:9,orbT:20,orbit:0,view:'far'});CAMX=null;$('attract').style.display='block';}
 /* attract mode: walk the trail, hop now and then */
@@ -2741,7 +2917,7 @@ function setupTitle(){
   $('mlback').onclick=e=>{e.stopPropagation();$('mlist').style.display='none';};
   $('rnext').onclick=()=>{const q=new URLSearchParams(location.search);q.set('mission',MISSION.id+1);location.search=q.toString();};
   $('rretry').onclick=()=>location.reload();
-  $('bhang').onclick=e=>{e.stopPropagation();openBay();};$('rhang').onclick=e=>{e.stopPropagation();openBay();};$('hback').onclick=e=>{e.stopPropagation();$('hangar').style.display='none';};
+  $('bhang').onclick=e=>{e.stopPropagation();openBay();};$('bbook').onclick=e=>{e.stopPropagation();openBook();};titlePilot();$('rhang').onclick=e=>{e.stopPropagation();openBay();};$('hback').onclick=e=>{e.stopPropagation();$('hangar').style.display='none';};
   $('rmenu').onclick=()=>{const q=new URLSearchParams(location.search);q.delete('mission');location.search=q.toString();};
 }
 boot();
