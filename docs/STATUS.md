@@ -6,7 +6,9 @@ ChatGPT's pictures and baked.
 
 **The game is being built** in `game/` (plan: `game/PLAN.md`, test build https://claude.ai/artifact/RebwJkoUiVQYwZoDqsX6tk).
 Session 1 done: the Wraith with its kit in the field and the modification bay. Session 2 done: the FORGE machines in every
-fight, the three bosses as waves 7–9, the new spawner pods in mission 5. Next: session 3, the kit's own behaviours.
+fight, the three bosses (sandbox waves 7–9, Endless heavy waves), the new spawner pods in mission 5. Session 3 done: the
+Lance's rail shot, the Arc's chain lightning, the Watcher's radar, marks, lock and warnings, the flying assist drone and the
+30 s hover. Next: session 4, the intel brief, the armory book and pilot levels.
 
 ## What the game has (all in `models/`)
 | Piece | Full model (triangles) | Combat model | Made by |
