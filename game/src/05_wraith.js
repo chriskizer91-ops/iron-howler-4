@@ -73,7 +73,7 @@ function rigKit(M){const W=M.W,_p=new THREE.Vector3();W.root.updateMatrixWorld(t
     hold.parent.getWorldQuaternion(q);const fwd=wf.applyQuaternion(q.invert()).normalize();
     const bb=localBox(hold),mz=new THREE.Object3D();hold.add(mz);bb.getCenter(_p);
     const ax=['x','y','z'].sort((a,b)=>Math.abs(fwd[b])-Math.abs(fwd[a]))[0];_p[ax]=fwd[ax]>0?bb.max[ax]:bb.min[ax];mz.position.copy(_p);
-    return {sh:arm,muzzle:mz,hold,base:hold.position.clone(),fwd,kick:0,sd:i?1:-1};});
+    return {sh:arm,muzzle:mz,hold,base:hold.position.clone(),fwd,kick:0,sd:i?1:-1,kind:W.kit[s]};});
   M.pods=[];for(const s of ['sh_R','sh_L']){const h=W.holds[s];if(h&&W.kit[s]==='mpod')for(let i=0;i<9;i++){const t=h.getObjectByName('tube'+i);if(t)M.pods.push(t);}}
   if(!M.pods.length)M.pods=[W.J.sh_R,W.J.sh_L];
   M.jets=[];const jp=W.holds.bk;

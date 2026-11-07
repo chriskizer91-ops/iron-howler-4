@@ -15,11 +15,16 @@ const HUD={_c:{},
   hit(fx,fz,kind){const a=Math.atan2(fx-P.x,fz-P.z),rel=angD(a,P.yaw+Math.PI);const d=$('dmg'+(HUD._di=(HUD._di+1||0)%4));
     d.className='dmg '+kind;d.style.transform='rotate('+(-rel)+'rad)';d.style.opacity=1;clearTimeout(d._t);d._t=setTimeout(()=>d.style.opacity=0,450);
     if(kind==='h'){const v=$('vig');v.style.opacity=.55;clearTimeout(v._t);v._t=setTimeout(()=>v.style.opacity=0,180);}},
+  /* a yellow arc at the screen edge (Watcher): something is about to hit you from there */
+  warn(fx,fz){const a=Math.atan2(fx-P.x,fz-P.z),rel=angD(a,P.yaw+Math.PI);const d=$('dmg'+(HUD._di=(HUD._di+1||0)%4));
+    if(DEV)window.__wc=(window.__wc||0)+1;d.className='dmg w';d.style.transform='rotate('+(-rel)+'rad)';d.style.opacity=1;clearTimeout(d._t);d._t=setTimeout(()=>d.style.opacity=0,700);},
   frame(){
     if(!P)return;
     this.set('bshield','width',(P.shield/P.shieldMax*100).toFixed(0)+'%');this.set('bhull','width',(P.hull/P.hullMax*100).toFixed(0)+'%');
     this.set('bhull','cls',P.hull<30?'low':'');
-    this.set('gtier','text','GUN '+ROMAN[GUN.tier]);this.set('mslc','text','MSL '+MSL.ammo);this.set('bmsl','text','MSL '+MSL.ammo);
+    {const k=M&&M.ready?M.arms.map(A=>A.kind||'ac'):['ac'],t=[];if(k.includes('ac'))t.push('GUN '+ROMAN[GUN.tier]);if(k.includes('ln'))t.push('LANCE');if(k.includes('ar'))t.push('ARC');this.set('gtier','text',t.join(' · '));}
+    this.set('hov','cls',P.hovering?'on act':P.hov<.999?'on':'');this.set('hovb','width',(P.hov*100).toFixed(0)+'%');
+    kitHud();this.set('mslc','text','MSL '+MSL.ammo);this.set('bmsl','text','MSL '+MSL.ammo);
     this.set('score','text',G.score.toLocaleString('en-US'));if(!MISSION)this.set('obj','text','');const cm=G.t-G.lastKill<3&&G.combo>1;this.set('combo','text',cm?'x'+Math.min(3,1+.25*(G.combo-1)).toFixed(2).replace(/\.?0+$/,''):'');
     this.set('heatb','width',GUN.heat.toFixed(0)+'%');this.set('heat','cls',GUN.over?'over':GUN.heat>70?'warm':'');
     this.set('cross','cls',GUN.hitT>0?'hit':AIM.e?'on':'');

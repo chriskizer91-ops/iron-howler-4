@@ -46,6 +46,18 @@ button:active{background:#ffb34733}
 .dmg{position:fixed;left:50%;top:50%;width:0;height:0;opacity:0;transition:opacity .3s;pointer-events:none}
 .dmg:before{content:"";position:absolute;left:-60px;top:calc(-1 * min(38vh,38vw));width:120px;height:14px;border-radius:50%;background:radial-gradient(#ff3b30,transparent 70%)}
 .dmg.s:before{background:radial-gradient(#7cc4ff,transparent 70%)}
+.dmg.w:before{background:radial-gradient(#ffd23a,transparent 70%);height:18px}
+/* IH4 kit HUD: Lance charge, hover tank, Watcher radar and marks */
+#lch{position:fixed;left:50%;top:50%;width:54px;height:3px;margin:25px 0 0 -27px;border-radius:2px;background:#ffffff1f;overflow:hidden;pointer-events:none;opacity:0;transition:opacity .15s}
+#lch.on{opacity:1}#lchb{height:100%;width:0;background:#8fd0ff}#lch.full #lchb{background:#e8f6ff;box-shadow:0 0 6px #8fd0ff}
+#hov{display:none;width:65px;height:4px;margin-top:5px;border-radius:2px;background:#ffffff1f;overflow:hidden}#hov.on{display:block}#hovb{display:block;height:100%;width:100%;background:#ffb347}#hov.act #hovb{background:#ffd98a;box-shadow:0 0 6px #ffb347}
+#radar{display:none;position:fixed;left:auto;right:max(12px,env(safe-area-inset-right));top:calc(max(10px,env(safe-area-inset-top)) + 46px);width:84px;height:84px;pointer-events:none;opacity:.9}
+.mk{display:none;position:fixed;left:0;top:0;width:0;height:0;pointer-events:none}
+.mk i{position:absolute;left:-7px;top:-12px;width:10px;height:10px;border:2px solid #ff4a3acc;border-top:none;border-left:none;transform:rotate(45deg)}
+.mk.boss i{border-color:#ffd76a;left:-9px;width:14px;height:14px;top:-16px}
+.mk.locking i{border-color:#ffb347;opacity:calc(.4 + var(--lk) * .6)}
+.mk.lock i{border:2px solid #ffb347;background:#ffb34755;transform:rotate(45deg) scale(1.15)}
+.mk.dr i{box-shadow:0 0 6px #7cf0ff}
 .ea{display:none;position:fixed;left:50%;top:50%;width:0;height:0;pointer-events:none}
 .ea:before{content:"";position:absolute;left:-9px;top:calc(-1 * min(42vh,44vw));border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:13px solid #ff3b30cc}
 #vig{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;background:radial-gradient(transparent 55%,#ff1a0080)}
@@ -98,9 +110,9 @@ body.inbay>*:not(#bay):not(#gl):not(#hangar):not(script){visibility:hidden!impor
 #dev{position:fixed;left:12px;top:40px;font:11px monospace;color:#7f7;pointer-events:none;text-shadow:0 0 3px #000}
 </style></head><body>
 <canvas id="gl"></canvas>
-<div id="top"><div id="stat"><div class="bar"><b id="bshield"></b></div><div class="bar"><b id="bhull"></b></div><div id="fuel"></div><div id="gline"><span id="gtier">GUN I</span><span id="mslc">MSL 12</span><span id="salvoc" class="rdy">SALVO Q</span></div></div><div class="btns"><button id="bview">CLOSE</button><button id="bpause">II</button></div></div>
+<div id="top"><div id="stat"><div class="bar"><b id="bshield"></b></div><div class="bar"><b id="bhull"></b></div><div id="fuel"></div><div id="hov"><b id="hovb"></b></div><div id="gline"><span id="gtier">GUN I</span><span id="mslc">MSL 12</span><span id="salvoc" class="rdy">SALVO Q</span></div></div><div class="btns"><button id="bview">CLOSE</button><button id="bpause">II</button></div></div>
 <div id="mid"><div id="score">0</div><div id="combo"></div><div id="obj"></div></div><div id="radio"></div><div id="wp"><i></i><span id="wpd"></span></div>
-<div id="vig"></div><div id="cross"></div><div id="heat"><div id="heatb"></div></div><div id="msg"></div><div id="banner"></div>
+<div id="vig"></div><div id="cross"></div><div id="heat"><div id="heatb"></div></div><div id="lch"><div id="lchb"></div></div><canvas id="radar" width="84" height="84"></canvas><div id="msg"></div><div id="banner"></div>
 <div class="dmg" id="dmg0"></div><div class="dmg" id="dmg1"></div><div class="dmg" id="dmg2"></div><div class="dmg" id="dmg3"></div><div class="ea" id="ea0"></div><div class="ea" id="ea1"></div><div class="ea" id="ea2"></div><div class="ea" id="ea3"></div><div class="ea" id="ea4"></div><div class="ea" id="ea5"></div>
 <button id="bfire" class="tb">FIRE</button><button id="bjet" class="tb">JET</button><button id="bmsl" class="tb">MSL</button><button id="bvent" class="tb">VENT</button><button id="bsalvo" class="tb">SALVO</button>
 <div id="stick"><div id="knob"></div></div>
@@ -119,7 +131,7 @@ body.inbay>*:not(#bay):not(#gl):not(#hangar):not(script){visibility:hidden!impor
 <div id="title" class="ov"><div class="logo">IRONHOWL 4</div><div class="sub" id="tsub">SANDBOX · PICK A PLACE</div><div id="tbrief"></div>
   <div class="trow"><button id="bmis" style="display:none">MISSIONS</button><button id="bend">ENDLESS</button><button id="bhang">MOD BAY</button></div><div id="maps"><button data-map="woods">WOODS</button><button data-map="field">FIELD</button><button data-map="docks">DOCKS</button><button data-map="foundry">FOUNDRY</button></div><button id="bmenu" style="display:none">MENU</button>
   <div class="go" id="tgo">CLICK OR TAP TO START</div>
-  <div class="keys desk">WASD MOVE · MOUSE AIM · CLICK FIRE · RIGHT CLICK MISSILES · Q SALVO · R VENT · SPACE JET HOP · V CAMERA</div>
+  <div class="keys desk">WASD MOVE · MOUSE AIM · CLICK FIRE · RIGHT CLICK MISSILES · Q SALVO · R VENT · SPACE JET HOP (HOLD TO HOVER) · V CAMERA</div>
   <div class="keys tch">LEFT THUMB MOVES · RIGHT THUMB AIMS · HOLD FIRE AND DRAG IT TO AIM · PLAY SIDEWAYS</div></div>
 <div id="load" class="ov"><div class="logo">IRONHOWL 4</div><div class="bar"><div id="ldbar"></div></div></div>
 <script src="js/three-ih3.min.js"></script>

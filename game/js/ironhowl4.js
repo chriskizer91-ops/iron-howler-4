@@ -843,7 +843,7 @@ function rigKit(M){const W=M.W,_p=new THREE.Vector3();W.root.updateMatrixWorld(t
     hold.parent.getWorldQuaternion(q);const fwd=wf.applyQuaternion(q.invert()).normalize();
     const bb=localBox(hold),mz=new THREE.Object3D();hold.add(mz);bb.getCenter(_p);
     const ax=['x','y','z'].sort((a,b)=>Math.abs(fwd[b])-Math.abs(fwd[a]))[0];_p[ax]=fwd[ax]>0?bb.max[ax]:bb.min[ax];mz.position.copy(_p);
-    return {sh:arm,muzzle:mz,hold,base:hold.position.clone(),fwd,kick:0,sd:i?1:-1};});
+    return {sh:arm,muzzle:mz,hold,base:hold.position.clone(),fwd,kick:0,sd:i?1:-1,kind:W.kit[s]};});
   M.pods=[];for(const s of ['sh_R','sh_L']){const h=W.holds[s];if(h&&W.kit[s]==='mpod')for(let i=0;i<9;i++){const t=h.getObjectByName('tube'+i);if(t)M.pods.push(t);}}
   if(!M.pods.length)M.pods=[W.J.sh_R,W.J.sh_L];
   M.jets=[];const jp=W.holds.bk;
@@ -914,9 +914,12 @@ function poseMech(M,st,dt){
 const WALK=7.5,RAD=1.35;
 /* jet hop: vh = sideways speed, vy = launch speed, hold = how long holding JET keeps pushing, refill = seconds per fuel cell */
 const JET={vh:30,vy:11,grav:22,hold:.9,holdG:.35,refill:3.2,drain:.55};   /* tap: about 30 m, hold: about 55 m */
+/* IH4 hover (JP-2 jet pack): keep holding JET after the hop's push, or press it again while falling, and the Wraith holds its
+   height; the stick moves it at up to 9 m/s. 30 s of hover in a full tank; the tank refills on the ground in 12 s. */
+const HOV={time:30,refill:12,speed:9};
 let P=null;
 function mkPlayer(){return {x:SPAWN.x,z:SPAWN.z,y:hgt(SPAWN.x,SPAWN.z),yaw:SPAWN.yaw,pitch:0,legYaw:SPAWN.yaw,vx:0,vz:0,vy:0,air:false,
-  cells:2,fuel:2,jetT:9,land:0,thrust:0,spd:0,groundT:9,ev:[],hops:0,dist:0,hull:100,hullMax:100,shield:60,shieldMax:60,regenT:0,dead:false};}
+  cells:2,fuel:2,hov:1,hovering:false,jetT:9,land:0,thrust:0,spd:0,groundT:9,ev:[],hops:0,dist:0,hull:100,hullMax:100,shield:60,shieldMax:60,regenT:0,dead:false};}
 function updPlayer(c,dt){
   if(P.dead){P.thrust=0;return;}
   /* shield comes back after 3 s without a hit */
@@ -933,15 +936,20 @@ function updPlayer(c,dt){
   if(P.air){
     P.jetT+=dt;const hold=c.jet&&P.jetT<JET.hold&&P.fuel>.02;
     if(hold)P.fuel=Math.max(0,P.fuel-JET.drain*dt);
-    P.vy-=JET.grav*(hold?JET.holdG:1)*dt;
+    const hov=c.jet&&!hold&&P.jetT>.3&&P.hov>0&&kitHas('jetpack');
+    if(hov&&!P.hovering)P.ev.push({t:'hover'});P.hovering=hov;
+    if(hov){P.hov=Math.max(0,P.hov-dt/(HOV.time*(UP.hoverK||1)));P.vy+=(Math.sin(G.t*2.2)*.25-P.vy)*damp(3.5,dt);
+      const k=damp(1.8,dt);P.vx+=(wx*HOV.speed-P.vx)*k;P.vz+=(wz*HOV.speed-P.vz)*k;
+      if(P.hov<=0){P.ev.push({t:'hoverout'});}}
+    else{P.vy-=JET.grav*(hold?JET.holdG:1)*dt;
     /* a little steering in the air */
-    P.vx+=wx*5*dt;P.vz+=wz*5*dt;const hv=Math.hypot(P.vx,P.vz);if(hv>JET.vh*1.05){P.vx*=JET.vh*1.05/hv;P.vz*=JET.vh*1.05/hv;}
-    P.thrust+=((P.jetT<.28?1:hold?.75:0)-P.thrust)*damp(14,dt);
+    P.vx+=wx*5*dt;P.vz+=wz*5*dt;const hv=Math.hypot(P.vx,P.vz);if(hv>JET.vh*1.05){P.vx*=JET.vh*1.05/hv;P.vz*=JET.vh*1.05/hv;}}
+    P.thrust+=((P.jetT<.28?1:hold?.75:hov?.6:0)-P.thrust)*damp(14,dt);
     P.y+=P.vy*dt;
   }else{
     const tx=wx*WALK,tz=wz*WALK,k=damp(Math.hypot(P.vx,P.vz)>WALK*1.1?2.6:ml>.05?3.4:5.5,dt);
     P.vx+=(tx-P.vx)*k;P.vz+=(tz-P.vz)*k;P.thrust+=(0-P.thrust)*damp(10,dt);P.groundT+=dt;
-    if(P.groundT>.6)P.fuel=Math.min(P.cells,P.fuel+dt/JET.refill);
+    if(P.groundT>.6){P.fuel=Math.min(P.cells,P.fuel+dt/JET.refill);P.hov=Math.min(1,P.hov+dt/HOV.refill);}P.hovering=false;
   }
   /* move, then push out of tree trunks and keep inside the map */
   let nx=P.x+P.vx*dt,nz=P.z+P.vz*dt;
@@ -1026,9 +1034,11 @@ function updGun(c,dt){
   updSalvo(c,dt);
   GUN.cd-=dt;GUN.ventCd=Math.max(0,GUN.ventCd-dt);GUN.flash=Math.max(0,GUN.flash-dt*12);GUN.hitT=Math.max(0,GUN.hitT-dt);
   if(M.ready)setTier(M,GUN.tier);
-  const firing=c.fire&&!GUN.over&&!P.dead;
+  /* IH4: only the arms that carry an autocannon fire gun rounds (the Lance and the Arc are in 06k_kit.js); one autocannon arm fires at 60 % of the pair's rate */
+  const AC=M.ready?M.arms.filter(a=>!a.kind||a.kind==='ac'):[null],firing=c.fire&&!GUN.over&&!P.dead&&AC.length>0;
+  kitArms(c,dt);
   if(firing&&GUN.cd<=0){
-    const t=GUN.tier,A=M.ready?M.arms[GUN.side]:null;GUN.cd+=1/GUN.rate[t];if(GUN.cd<0)GUN.cd=0;GUN.side^=1;
+    const t=GUN.tier,A=AC[GUN.side%AC.length];GUN.cd+=1/(GUN.rate[t]*(AC.length<2?.6:1));if(GUN.cd<0)GUN.cd=0;GUN.side=(GUN.side+1)%AC.length;
     if(A){A.muzzle.getWorldPosition(_w);A.kick=1;}else _w.set(P.x,P.y+3.2,P.z);
     /* barrel offsets per tier, in the gun's own frame */
     const offs=t===1?[[0,0]]:t===2?[[-.11,0],[.11,0]]:t===3?[[-.12,-.07],[.12,-.07],[0,.13]]:[[.1,.1],[-.1,.1],[-.1,-.1],[.1,-.1]];
@@ -1045,7 +1055,7 @@ function updGun(c,dt){
     sGun(t);
   }else if(!firing){GUN.cool-=dt;if(GUN.cool<=0)GUN.heat=Math.max(0,GUN.heat-HEAT.cool*dt);}
   if(GUN.over){GUN.cool-=dt;if(GUN.cool<=0)GUN.heat=Math.max(0,GUN.heat-HEAT.cool*.8*dt);if(GUN.heat<=HEAT.resume)GUN.over=false;
-    if(M.ready&&Math.random()<dt*14){const A=M.arms[Math.random()<.5?0:1];A.muzzle.getWorldPosition(_w);part({x:_w.x,y:_w.y,z:_w.z,vx:(Math.random()-.5),vy:1.5+Math.random(),vz:(Math.random()-.5),life:1.2,s0:.4,s1:1.6,a:.35,col:[.85,.85,.88],drag:1});}}
+    if(M.ready&&AC.length&&Math.random()<dt*14){const A=AC[Math.random()*AC.length|0];A.muzzle.getWorldPosition(_w);part({x:_w.x,y:_w.y,z:_w.z,vx:(Math.random()-.5),vy:1.5+Math.random(),vz:(Math.random()-.5),life:1.2,s0:.4,s1:1.6,a:.35,col:[.85,.85,.88],drag:1});}}
   MFL.intensity=GUN.flash*90;
   /* vent: dump all heat with a steam blast that shoves close enemies back */
   if(c.vent&&GUN.ventCd<=0&&!P.dead){GUN.ventCd=GUN.ventCool||8;GUN.heat=0;GUN.over=false;sVent();CAMS.shake=Math.max(CAMS.shake,.35);
@@ -1053,16 +1063,16 @@ function updGun(c,dt){
     for(let i=0;i<26;i++){const a=Math.random()*TAU,s=4+Math.random()*7;part({x:P.x+Math.cos(a)*1.2,y:P.y+1.5+Math.random()*2,z:P.z+Math.sin(a)*1.2,vx:Math.cos(a)*s,vy:.5+Math.random()*2,vz:Math.sin(a)*s,life:1.4+Math.random(),s0:1,s1:4.2,a:.4,col:[.92,.93,.95],drag:2.2,grav:-.4});}
     for(const e of EN){if(e.dead)continue;const dx=e.x-P.x,dz=e.z-P.z,d=Math.hypot(dx,dz)||1;if(d<10){hurtEnemy(e,15,e.x,e.y+1,e.z);e.kx+=dx/d*16*(1-d/12);e.kz+=dz/d*16*(1-d/12);}}}
   /* missiles: tap to fire a salvo at the enemies nearest the crosshair */
-  MSL.cd-=dt;
+  MSL.cd-=dt;updLock(dt);updWarn(dt);
   if(c.msl&&!P.dead){
     if(MSL.ammo<=0||MSL.cd>0){if(MSL.ammo<=0){sClick();HUD.msg('NO MISSILES',1);}}
-    else{MSL.cd=.7;cam.getWorldDirection(_v);
-      const cand=EN.filter(e=>!e.dead&&e.spawnT<=0).map(e=>{const ex=e.x-cam.position.x,ey=e.y+e.d.cy-cam.position.y,ez=e.z-cam.position.z,d=Math.hypot(ex,ey,ez);return {e,d,a:Math.acos(clamp((ex*_v.x+ey*_v.y+ez*_v.z)/d,-1,1))};})
-        .filter(o=>o.a<.6&&o.d<120).sort((a,b)=>a.a-b.a);
-      const n=Math.min(MSL.salvo,MSL.ammo);for(let i=0;i<n;i++){const tg=cand.length?cand[i%cand.length].e:null,pod=M.ready?M.pods[i%2]:null;
+    else{MSL.cd=.7;
+      /* IH4: locked machines first (06k_kit.js); a missile at a locked machine turns hard, at one not yet locked gently */
+      const cand=lockCands();
+      const n=Math.min(MSL.salvo,MSL.ammo);for(let i=0;i<n;i++){const tg=cand.length?cand[i%cand.length]:null,pod=M.ready?M.pods[i%2]:null;
         if(pod)pod.getWorldPosition(_w);else _w.set(P.x,P.y+4.4,P.z);
         const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
-        MISS.push({x:_w.x,y:_w.y,z:_w.z,vx:fx*14+(i%2?3:-3),vy:9,vz:fz*14,t:0,tg,life:4.5,ax:AIM.x,ay:AIM.y,az:AIM.z,delay:i*.09});}
+        MISS.push({x:_w.x,y:_w.y,z:_w.z,vx:fx*14+(i%2?3:-3),vy:9,vz:fz*14,t:0,tg,life:4.5,ax:AIM.x,ay:AIM.y,az:AIM.z,delay:i*.09,turn:tg&&tg.lk>=1?4.2:1.7});}
       MSL.ammo-=n;sMissile();}
   }
 }
@@ -1081,7 +1091,7 @@ function updShots(dt){
     if(m.tg&&m.tg.dead)m.tg=null;
     const tx=m.tg?m.tg.x:m.ax,ty=m.tg?m.tg.y+m.tg.d.cy:m.ay,tz=m.tg?m.tg.z:m.az;
     if(m.t>m.delay+.25){/* home in */const sp=Math.min(62,Math.hypot(m.vx,m.vy,m.vz)+60*dt);let dx=tx-m.x,dy=ty-m.y,dz=tz-m.z;const dl=Math.hypot(dx,dy,dz)||1;
-      const k=Math.min(1,dt*4.2);let vx=m.vx/sp,vy=m.vy/sp,vz=m.vz/sp;const cl=Math.hypot(m.vx,m.vy,m.vz)||1;vx=m.vx/cl;vy=m.vy/cl;vz=m.vz/cl;
+      const k=Math.min(1,dt*(m.turn||4.2));let vx=m.vx/sp,vy=m.vy/sp,vz=m.vz/sp;const cl=Math.hypot(m.vx,m.vy,m.vz)||1;vx=m.vx/cl;vy=m.vy/cl;vz=m.vz/cl;
       vx+=(dx/dl-vx)*k;vy+=(dy/dl-vy)*k;vz+=(dz/dl-vz)*k;const nl=Math.hypot(vx,vy,vz)||1;m.vx=vx/nl*sp;m.vy=vy/nl*sp;m.vz=vz/nl*sp;}
     else m.vy-=6*dt;
     m.x+=m.vx*dt;m.y+=m.vy*dt;m.z+=m.vz*dt;
@@ -1251,7 +1261,7 @@ function updEnemies(dt){
         mvx=-dx/dist;mvz=-dz/dist;sp=e.d.speed*.85;want=face;if(e.t>.5){e.st='move';e.t=0;}}
       else if(dist>2.8){const nd=navDir(e.x,e.z);mvx=nd[0];mvz=nd[1];want=Math.atan2(-mvx,-mvz);
         const s=Math.sin(e.t*3+e.phase)*.5;mvx+=-nd[1]*s;mvz+=nd[0]*s;}
-      else if(e.cd<=0&&!P.dead){e.cd=1.2;e.st='hop';e.t=0;hurtPlayer(e.d.zap||4,e.x,e.z);sZap();sparks(lerp(e.x,P.x,.6),e.y+1.2,lerp(e.z,P.z,.6),6,[.6,.85,1]);}
+      else if(e.cd<=0&&!P.dead&&P.y-hgt(P.x,P.z)<3){e.cd=1.2;e.st='hop';e.t=0;hurtPlayer(e.d.zap||4,e.x,e.z);sZap();sparks(lerp(e.x,P.x,.6),e.y+1.2,lerp(e.z,P.z,.6),6,[.6,.85,1]);}
     }else if(e.id==='hound'){
       if(e.st==='move'){if(dist<6.5+e.d.r){/* IH4: too close to charge, so back off to one side facing you, then come again (it used to cling) */
           mvx=-dx/dist-dz/dist*e.strafe*.8;mvz=-dz/dist+dx/dist*e.strafe*.8;want=face;}
@@ -2022,17 +2032,17 @@ const KIT_INFO={
   ac:{name:'AC-4 AUTOCANNON',role:'Forearm. The main gun: heats up as it fires, VENT dumps the heat. Power chips raise it a tier.',
     stats:[['BARRELS','1 to 4 (tiers I-IV)'],['RATE','6 to 9 a second'],['DAMAGE','11 a shot at tier I'],['RANGE','170 m'],['GUIDANCE','aim assist']],live:'IN THE FIELD NOW'},
   ln:{name:'LN-1 LANCE',role:'Forearm. Rail cannon: hold to charge, one long-range shot that pierces.',
-    stats:[['CHARGE','1.2 s'],['DAMAGE','120'],['RANGE','260 m'],['PIERCES','3 machines'],['GUIDANCE','none']],live:'RAIL SHOT COMES NEXT UPDATE (FIRES GUN ROUNDS FOR NOW)'},
+    stats:[['CHARGE','1.2 s'],['DAMAGE','120'],['RANGE','260 m'],['PIERCES','3 machines'],['GUIDANCE','none']],live:'IN THE FIELD NOW · HOLD FIRE TO CHARGE'},
   ar:{name:'AR-1 ARC',role:'Forearm. Short-range lightning that jumps between nearby machines. For swarms.',
-    stats:[['RANGE','35 m'],['JUMPS','4 machines'],['DAMAGE','14 a jump'],['RATE','4 a second'],['GUIDANCE','nearest machine']],live:'LIGHTNING COMES NEXT UPDATE (FIRES GUN ROUNDS FOR NOW)'},
-  mpod:{name:'MP-9 MISSILE POD',role:'Shoulder. Nine tubes: locks onto machines in front of you and fires a salvo.',
+    stats:[['RANGE','35 m'],['JUMPS','4 machines'],['DAMAGE','14 a jump'],['RATE','4 a second'],['GUIDANCE','nearest machine']],live:'IN THE FIELD NOW'},
+  mpod:{name:'MP-9 MISSILE POD',role:'Shoulder. Nine tubes: keep a machine near the crosshair to lock it, then fire. Locked missiles turn hard.',
     stats:[['SALVO','2 (8 with upgrades)'],['AMMO','12'],['LOCK','0.6 s'],['GUIDANCE','heat-seeking'],['RANGE','180 m']],live:'IN THE FIELD NOW (MISSILES NEED ONE)'},
   watcher:{name:'WT-1 WATCHER',role:'Shoulder. Sensor pod: radar, marks targets, faster missile lock, warns of incoming fire.',
-    stats:[['RADAR','220 m'],['MISSILE LOCK','40% faster'],['MARKS','8 targets'],['WARNING','incoming fire']],live:'ITS ASSISTS COME NEXT UPDATE'},
-  jetpack:{name:'JP-2 JET PACK',role:'Back. Jet hops now; a hover of about 30 s next. Carries the drone.',
-    stats:[['FUEL CELLS','2 (4 with upgrades)'],['HOP','30 m tap, 55 m hold'],['HOVER','about 30 s'],['CARRIES','assist drone']],live:'HOPS IN THE FIELD NOW, HOVER NEXT UPDATE'},
+    stats:[['RADAR','220 m'],['MISSILE LOCK','40% faster'],['MARKS','8 targets'],['WARNING','incoming fire']],live:'IN THE FIELD NOW · RADAR AT THE TOP RIGHT'},
+  jetpack:{name:'JP-2 JET PACK',role:'Back. Jet hops; keep holding JET in the air to hover for about 30 s. Carries the drone.',
+    stats:[['FUEL CELLS','2 (4 with upgrades)'],['HOP','30 m tap, 55 m hold'],['HOVER','about 30 s'],['CARRIES','assist drone']],live:'IN THE FIELD NOW'},
   drone:{name:'DR-1 ASSIST DRONE',role:'Docks on the jet pack and flies beside you: small gun, marks targets, repairs between waves.',
-    stats:[['GUN','5 a shot, 3 a second'],['REPAIR','2 hull a second'],['SHIELD','40'],['RANGE','60 m']],live:'FLYING COMES NEXT UPDATE (DOCKED FOR NOW)'}};
+    stats:[['GUN','5 a shot, 3 a second'],['REPAIR','2 hull a second'],['SHIELD','40'],['RANGE','60 m']],live:'IN THE FIELD NOW · FLIES WHEN MACHINES COME CLOSE'}};
 const BAY_SLOTS=[{s:'fa_L',n:'LEFT ARM',o:['ac','ln','ar']},{s:'fa_R',n:'RIGHT ARM',o:['ac','ln','ar']},{s:'sh_L',n:'LEFT SHOULDER',o:['watcher','mpod',null]},
   {s:'sh_R',n:'RIGHT SHOULDER',o:['mpod','watcher',null]},{s:'bk',n:'BACK',o:['jetpack']},{s:'drone',n:'DRONE',o:['drone',null]}];
 const BAY={open:false,scene:null,cam:null,W:null,yaw:.55,pitch:.1,dist:14,ty:3.3,tgt:new THREE.Vector3(0,3.3,0),want:{x:0,y:3.3,z:0,d:14},sel:null,changed:false,
@@ -2230,6 +2240,198 @@ if(DEV)window.__ih4={spawnEnemy,EN,EDEF,F4,startWave,get P(){return P;},
   st(){return {mode:G.mode,dead:!!P.dead,paused:!!G.paused,hull:Math.round(P.hull),shield:Math.round(P.shield||0),score:G.score,kills:G.kills,banner:document.getElementById('banner').textContent,
     foes:EN.filter(e=>!e.dead).map(e=>(e.d.boss?e.d.boss:e.id)+':'+Math.round(e.hp)+'@'+Math.round(Math.hypot(e.x-P.x,e.z-P.z))+'m'+(e.st?'/'+e.st:''))};}};
 
+/* ---- 06k_kit.js ---- */
+/* ===================== Ironhowl 4: the kit's own behaviours (session 3) =====================
+   Each forearm fires its own weapon when you hold FIRE:
+     AC-4 autocannon  Ironhowl 3's gun (06b_weapons.js): heat, VENT, tiers. One autocannon arm fires at 60 % of the pair's rate.
+     LN-1 Lance       charges while FIRE is held (1.2 s) and fires by itself when full; let go early (past a quarter) for a weaker
+                      shot. A rail shot: instant, 260 m, goes through up to 3 machines (100 %, 80 %, 60 % of 120 damage).
+     AR-1 Arc         4 zaps a second at the machine nearest the crosshair within 35 m; each zap jumps on to the nearest machine
+                      within 12 m of the last, up to 4 machines, 14 damage each.
+   WT-1 Watcher (shoulder): radar (220 m), red marks on up to 8 machines, missile lock 40 % faster, a yellow warning at the screen
+     edge for shots and Hound charges coming from outside your view.
+   DR-1 assist drone: leaves the jet pack when machines come within 70 m and flies beside you; small gun (5 a shot, 3 a second,
+     60 m); between fights it repairs the hull (2 a second); its own 40 shield, and when that breaks it goes home to recharge.
+   JP-2 jet pack: keep holding JET after a hop and you hover (06_player.js): 30 s of hover per full tank, refilled on the ground. */
+const LANCE={charge:1.2,dmg:120,range:260,pierce:3,fall:[1,.8,.6],cool:.35};
+const ARCW={range:35,hop:12,jumps:4,dmg:14,rate:4,cone:.95};
+const WATCH={radar:220,marks:8,lockK:.6};   /* lockK: lock time multiplier (40 % faster) */
+const LOCK={time:.6,cone:.6,range:180};
+const DRN={gun:5,rate:3,range:60,repair:2,shield:40,wake:70,recharge:4};
+const KX={beams:[],bm:null,col:new THREE.Color(),m4:new THREE.Matrix4(),q:new THREE.Quaternion(),s:new THREE.Vector3(),p:new THREE.Vector3(),z:new THREE.Vector3(0,0,1),d:new THREE.Vector3()};
+const _ka=new THREE.Vector3(),_kb=new THREE.Vector3();
+function kitKind(i){const A=M&&M.ready&&M.arms[i];return A&&A.kind||'ac';}
+function kitHas(id){return !!(M&&M.W&&Object.values(M.W.kit).includes(id));}
+
+/* ---- beams: one instanced mesh of glowing cylinders for the rail shots, the lightning and the drone's repair beam ---- */
+function kitFxInit(){if(KX.bm)return;const g=new THREE.CylinderGeometry(1,1,1,6,1,true);g.rotateX(Math.PI/2);
+  const m=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false});
+  KX.bm=new THREE.InstancedMesh(g,m,400);KX.bm.instanceMatrix.setUsage(THREE.DynamicDrawUsage);KX.bm.setColorAt(0,KX.col.setRGB(0,0,0));
+  KX.bm.count=0;KX.bm.frustumCulled=false;KX.bm.renderOrder=4;S.add(KX.bm);}
+function beam(a,b,r,col,life){KX.beams.push({a:[a.x,a.y,a.z],b:[b.x,b.y,b.z],r,col,life,t:0});}
+/* a jagged line from a to b: n pieces, each corner pushed sideways by up to j metres */
+function bolt(a,b,r,col,life,j){const n=Math.max(3,Math.min(10,Math.round(a.distanceTo(b)/2.2)));let p=a.clone();
+  for(let i=1;i<=n;i++){const q=i===n?b.clone():a.clone().lerp(b,i/n).add(new THREE.Vector3((Math.random()-.5)*2*j,(Math.random()-.5)*2*j,(Math.random()-.5)*2*j));
+    beam(p,q,r,col,life);p=q;}}
+function updBeams(dt){if(!KX.bm)kitFxInit();const L=KX.beams;let n=0;
+  for(let i=L.length-1;i>=0;i--){const B=L[i];B.t+=dt;if(B.t>=B.life){L.splice(i,1);continue;}}
+  for(const B of L){if(n>=400)break;const f=1-B.t/B.life,a=B.a,b=B.b;KX.d.set(b[0]-a[0],b[1]-a[1],b[2]-a[2]);const len=KX.d.length();if(len<1e-3)continue;
+    KX.p.set((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2);KX.q.setFromUnitVectors(KX.z,KX.d.multiplyScalar(1/len));const r=B.r*(.4+.6*f);KX.s.set(r,r,len);
+    KX.m4.compose(KX.p,KX.q,KX.s);KX.bm.setMatrixAt(n,KX.m4);KX.bm.setColorAt(n,KX.col.setRGB(B.col[0]*f,B.col[1]*f,B.col[2]*f));n++;}
+  KX.bm.count=n;KX.bm.instanceMatrix.needsUpdate=true;if(KX.bm.instanceColor)KX.bm.instanceColor.needsUpdate=true;}
+function sRail(k){nz('highpass',5200,700,.5,.42*k+.12,1.4);thump(110,34,.35,.5*k+.15,0,0);tone('sawtooth',1400,90,.32,.07);}
+function sCharge(){tone('sine',180,1100,LANCE.charge,.05);}
+function sArc(){nz('bandpass',4200,1500,.09,.11,3);tone('square',1900,700,.06,.025);}
+let HOVS=0;function updHoverFx(dt){if(!P.hovering)return;HOVS-=dt;if(HOVS<=0){HOVS=.38;nz('bandpass',420,760,.45,.1,.8);}}
+function sWarn(){tone('square',1320,1320,.07,.05);setTimeout(()=>tone('square',1320,1320,.07,.05),110);}
+
+/* ---- the forearms: called from updGun every frame ---- */
+function kitArms(c,dt){if(!M||!M.ready)return;const hold=c.fire&&!P.dead;let lances=0;
+  M.arms.forEach((A,i)=>{if(A.kind==='ln')lanceArm(A,hold,dt,lances++);else if(A.kind==='ar')arcArm(A,hold,dt,i);});}
+function lanceArm(A,hold,dt,k){A.cd=Math.max(0,(A.cd||0)-dt);if(A.ch==null)A.ch=0;
+  if(hold&&A.cd<=0){if(!A.chg){A.chg=true;A.ch=k?-.125:0;if(!k)sCharge();}A.ch=Math.min(1,A.ch+dt/LANCE.charge*(UP.chargeK||1));if(A.ch>=1)railShot(A,1);}
+  else if(!hold&&A.chg){A.chg=false;if(A.ch>=.25)railShot(A,A.ch);A.ch=0;}
+  else if(!hold)A.ch=0;
+  /* the charge: a glow at the muzzle that grows, and sparks drawn into it */
+  if(!A.glow){A.glow=new THREE.Mesh(new THREE.SphereGeometry(1,12,8),new THREE.MeshBasicMaterial({color:new THREE.Color(.5,.8,1).multiplyScalar(4),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}));
+    A.glow.renderOrder=5;A.muzzle.add(A.glow);}
+  const ch=Math.max(0,A.ch||0);A.glow.visible=ch>0;if(ch>0){const s=.08+ch*.32+(ch>=.99?Math.random()*.06:0);A.glow.scale.setScalar(s/Math.max(1e-3,A.muzzle.getWorldScale(_kb).x));A.glow.material.opacity=.5+ch*.5;
+    if(Math.random()<dt*40*ch){A.muzzle.getWorldPosition(_ka);const a=Math.random()*TAU,b=Math.random()*TAU,r=1.2;
+      part({x:_ka.x+Math.cos(a)*r,y:_ka.y+Math.sin(b)*r,z:_ka.z+Math.sin(a)*r,vx:-Math.cos(a)*r*5,vy:-Math.sin(b)*r*5,vz:-Math.sin(a)*r*5,life:.2,s0:.25,s1:.05,a:1.5,col:[.55,.8,1],glow:true});}}}
+function railShot(A,k){A.muzzle.getWorldPosition(_ka);const s=_ka.clone();
+  const d=new THREE.Vector3(AIM.x-s.x,AIM.y-s.y,AIM.z-s.z);if(d.lengthSq()<1)d.set(-Math.sin(P.yaw),0,-Math.cos(P.yaw));d.normalize();
+  /* where it stops: the ground or a tree trunk (2 m steps, then 0.25 m) */
+  let len=LANCE.range;for(let t=2;t<=LANCE.range;t+=2){const x=s.x+d.x*t,y=s.y+d.y*t,z=s.z+d.z*t;if(y<hgt(x,z)||treeAt(x,z,y)){let u=t-2;while(u<t){u+=.25;const x2=s.x+d.x*u,y2=s.y+d.y*u,z2=s.z+d.z*u;if(y2<hgt(x2,z2)||treeAt(x2,z2,y2))break;}len=u;break;}}
+  const e1=s.clone().addScaledVector(d,len);
+  const hits=[];for(const e of EN){if(e.dead||e.spawnT>0)continue;const t=segSphere(s.x,s.y,s.z,e1.x,e1.y,e1.z,e.x,e.y+e.d.cy,e.z,e.d.r*1.1);if(t>=0)hits.push([t,e]);}
+  hits.sort((a,b)=>a[0]-b[0]);const dmg=LANCE.dmg*k*UP.dmgK*(UP.railK||1);
+  hits.slice(0,LANCE.pierce+(UP.pierce||0)).forEach(([t,e],i)=>{const hx=s.x+(e1.x-s.x)*t,hy=s.y+(e1.y-s.y)*t,hz=s.z+(e1.z-s.z)*t;
+    hurtEnemy(e,dmg*(LANCE.fall[i]||.6),hx,hy,hz);e.kx+=d.x*6*k;e.kz+=d.z*6*k;sparks(hx,hy,hz,10,[.6,.85,1]);});
+  const tg=hitTargets(s.x,s.y,s.z,e1.x,e1.y,e1.z);if(tg)hurtTarget(tg,dmg);
+  if(hits.length)GUN.hitT=.2;
+  /* the beam: a white core in a blue sleeve, a flash at the muzzle and where it lands */
+  beam(s,e1,.09+.07*k,[2.2,2.4,2.6],.22+.12*k);beam(s,e1,.3+.2*k,[.25,.55,1.3],.3+.15*k);
+  for(let i=0;i<3;i++)part({x:s.x+d.x*i*.6,y:s.y+d.y*i*.6,z:s.z+d.z*i*.6,vx:0,vy:0,vz:0,life:.1,s0:1.8-i*.4,s1:.6,a:2,col:[.7,.9,1],glow:true});
+  if(len<LANCE.range-1){sparks(e1.x,e1.y+.1,e1.z,8,[.6,.85,1]);part({x:e1.x,y:e1.y+.3,z:e1.z,vx:0,vy:1,vz:0,life:.9,s0:1,s1:3,a:.35,col:DUST,drag:1.5});}
+  A.kick=1.6;CAMS.shake=Math.max(CAMS.shake,.18+.15*k);MFL.position.copy(s);GUN.flash=1;sRail(k);A.ch=0;A.chg=false;A.cd=LANCE.cool;}
+function arcArm(A,hold,dt,i){if(A.cd==null)A.cd=i?.5/ARCW.rate:0;A.cd-=dt;if(!hold){A.cd=Math.max(A.cd,i?.5/ARCW.rate:0);return;}
+  if(A.cd>0)return;A.cd+=1/ARCW.rate;if(A.cd<0)A.cd=0;arcZap(A);}
+function arcZap(A){A.muzzle.getWorldPosition(_ka);const s=_ka.clone(),fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
+  const ok=e=>!e.dead&&e.spawnT<=0;
+  /* first: the machine under the crosshair if it is close enough, otherwise the one nearest the crosshair line in front of you */
+  let first=AIM.e&&ok(AIM.e)&&Math.hypot(AIM.e.x-P.x,AIM.e.z-P.z)<ARCW.range+AIM.e.d.r?AIM.e:null;
+  if(!first){let best=1e9;for(const e of EN){if(!ok(e))continue;const dx=e.x-P.x,dz=e.z-P.z,d=Math.hypot(dx,dz);if(d>ARCW.range+e.d.r)continue;
+    const ang=Math.acos(clamp((dx*fx+dz*fz)/(d||1),-1,1));if(ang>ARCW.cone)continue;const sc=ang+d/80;if(sc<best){best=sc;first=e;}}}
+  const col=[.35,.6,1.9],pts=[s];
+  if(!first){/* nothing to hit: a short crackle toward the crosshair, or the nearest spawner pod or target */
+    let tg=null,bd=ARCW.range;for(const t of TARGETS){if(t.dead)continue;const q=t.spheres[0],d=Math.hypot(q[0]-P.x,q[2]-P.z)-q[3];if(d<bd){const ang=Math.acos(clamp(((q[0]-P.x)*fx+(q[2]-P.z)*fz)/(Math.hypot(q[0]-P.x,q[2]-P.z)||1),-1,1));if(ang<ARCW.cone){bd=d;tg=t;}}}
+    if(tg){const q=tg.spheres[0],p=new THREE.Vector3(q[0],q[1],q[2]);bolt(s,p,.07,col,.11,.7);hurtTarget(tg,ARCW.dmg*UP.dmgK);sparks(p.x,p.y,p.z,4,[.6,.85,1]);}
+    else{const p=new THREE.Vector3(AIM.x,AIM.y,AIM.z).sub(s);p.setLength(Math.min(9,p.length()));p.add(s);bolt(s,p,.05,col,.08,.6);}
+    sArc();return;}
+  const hit=[first];let cur=first;
+  while(hit.length<ARCW.jumps+(UP.jumps||0)){let nx=null,bd=ARCW.hop;for(const e of EN){if(!ok(e)||hit.includes(e))continue;const d=Math.hypot(e.x-cur.x,e.z-cur.z)-e.d.r-cur.d.r;if(d<bd){bd=d;nx=e;}}
+    if(!nx)break;hit.push(nx);cur=nx;}
+  let p=s;for(const e of hit){const q=new THREE.Vector3(e.x+(Math.random()-.5)*e.d.r*.6,e.y+e.d.cy*(.6+Math.random()*.6),e.z+(Math.random()-.5)*e.d.r*.6);
+    bolt(p,q,.07,col,.11,Math.min(1.4,.08*p.distanceTo(q)+.3));bolt(p,q,.025,[1.6,1.8,2.2],.08,.3);
+    hurtEnemy(e,ARCW.dmg*UP.dmgK,q.x,q.y,q.z);sparks(q.x,q.y,q.z,4,[.6,.85,1]);p=q;}
+  part({x:s.x,y:s.y,z:s.z,vx:0,vy:0,vz:0,life:.08,s0:1.3,s1:.5,a:1.8,col:[.6,.8,1],glow:true});A.kick=.4;GUN.hitT=.12;sArc();}
+
+/* ---- missile lock (MP-9): a machine near the crosshair for 0.6 s is locked (0.36 s with the Watcher); missiles at locked
+   machines turn hard, missiles at others turn gently, and with nothing in front they fly at the crosshair ---- */
+function updLock(dt){const T=LOCK.time*(kitHas('watcher')?WATCH.lockK:1)*(UP.lockK||1);cam.getWorldDirection(_kb);
+  for(const e of EN){if(e.dead||e.spawnT>0){e.lk=0;continue;}const ex=e.x-cam.position.x,ey=e.y+e.d.cy-cam.position.y,ez=e.z-cam.position.z,d=Math.hypot(ex,ey,ez);
+    const a=Math.acos(clamp((ex*_kb.x+ey*_kb.y+ez*_kb.z)/(d||1),-1,1));e.lka=a;const inC=MSL.ammo>0&&kitHas('mpod')&&a<LOCK.cone&&d<LOCK.range;
+    const was=(e.lk||0)>=1;e.lk=inC?Math.min(1,(e.lk||0)+dt/T):Math.max(0,(e.lk||0)-dt*2);if(!was&&e.lk>=1)tone('sine',1500,1700,.05,.03);}}
+function lockCands(){return EN.filter(e=>!e.dead&&e.spawnT<=0&&e.lka<LOCK.cone&&Math.hypot(e.x-P.x,e.z-P.z)<LOCK.range).sort((a,b)=>((b.lk>=1)-(a.lk>=1))||(a.lka-b.lka));}
+
+/* ---- the Watcher's warnings: a yellow arc at the screen edge before a shot or a charge reaches you ---- */
+let WARN_T=0;
+function updWarn(dt){WARN_T-=dt;if(!kitHas('watcher')||P.dead)return;const cx=P.x,cy=P.y+3,cz=P.z;
+  for(const b of EBOLTS){if(b.warned)continue;const rx=cx-b.x,ry=cy-b.y,rz=cz-b.z,v2=b.vx*b.vx+b.vy*b.vy+b.vz*b.vz||1,t=(rx*b.vx+ry*b.vy+rz*b.vz)/v2;
+    if(t<0||t>1.1)continue;const mx=b.x+b.vx*t-cx,my=b.y+b.vy*t-cy,mz=b.z+b.vz*t-cz;if(mx*mx+my*my+mz*mz>16)continue;
+    b.warned=true;if(Math.abs(angD(Math.atan2(-(b.x-P.x),-(b.z-P.z)),P.yaw))<.6)continue;   /* only shots from outside your view */
+    HUD.warn(b.x-b.vx*.2,b.z-b.vz*.2);if(WARN_T<=0){WARN_T=.5;sWarn();}}
+  for(const e of EN){if(e.dead)continue;if(e.st==='aim'&&e.id==='hound'){if(!e.warned){e.warned=true;if(Math.abs(angD(Math.atan2(-(e.x-P.x),-(e.z-P.z)),P.yaw))<.6)continue;HUD.warn(e.x,e.z);if(WARN_T<=0){WARN_T=.5;sWarn();}}}else if(e.st!=='charge')e.warned=false;}}
+
+/* ---- the assist drone ---- */
+const DR={st:'dock',hold:null,P:null,sh:DRN.shield,cd:0,tg:null,t:0,pos:new THREE.Vector3(),fix:0,rep:0};
+function droneDockNow(){const h=DR.hold;if(!h)return;const dock=M&&M.W&&M.W.holds.bk&&M.W.holds.bk.getObjectByName('drone_dock');
+  if(dock&&h.parent!==dock){dock.add(h);}h.position.set(0,0,0);h.quaternion.identity();h.scale.set(1,1,1);DR.st='dock';DR.fix=0;}
+function updDrone(dt){const h=M&&M.ready&&M.W&&M.W.holds.drone;
+  if(h!==DR.hold||DR.P!==P){if(DR.hold&&DR.hold!==h&&DR.hold.parent)DR.hold.parent.remove(DR.hold);DR.hold=h||null;DR.P=P;DR.sh=DRN.shield;droneDockNow();}
+  if(!h)return;const dock=M.W.holds.bk&&M.W.holds.bk.getObjectByName('drone_dock');if(!dock)return;
+  const live=(G.mode==='play'&&!G.paused)||G.mode==='demo';if(!live){if(G.mode!=='play'&&DR.st!=='dock')droneDockNow();return;}
+  if(P.dead){if(DR.st!=='dock')droneDockNow();return;}
+  DR.t+=dt;DR.cd-=dt;
+  const near=EN.some(e=>!e.dead&&e.spawnT<=0&&Math.hypot(e.x-P.x,e.z-P.z)<DRN.wake),fix=!near&&P.hull<P.hullMax;
+  if(DR.st==='dock'){DR.sh=Math.min(DRN.shield,DR.sh+DRN.recharge*dt);
+    if((near||fix)&&DR.sh>=DRN.shield*.5){h.updateMatrixWorld(true);S.attach(h);DR.st='fly';DR.pos.copy(h.position);sJet();}
+    return;}
+  /* where it wants to be: beside your right shoulder, a little ahead; when repairing it circles you slowly */
+  const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw),rx=Math.cos(P.yaw),rz=-Math.sin(P.yaw);let want=new THREE.Vector3();
+  const goHome=DR.st==='home'||(!near&&!fix);
+  if(goHome){dock.getWorldPosition(want);}
+  else if(fix){const a=DR.t*.6;want.set(P.x+Math.cos(a)*4.2,P.y+5.2+Math.sin(DR.t*1.7)*.3,P.z+Math.sin(a)*4.2);}
+  else want.set(P.x+rx*2.7-fx*.4,P.y+7.8+Math.sin(DR.t*2.1)*.3,P.z+rz*2.7-fz*.4);   /* above your right shoulder: on screen on a phone too */
+  const k=damp(goHome?4.5:3,dt);h.position.lerp(want,k);
+  /* face the target (or the way you face), lean into the flight */
+  let tg=null;if(near&&!goHome){tg=AIM.e&&!AIM.e.dead&&Math.hypot(AIM.e.x-h.position.x,AIM.e.z-h.position.z)<DRN.range?AIM.e:null;
+    if(!tg){let bd=DRN.range;for(const e of EN){if(e.dead||e.spawnT>0)continue;const d=Math.hypot(e.x-h.position.x,e.z-h.position.z);if(d<bd){bd=d;tg=e;}}}}
+  DR.tg=tg;const yaw=tg?Math.atan2(-(tg.x-h.position.x),-(tg.z-h.position.z)):goHome?P.yaw:P.yaw;
+  const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(0,yaw,0));if(goHome){dock.getWorldQuaternion(q);}h.quaternion.slerp(q,damp(6,dt));
+  const gun=h.getObjectByName('gun');
+  if(tg){const mz=h.getObjectByName('muzzle')||h;mz.getWorldPosition(_ka);const ty=tg.y+tg.d.cy,d=Math.hypot(tg.x-_ka.x,tg.z-_ka.z);
+    if(gun)gun.rotation.x=clamp(Math.atan2(ty-_ka.y,d),-1,.4);
+    if(DR.cd<=0){DR.cd=1/DRN.rate;let ax=tg.x-_ka.x,ay=ty-_ka.y,az=tg.z-_ka.z;const l=Math.hypot(ax,ay,az)||1;ax/=l;ay/=l;az/=l;
+      BOLTS.push({x:_ka.x,y:_ka.y,z:_ka.z,vx:ax*BOLT.speed,vy:ay*BOLT.speed,vz:az*BOLT.speed,life:(DRN.range+10)/BOLT.speed,dmg:DRN.gun*UP.dmgK*(UP.droneK||1)});
+      part({x:_ka.x+ax*.2,y:_ka.y+ay*.2,z:_ka.z+az*.2,vx:0,vy:0,vz:0,life:.06,s0:.7,s1:.3,a:2,col:[1,.75,.4],glow:true});nz('bandpass',2600,900,.05,.08,1);}}
+  else if(gun)gun.rotation.x*=1-damp(4,dt);
+  /* repairs: a green beam to your hull */
+  if(fix&&!goHome&&h.position.distanceTo(want)<2.5){P.hull=Math.min(P.hullMax,P.hull+DRN.repair*(UP.repairK||1)*dt);const rp=h.getObjectByName('repair')||h;rp.getWorldPosition(_ka);
+    _kb.set(P.x+(Math.random()-.5)*1.5,P.y+3+Math.random()*1.5,P.z+(Math.random()-.5)*1.5);beam(_ka,_kb,.05,[.3,1.6,.55],.07);
+    if(Math.random()<dt*14)part({x:_kb.x,y:_kb.y,z:_kb.z,vx:0,vy:1,vz:0,life:.5,s0:.4,s1:.1,a:1.4,col:[.4,1,.5],glow:true});
+    DR.rep+=dt;if(DR.rep>2.5){DR.rep=0;HUD.msg('DRONE REPAIRING',1);}}
+  /* its shield: enemy shots that pass close hit the drone instead */
+  if(DR.st==='fly')for(let i=EBOLTS.length-1;i>=0;i--){const b=EBOLTS[i],dx=b.x-h.position.x,dy=b.y-h.position.y,dz=b.z-h.position.z;if(dx*dx+dy*dy+dz*dz<1.1){
+    DR.sh-=b.dmg;EBOLTS.splice(i,1);sparks(b.x,b.y,b.z,5,[.5,.8,1]);if(DR.sh<=0){DR.sh=0;DR.st='home';HUD.msg('DRONE SHIELD DOWN · RETURNING',1.4);sShield();}}}
+  /* home: dock when it reaches the jet pack */
+  if(goHome){dock.getWorldPosition(_kb);if(h.position.distanceTo(_kb)<.35){droneDockNow();return;}}
+  /* fans: a little tilt into the direction of flight */
+  for(const n of ['fan_L','fan_R']){const f=h.getObjectByName(n);if(f)f.rotation.x=Math.sin(DR.t*9+(n==='fan_L'?0:1))*.04-(goHome?0:.12);}}
+
+/* ---- the Watcher's HUD: radar, marks, the lock brackets; the Lance's charge bar ---- */
+const KH={marks:[],rt:0};
+function kitHud(){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitHas('mpod');
+  /* lance charge bar under the crosshair, only while charging */
+  let ch=0;for(const A of M.arms)if(A.kind==='ln')ch=Math.max(ch,A.ch||0);
+  HUD.set('lch','cls',ch>0?(ch>=.99?'on full':'on'):'');HUD.set('lchb','width',Math.round(ch*100)+'%');
+  /* the heat bar belongs to the autocannon */
+  const ac=M.arms.some(A=>A.kind==='ac'||!A.kind);$('heat').style.visibility=ac?'':'hidden';
+  /* radar (Watcher) */
+  const rd=$('radar');rd.style.display=W&&G.mode==='play'?'block':'none';
+  if(W&&G.mode==='play'&&(KH.rt-=1/60)<=0){KH.rt=.1;const cv=rd,g=cv.getContext('2d'),w=cv.width,r=w/2-3,k=r/WATCH.radar;g.clearRect(0,0,w,w);
+    g.fillStyle='rgba(8,14,18,.55)';g.beginPath();g.arc(w/2,w/2,r,0,TAU);g.fill();g.strokeStyle='rgba(124,240,255,.35)';g.lineWidth=1;
+    for(const f of [1,.5]){g.beginPath();g.arc(w/2,w/2,r*f,0,TAU);g.stroke();}
+    const sw=(G.t*1.6)%TAU;g.fillStyle='rgba(124,240,255,.10)';g.beginPath();g.moveTo(w/2,w/2);g.arc(w/2,w/2,r,sw-.5,sw);g.fill();
+    const c=Math.cos(P.yaw),s=Math.sin(P.yaw),pt=(x,z)=>{const dx=x-P.x,dz=z-P.z,u=dx*c-dz*s,v=dx*s+dz*c;return [w/2+u*k,w/2+v*k,Math.hypot(dx,dz)];};
+    if(MISSION&&!MS.done){const st=MISSION.steps[MS.step],p=st&&stepPos(st);if(p){let [x,y,d]=pt(p.x,p.z);if(d>WATCH.radar){x=w/2+(x-w/2)*WATCH.radar/d;y=w/2+(y-w/2)*WATCH.radar/d;}g.fillStyle='#7cf0ff';g.fillRect(x-2.5,y-2.5,5,5);}}
+    for(const t of TARGETS){if(t.dead)continue;const [x,y,d]=pt(t.x,t.z);if(d>WATCH.radar)continue;g.fillStyle='#ff9a3a';g.fillRect(x-3,y-3,6,6);}
+    for(const e of EN){if(e.dead||e.spawnT>0)continue;const [x,y,d]=pt(e.x,e.z);if(d>WATCH.radar)continue;const z=e.d.boss?3.6:e.id==='skitter'?1.6:2.4;
+      g.fillStyle=e.d.boss?'#ffd76a':'#ff4a3a';g.beginPath();g.arc(x,y,z,0,TAU);g.fill();}
+    g.fillStyle='#fff';g.beginPath();g.moveTo(w/2,w/2-5);g.lineTo(w/2+3.5,w/2+4);g.lineTo(w/2-3.5,w/2+4);g.closePath();g.fill();}
+  /* marks: the Watcher marks up to 8 machines on screen (bosses and gunners first); without it only the missile lock shows */
+  let list=[];if(G.mode==='play'){for(const e of EN){if(e.dead||e.spawnT>0)continue;const d=Math.hypot(e.x-P.x,e.z-P.z);
+    if(W?d<WATCH.radar:hasM&&(e.lk||0)>.02)list.push([e,(e.d.boss?0:e.id==='gunner'?1e3:2e3)+d]);}}
+  list.sort((a,b)=>a[1]-b[1]);list=list.slice(0,W?WATCH.marks:4);
+  while(KH.marks.length<8){const el=document.createElement('div');el.className='mk';el.innerHTML='<i></i>';document.body.appendChild(el);KH.marks.push(el);}
+  KH.marks.forEach((el,i)=>{const it=list[i];if(!it){if(el.style.display!=='none')el.style.display='none';return;}const e=it[0],sc=e.d.sc||1;
+    _ka.set(e.x,e.y+e.d.cy+e.d.r*.9+.6,e.z).project(cam);if(_ka.z>1||Math.abs(_ka.x)>1.05||Math.abs(_ka.y)>1.05){el.style.display='none';return;}
+    el.style.display='block';el.style.transform='translate('+((_ka.x*.5+.5)*innerWidth).toFixed(0)+'px,'+((-_ka.y*.5+.5)*innerHeight).toFixed(0)+'px)';
+    const lk=e.lk||0,cls='mk'+(e.d.boss?' boss':'')+(lk>=1?' lock':lk>.02?' locking':'')+(DR.tg===e?' dr':'');if(el.className!==cls)el.className=cls;
+    el.style.setProperty('--lk',lk.toFixed(2));});}
+if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas});
+  Object.defineProperties(I,{M:{get:()=>M},AIM:{get:()=>AIM}});}   /* getters: M is made later */
+
 /* ---- 07_fx.js ---- */
 /* ===================== particles: one system, smoke blends normally, glow adds light (premultiplied alpha) ===================== */
 const PFX={max:900,list:[],mesh:null};
@@ -2360,11 +2562,16 @@ const HUD={_c:{},
   hit(fx,fz,kind){const a=Math.atan2(fx-P.x,fz-P.z),rel=angD(a,P.yaw+Math.PI);const d=$('dmg'+(HUD._di=(HUD._di+1||0)%4));
     d.className='dmg '+kind;d.style.transform='rotate('+(-rel)+'rad)';d.style.opacity=1;clearTimeout(d._t);d._t=setTimeout(()=>d.style.opacity=0,450);
     if(kind==='h'){const v=$('vig');v.style.opacity=.55;clearTimeout(v._t);v._t=setTimeout(()=>v.style.opacity=0,180);}},
+  /* a yellow arc at the screen edge (Watcher): something is about to hit you from there */
+  warn(fx,fz){const a=Math.atan2(fx-P.x,fz-P.z),rel=angD(a,P.yaw+Math.PI);const d=$('dmg'+(HUD._di=(HUD._di+1||0)%4));
+    if(DEV)window.__wc=(window.__wc||0)+1;d.className='dmg w';d.style.transform='rotate('+(-rel)+'rad)';d.style.opacity=1;clearTimeout(d._t);d._t=setTimeout(()=>d.style.opacity=0,700);},
   frame(){
     if(!P)return;
     this.set('bshield','width',(P.shield/P.shieldMax*100).toFixed(0)+'%');this.set('bhull','width',(P.hull/P.hullMax*100).toFixed(0)+'%');
     this.set('bhull','cls',P.hull<30?'low':'');
-    this.set('gtier','text','GUN '+ROMAN[GUN.tier]);this.set('mslc','text','MSL '+MSL.ammo);this.set('bmsl','text','MSL '+MSL.ammo);
+    {const k=M&&M.ready?M.arms.map(A=>A.kind||'ac'):['ac'],t=[];if(k.includes('ac'))t.push('GUN '+ROMAN[GUN.tier]);if(k.includes('ln'))t.push('LANCE');if(k.includes('ar'))t.push('ARC');this.set('gtier','text',t.join(' · '));}
+    this.set('hov','cls',P.hovering?'on act':P.hov<.999?'on':'');this.set('hovb','width',(P.hov*100).toFixed(0)+'%');
+    kitHud();this.set('mslc','text','MSL '+MSL.ammo);this.set('bmsl','text','MSL '+MSL.ammo);
     this.set('score','text',G.score.toLocaleString('en-US'));if(!MISSION)this.set('obj','text','');const cm=G.t-G.lastKill<3&&G.combo>1;this.set('combo','text',cm?'x'+Math.min(3,1+.25*(G.combo-1)).toFixed(2).replace(/\.?0+$/,''):'');
     this.set('heatb','width',GUN.heat.toFixed(0)+'%');this.set('heat','cls',GUN.over?'over':GUN.heat>70?'warm':'');
     this.set('cross','cls',GUN.hitT>0?'hit':AIM.e?'on':'');
@@ -2429,7 +2636,7 @@ function playerDown(){if(P.dead)return;P.dead=true;P.thrust=0;boom(P.x,P.y+2.5,P
   ARC.over(G.score,Math.min(60,Math.floor(G.score/400)+G.wave));}
 function fpsLabel(){$('mfps').textContent='FRAME RATE: '+(SET.fps?'ON':'OFF');$('fps').style.display=SET.fps?'block':'none';}
 function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();if(MISSION)startMission();
-  if(!touchy){lockMouse();HUD.hint('WASD MOVE · MOUSE AIM · SPACE JET HOP · V CAMERA · ESC PAUSE',9);}else HUD.hint('LEFT THUMB MOVES · RIGHT THUMB AIMS · JET TO HOP',7);}
+  if(!touchy){lockMouse();HUD.hint('WASD MOVE · MOUSE AIM · SPACE JET HOP, HOLD TO HOVER · V CAMERA · ESC PAUSE',9);}else HUD.hint('LEFT THUMB MOVES · RIGHT THUMB AIMS · JET TO HOP, HOLD TO HOVER',7);}
 function startDemo(){resetRun();G.mode='demo';G.paused=false;G.demoI=1;$('title').style.display='none';HUD.menu();Object.assign(DM,{spawnT:4,viewT:9,orbT:20,orbit:0,view:'far'});CAMX=null;$('attract').style.display='block';}
 /* attract mode: walk the trail, hop now and then */
 function demoCtl(dt){const c={mx:0,my:0,turn:0,pitch:0,jet:false,jetHit:false},RT=MAPDEF.route||TRAIL;const t=RT[G.demoI];if(!t)return c;
@@ -2441,6 +2648,8 @@ function handleEvents(){
     if(e.t==='jet'){sJet();CAMS.shake=Math.max(CAMS.shake,.45);dustPuff(P.x,P.z,12,1.1);}
     else if(e.t==='land'){sLand(e.k);CAMS.shake=Math.max(CAMS.shake,.4+e.k*.6);dustPuff(P.x,P.z,10+e.k*16|0,.9+e.k*.7);}
     else if(e.t==='nofuel'){sClick();HUD.flashFuel();}
+    else if(e.t==='hover'){HUD.msg('HOVER',.7);}
+    else if(e.t==='hoverout'){sClick();HUD.msg('HOVER TANK EMPTY',1.1);}
   }
   P.ev.length=0;
 }
@@ -2462,6 +2671,7 @@ function tick(dt){
   else readCtl(dt);
   const fight=(G.mode==='play'&&!G.paused)||G.mode==='down'||G.mode==='demo';
   if(fight){updShots(dt);updEnemies(dt);updPickups(dt);}
+  updDrone(dt);updBeams(fight?dt:0);if(live)updHoverFx(dt);
   updRadio(dt);updRadioX(dt);if(NIGHT_ON&&M&&M.ready&&!M.lamp){M.lamp=new THREE.SpotLight(0xfff2d8,1600,110,.55,.6,1.4);M.lamp.position.set(0,.3,-.4);M.head.add(M.lamp);const t=new THREE.Object3D();t.position.set(0,-3,-30);M.head.add(t);M.lamp.target=t;}
   if(G.mode==='down'&&MISSION&&MS.failT>0){MS.failT-=dt;if(MS.failT<=0)finishMission(false);}
   if(G.mode==='down'){G.downT-=dt;if(G.downT<=0&&$('down').style.display!=='flex'){$('down').style.display='flex';}

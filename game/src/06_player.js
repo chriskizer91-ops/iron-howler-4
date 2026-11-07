@@ -2,9 +2,12 @@
 const WALK=7.5,RAD=1.35;
 /* jet hop: vh = sideways speed, vy = launch speed, hold = how long holding JET keeps pushing, refill = seconds per fuel cell */
 const JET={vh:30,vy:11,grav:22,hold:.9,holdG:.35,refill:3.2,drain:.55};   /* tap: about 30 m, hold: about 55 m */
+/* IH4 hover (JP-2 jet pack): keep holding JET after the hop's push, or press it again while falling, and the Wraith holds its
+   height; the stick moves it at up to 9 m/s. 30 s of hover in a full tank; the tank refills on the ground in 12 s. */
+const HOV={time:30,refill:12,speed:9};
 let P=null;
 function mkPlayer(){return {x:SPAWN.x,z:SPAWN.z,y:hgt(SPAWN.x,SPAWN.z),yaw:SPAWN.yaw,pitch:0,legYaw:SPAWN.yaw,vx:0,vz:0,vy:0,air:false,
-  cells:2,fuel:2,jetT:9,land:0,thrust:0,spd:0,groundT:9,ev:[],hops:0,dist:0,hull:100,hullMax:100,shield:60,shieldMax:60,regenT:0,dead:false};}
+  cells:2,fuel:2,hov:1,hovering:false,jetT:9,land:0,thrust:0,spd:0,groundT:9,ev:[],hops:0,dist:0,hull:100,hullMax:100,shield:60,shieldMax:60,regenT:0,dead:false};}
 function updPlayer(c,dt){
   if(P.dead){P.thrust=0;return;}
   /* shield comes back after 3 s without a hit */
@@ -21,15 +24,20 @@ function updPlayer(c,dt){
   if(P.air){
     P.jetT+=dt;const hold=c.jet&&P.jetT<JET.hold&&P.fuel>.02;
     if(hold)P.fuel=Math.max(0,P.fuel-JET.drain*dt);
-    P.vy-=JET.grav*(hold?JET.holdG:1)*dt;
+    const hov=c.jet&&!hold&&P.jetT>.3&&P.hov>0&&kitHas('jetpack');
+    if(hov&&!P.hovering)P.ev.push({t:'hover'});P.hovering=hov;
+    if(hov){P.hov=Math.max(0,P.hov-dt/(HOV.time*(UP.hoverK||1)));P.vy+=(Math.sin(G.t*2.2)*.25-P.vy)*damp(3.5,dt);
+      const k=damp(1.8,dt);P.vx+=(wx*HOV.speed-P.vx)*k;P.vz+=(wz*HOV.speed-P.vz)*k;
+      if(P.hov<=0){P.ev.push({t:'hoverout'});}}
+    else{P.vy-=JET.grav*(hold?JET.holdG:1)*dt;
     /* a little steering in the air */
-    P.vx+=wx*5*dt;P.vz+=wz*5*dt;const hv=Math.hypot(P.vx,P.vz);if(hv>JET.vh*1.05){P.vx*=JET.vh*1.05/hv;P.vz*=JET.vh*1.05/hv;}
-    P.thrust+=((P.jetT<.28?1:hold?.75:0)-P.thrust)*damp(14,dt);
+    P.vx+=wx*5*dt;P.vz+=wz*5*dt;const hv=Math.hypot(P.vx,P.vz);if(hv>JET.vh*1.05){P.vx*=JET.vh*1.05/hv;P.vz*=JET.vh*1.05/hv;}}
+    P.thrust+=((P.jetT<.28?1:hold?.75:hov?.6:0)-P.thrust)*damp(14,dt);
     P.y+=P.vy*dt;
   }else{
     const tx=wx*WALK,tz=wz*WALK,k=damp(Math.hypot(P.vx,P.vz)>WALK*1.1?2.6:ml>.05?3.4:5.5,dt);
     P.vx+=(tx-P.vx)*k;P.vz+=(tz-P.vz)*k;P.thrust+=(0-P.thrust)*damp(10,dt);P.groundT+=dt;
-    if(P.groundT>.6)P.fuel=Math.min(P.cells,P.fuel+dt/JET.refill);
+    if(P.groundT>.6){P.fuel=Math.min(P.cells,P.fuel+dt/JET.refill);P.hov=Math.min(1,P.hov+dt/HOV.refill);}P.hovering=false;
   }
   /* move, then push out of tree trunks and keep inside the map */
   let nx=P.x+P.vx*dt,nz=P.z+P.vz*dt;
