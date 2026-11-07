@@ -19,6 +19,11 @@ standing still, before (b9ee641) and after:
 
 One trade-off: the bay's full-detail Wraith is now freed when a run starts, so the first bay visit after a run loads it again.
 
+Tests after fixing: all six chapter 1 missions ran start to finish (MISSION COMPLETE each, CHAPTER 1 COMPLETE after 6);
+five rounds of 8 Gunners spawned and destroyed kept graphics memory flat (160 meshes, 49 textures, 47 shaders after each
+round); the brief frees its full models on DEPLOY (198 → 174 meshes); phone size (412 × 915): Endless MENU goes back to the
+sandbox, the bay, the brief and DEPLOY all work; the hosted build loads with the fast decoder and with the slow fallback.
+
 Status: **Confirmed** = traced in the code (and measured where noted). **Likely** = the reasoning holds, but it wasn't
 measured.
 

@@ -10,6 +10,7 @@ playable at the test link.
 - Run from the repo: serve the repo folder and open `game/index.html` (the models come from the repo's `models/`).
 - Saves: keys starting `hd-ironhowl4-` only. Arcade id `ironhowl4` (same cabinet messages as Ironhowl 3, `?embed=1`).
 - Build: `python3 game/build.py` joins `game/src/*.js` into `game/js/ironhowl4.js`.
+- One-file game (opens from the disk, no internet; source code inside at the end): `python3 game/tools/pack_single.py . Ironhowl4_game.html` (119 MB on 7 Nov).
 
 | Session | What gets built | What you can try at the end |
 |---|---|---|
