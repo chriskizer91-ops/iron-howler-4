@@ -62,8 +62,9 @@ function stageDress(id,sc,mat,dark){const N=n=>sc.getObjectByName(n),e={o:sc,mat
 function stageShow(id,dark){stageInit();const seq=++STG.seq;STG.id=id;STG.pct=-1;
   const wantFull=QL!=='low'&&!dark&&!!stageFiles(id,true);   /* Ironhowl 3 models have no full version */
   stageModel(id,false,dark).then(o=>{if(seq!==STG.seq)return;stagePut(o,false);BAY.yaw=.6;BAY.pitch=.12;BAY.auto=true;
-    if(wantFull){STG.pct=0;BLM.onProgress=(u,a,b)=>{if(seq===STG.seq){STG.pct=Math.round(100*a/Math.max(1,b));briefSub();}};
-      stageModel(id,true,false).then(F=>{if(seq!==STG.seq){F.traverse(q=>{if(q.isMesh)q.geometry.dispose();});return;}stagePut(F,true);STG.pct=-1;briefSub();})
+    if(wantFull){STG.pct=0;const url=stageFiles(id,true).glb;   /* the percentage follows the download's bytes (the loading manager only counts whole files) */
+      GLBP[url]=k=>{if(seq!==STG.seq)return;const n=Math.min(99,Math.round(k*100));if(n!==STG.pct){STG.pct=n;briefSub();}};
+      stageModel(id,true,false).then(F=>{delete GLBP[url];if(seq!==STG.seq){F.traverse(q=>{if(q.isMesh)q.geometry.dispose();});return;}stagePut(F,true);STG.pct=-1;briefSub();})
         .catch(err=>{console.warn('full model',id,err);STG.pct=-1;briefSub();});}
     briefSub();}).catch(err=>{console.error('stage',id,err);});}
 /* ---------- opening and closing (the bay's own open/close, in another mode) ---------- */

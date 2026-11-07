@@ -18,7 +18,7 @@ const DRN={gun:5,rate:3,range:60,repair:2,shield:40,wake:70,recharge:4};
 const KX={beams:[],bm:null,col:new THREE.Color(),m4:new THREE.Matrix4(),q:new THREE.Quaternion(),s:new THREE.Vector3(),p:new THREE.Vector3(),z:new THREE.Vector3(0,0,1),d:new THREE.Vector3()};
 const _ka=new THREE.Vector3(),_kb=new THREE.Vector3();
 function kitKind(i){const A=M&&M.ready&&M.arms[i];return A&&A.kind||'ac';}
-function kitHas(id){return !!(M&&M.W&&Object.values(M.W.kit).includes(id));}
+function kitHas(id){if(!M||!M.W)return false;const K=M.W.kit;for(const k in K)if(K[k]===id)return true;return false;}
 
 /* ---- beams: one instanced mesh of glowing cylinders for the rail shots, the lightning and the drone's repair beam ---- */
 function kitFxInit(){if(KX.bm)return;const g=new THREE.CylinderGeometry(1,1,1,6,1,true);g.rotateX(Math.PI/2);
@@ -50,7 +50,8 @@ function lanceArm(A,hold,dt,k){A.cd=Math.max(0,(A.cd||0)-dt);if(A.ch==null)A.ch=
   else if(!hold&&A.chg){A.chg=false;if(A.ch>=.25)railShot(A,A.ch);A.ch=0;}
   else if(!hold)A.ch=0;
   /* the charge: a glow at the muzzle that grows, and sparks drawn into it */
-  if(!A.glow){A.glow=new THREE.Mesh(new THREE.SphereGeometry(1,12,8),new THREE.MeshBasicMaterial({color:new THREE.Color(.5,.8,1).multiplyScalar(4),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}));
+  if(!A.glow){const si=A.sd>0?1:0;if(!KX.lg){KX.lg=new THREE.SphereGeometry(1,12,8);KX.lm=[0,1].map(()=>new THREE.MeshBasicMaterial({color:new THREE.Color(.5,.8,1).multiplyScalar(4),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}));}
+    A.glow=new THREE.Mesh(KX.lg,KX.lm[si]);   /* one shape and one material per side, kept across refits */
     A.glow.renderOrder=5;A.muzzle.add(A.glow);}
   const ch=Math.max(0,A.ch||0);A.glow.visible=ch>0;if(ch>0){const s=.08+ch*.32+(ch>=.99?Math.random()*.06:0);A.glow.scale.setScalar(s/Math.max(1e-3,A.muzzle.getWorldScale(_kb).x));A.glow.material.opacity=.5+ch*.5;
     if(Math.random()<dt*40*ch){A.muzzle.getWorldPosition(_ka);const a=Math.random()*TAU,b=Math.random()*TAU,r=1.2;
@@ -95,9 +96,9 @@ function arcZap(A){A.muzzle.getWorldPosition(_ka);const s=_ka.clone(),fx=-Math.s
 
 /* ---- missile lock (MP-9): a machine near the crosshair for 0.6 s is locked (0.36 s with the Watcher); missiles at locked
    machines turn hard, missiles at others turn gently, and with nothing in front they fly at the crosshair ---- */
-function updLock(dt){const T=LOCK.time*(kitHas('watcher')?WATCH.lockK:1)*(UP.lockK||1);cam.getWorldDirection(_kb);
+function updLock(dt){const T=LOCK.time*(kitHas('watcher')?WATCH.lockK:1)*(UP.lockK||1),pod=MSL.ammo>0&&kitHas('mpod');cam.getWorldDirection(_kb);
   for(const e of EN){if(e.dead||e.spawnT>0){e.lk=0;continue;}const ex=e.x-cam.position.x,ey=e.y+e.d.cy-cam.position.y,ez=e.z-cam.position.z,d=Math.hypot(ex,ey,ez);
-    const a=Math.acos(clamp((ex*_kb.x+ey*_kb.y+ez*_kb.z)/(d||1),-1,1));e.lka=a;const inC=MSL.ammo>0&&kitHas('mpod')&&a<LOCK.cone&&d<LOCK.range;
+    const a=Math.acos(clamp((ex*_kb.x+ey*_kb.y+ez*_kb.z)/(d||1),-1,1));e.lka=a;const inC=pod&&a<LOCK.cone&&d<LOCK.range;
     const was=(e.lk||0)>=1;e.lk=inC?Math.min(1,(e.lk||0)+dt/T):Math.max(0,(e.lk||0)-dt*2);if(!was&&e.lk>=1)tone('sine',1500,1700,.05,.03);}}
 function lockCands(){return EN.filter(e=>!e.dead&&e.spawnT<=0&&e.lka<LOCK.cone&&Math.hypot(e.x-P.x,e.z-P.z)<LOCK.range).sort((a,b)=>((b.lk>=1)-(a.lk>=1))||(a.lka-b.lka));}
 
@@ -111,52 +112,59 @@ function updWarn(dt){WARN_T-=dt;if(!kitHas('watcher')||P.dead)return;const cx=P.
   for(const e of EN){if(e.dead)continue;if(e.st==='aim'&&e.id==='hound'){if(!e.warned){e.warned=true;if(Math.abs(angD(Math.atan2(-(e.x-P.x),-(e.z-P.z)),P.yaw))<.6)continue;HUD.warn(e.x,e.z);if(WARN_T<=0){WARN_T=.5;sWarn();}}}else if(e.st!=='charge')e.warned=false;}}
 
 /* ---- the assist drone ---- */
-const DR={st:'dock',hold:null,P:null,sh:DRN.shield,cd:0,tg:null,t:0,pos:new THREE.Vector3(),fix:0,rep:0};
+const DR={st:'dock',hold:null,P:null,sh:DRN.shield,cd:0,tg:null,t:0,pos:new THREE.Vector3(),fix:0,rep:0,pt:{}};
+const _kw=new THREE.Vector3(),_kq=new THREE.Quaternion(),_ke=new THREE.Euler();
 function droneDockNow(){const h=DR.hold;if(!h)return;const dock=M&&M.W&&M.W.holds.bk&&M.W.holds.bk.getObjectByName('drone_dock');
   if(dock&&h.parent!==dock){dock.add(h);}h.position.set(0,0,0);h.quaternion.identity();h.scale.set(1,1,1);DR.st='dock';DR.fix=0;}
 function updDrone(dt){const h=M&&M.ready&&M.W&&M.W.holds.drone;
-  if(h!==DR.hold||DR.P!==P){if(DR.hold&&DR.hold!==h&&DR.hold.parent)DR.hold.parent.remove(DR.hold);DR.hold=h||null;DR.P=P;DR.sh=DRN.shield;droneDockNow();}
+  if(h!==DR.hold||DR.P!==P){if(DR.hold&&DR.hold!==h&&DR.hold.parent)DR.hold.parent.remove(DR.hold);DR.hold=h||null;DR.P=P;DR.sh=DRN.shield;droneDockNow();
+    DR.pt=h?{gun:h.getObjectByName('gun'),muzzle:h.getObjectByName('muzzle')||h,repair:h.getObjectByName('repair')||h,fans:['fan_L','fan_R'].map(n=>h.getObjectByName(n))}:{};}
   if(!h)return;const dock=M.W.holds.bk&&M.W.holds.bk.getObjectByName('drone_dock');if(!dock)return;
   const live=(G.mode==='play'&&!G.paused)||G.mode==='demo';if(!live){if(G.mode!=='play'&&DR.st!=='dock')droneDockNow();return;}
   if(P.dead){if(DR.st!=='dock')droneDockNow();return;}
   DR.t+=dt;DR.cd-=dt;
-  const near=EN.some(e=>!e.dead&&e.spawnT<=0&&Math.hypot(e.x-P.x,e.z-P.z)<DRN.wake),fix=!near&&P.hull<P.hullMax;
-  if(DR.st==='dock'){DR.sh=Math.min(DRN.shield,DR.sh+DRN.recharge*dt);
+  /* it wakes for a machine inside 70 m, and stays out until none is inside 80 m (no flying out and back at the edge) */
+  const wr=DR.st==='dock'?DRN.wake:DRN.wake+10;let near=false;for(const e of EN)if(!e.dead&&e.spawnT<=0&&(e.x-P.x)**2+(e.z-P.z)**2<wr*wr){near=true;break;}
+  const fix=!near&&P.hull<P.hullMax;
+  if(DR.st==='dock'||DR.st==='home')DR.sh=Math.min(DRN.shield,DR.sh+DRN.recharge*dt);   /* the shield recharges on the way home too */
+  if(DR.st==='dock'){
     if((near||fix)&&DR.sh>=DRN.shield*.5){h.updateMatrixWorld(true);S.attach(h);DR.st='fly';DR.pos.copy(h.position);sJet();}
     return;}
   /* where it wants to be: beside your right shoulder, a little ahead; when repairing it circles you slowly */
-  const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw),rx=Math.cos(P.yaw),rz=-Math.sin(P.yaw);let want=new THREE.Vector3();
+  const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw),rx=Math.cos(P.yaw),rz=-Math.sin(P.yaw),want=_kw;
   const goHome=DR.st==='home'||(!near&&!fix);
   if(goHome){dock.getWorldPosition(want);}
   else if(fix){const a=DR.t*.6;want.set(P.x+Math.cos(a)*4.2,P.y+5.2+Math.sin(DR.t*1.7)*.3,P.z+Math.sin(a)*4.2);}
   else want.set(P.x+rx*2.7-fx*.4,P.y+7.8+Math.sin(DR.t*2.1)*.3,P.z+rz*2.7-fz*.4);   /* above your right shoulder: on screen on a phone too */
-  const k=damp(goHome?4.5:3,dt);h.position.lerp(want,k);
+  if(goHome){   /* home: fly straight at the jet pack at least 30 m/s (faster than you can go), and dock once close */
+    const d=h.position.distanceTo(want);if(d<1.5){droneDockNow();return;}
+    h.position.addScaledVector(_kb.subVectors(want,h.position),Math.min(d,Math.max(d*damp(4.5,dt),30*dt))/d);}
+  else h.position.lerp(want,damp(3,dt));
   /* face the target (or the way you face), lean into the flight */
   let tg=null;if(near&&!goHome){tg=AIM.e&&!AIM.e.dead&&Math.hypot(AIM.e.x-h.position.x,AIM.e.z-h.position.z)<DRN.range?AIM.e:null;
     if(!tg){let bd=DRN.range;for(const e of EN){if(e.dead||e.spawnT>0)continue;const d=Math.hypot(e.x-h.position.x,e.z-h.position.z);if(d<bd){bd=d;tg=e;}}}}
   DR.tg=tg;const yaw=tg?Math.atan2(-(tg.x-h.position.x),-(tg.z-h.position.z)):goHome?P.yaw:P.yaw;
-  const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(0,yaw,0));if(goHome){dock.getWorldQuaternion(q);}h.quaternion.slerp(q,damp(6,dt));
-  const gun=h.getObjectByName('gun');
-  if(tg){const mz=h.getObjectByName('muzzle')||h;mz.getWorldPosition(_ka);const ty=tg.y+tg.d.cy,d=Math.hypot(tg.x-_ka.x,tg.z-_ka.z);
+  const q=_kq;if(goHome)dock.getWorldQuaternion(q);else q.setFromEuler(_ke.set(0,yaw,0));h.quaternion.slerp(q,damp(6,dt));
+  const gun=DR.pt.gun;
+  if(tg){DR.pt.muzzle.getWorldPosition(_ka);const ty=tg.y+tg.d.cy,d=Math.hypot(tg.x-_ka.x,tg.z-_ka.z);
     if(gun)gun.rotation.x=clamp(Math.atan2(ty-_ka.y,d),-1,.4);
     if(DR.cd<=0){DR.cd=1/DRN.rate;let ax=tg.x-_ka.x,ay=ty-_ka.y,az=tg.z-_ka.z;const l=Math.hypot(ax,ay,az)||1;ax/=l;ay/=l;az/=l;
       BOLTS.push({x:_ka.x,y:_ka.y,z:_ka.z,vx:ax*BOLT.speed,vy:ay*BOLT.speed,vz:az*BOLT.speed,life:(DRN.range+10)/BOLT.speed,dmg:DRN.gun*UP.dmgK*(UP.droneK||1)});
       part({x:_ka.x+ax*.2,y:_ka.y+ay*.2,z:_ka.z+az*.2,vx:0,vy:0,vz:0,life:.06,s0:.7,s1:.3,a:2,col:[1,.75,.4],glow:true});nz('bandpass',2600,900,.05,.08,1);}}
   else if(gun)gun.rotation.x*=1-damp(4,dt);
   /* repairs: a green beam to your hull */
-  if(fix&&!goHome&&h.position.distanceTo(want)<2.5){P.hull=Math.min(P.hullMax,P.hull+DRN.repair*(UP.repairK||1)*dt);const rp=h.getObjectByName('repair')||h;rp.getWorldPosition(_ka);
+  if(fix&&!goHome&&h.position.distanceTo(want)<2.5){P.hull=Math.min(P.hullMax,P.hull+DRN.repair*(UP.repairK||1)*dt);DR.pt.repair.getWorldPosition(_ka);
     _kb.set(P.x+(Math.random()-.5)*1.5,P.y+3+Math.random()*1.5,P.z+(Math.random()-.5)*1.5);beam(_ka,_kb,.05,[.3,1.6,.55],.07);
     if(Math.random()<dt*14)part({x:_kb.x,y:_kb.y,z:_kb.z,vx:0,vy:1,vz:0,life:.5,s0:.4,s1:.1,a:1.4,col:[.4,1,.5],glow:true});
     DR.rep+=dt;if(DR.rep>2.5){DR.rep=0;HUD.msg('DRONE REPAIRING',1);}}
   /* FIELD REPAIR (pilot level 8): it also mends the hull during a fight, 1 a second */
-  if(near&&!goHome&&assistOn('repair')&&P.hull<P.hullMax){P.hull=Math.min(P.hullMax,P.hull+dt);if(Math.random()<dt*3){const rp=h.getObjectByName('repair')||h;rp.getWorldPosition(_ka);_kb.set(P.x,P.y+3.5,P.z);beam(_ka,_kb,.04,[.3,1.4,.5],.08);}}
+  if(near&&!goHome&&assistOn('repair')&&P.hull<P.hullMax){P.hull=Math.min(P.hullMax,P.hull+dt);if(Math.random()<dt*3){DR.pt.repair.getWorldPosition(_ka);_kb.set(P.x,P.y+3.5,P.z);beam(_ka,_kb,.04,[.3,1.4,.5],.08);}}
   /* its shield: enemy shots that pass close hit the drone instead */
   if(DR.st==='fly')for(let i=EBOLTS.length-1;i>=0;i--){const b=EBOLTS[i],dx=b.x-h.position.x,dy=b.y-h.position.y,dz=b.z-h.position.z;if(dx*dx+dy*dy+dz*dz<1.1){
     DR.sh-=b.dmg;EBOLTS.splice(i,1);sparks(b.x,b.y,b.z,5,[.5,.8,1]);if(DR.sh<=0){DR.sh=0;DR.st='home';HUD.msg('DRONE SHIELD DOWN · RETURNING',1.4);sShield();}}}
-  /* home: dock when it reaches the jet pack */
-  if(goHome){dock.getWorldPosition(_kb);if(h.position.distanceTo(_kb)<.35){droneDockNow();return;}}
+
   /* fans: a little tilt into the direction of flight */
-  for(const n of ['fan_L','fan_R']){const f=h.getObjectByName(n);if(f)f.rotation.x=Math.sin(DR.t*9+(n==='fan_L'?0:1))*.04-(goHome?0:.12);}}
+  DR.pt.fans.forEach((f,i)=>{if(f)f.rotation.x=Math.sin(DR.t*9+i)*.04-(goHome?0:.12);});}
 
 /* ---- the Watcher's HUD: radar, marks, the lock brackets; the Lance's charge bar ---- */
 const KH={marks:[],rt:0};
@@ -188,5 +196,5 @@ function kitHud(){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitH
     el.style.display='block';el.style.transform='translate('+((_ka.x*.5+.5)*innerWidth).toFixed(0)+'px,'+((-_ka.y*.5+.5)*innerHeight).toFixed(0)+'px)';
     const lk=e.lk||0,cls='mk'+(e.d.boss?' boss':'')+(lk>=1?' lock':lk>.02?' locking':'')+(DR.tg===e?' dr':'');if(el.className!==cls)el.className=cls;
     el.style.setProperty('--lk',lk.toFixed(2));});}
-if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas,kill:e=>hurtEnemy(e,1e6,e.x,e.y,e.z),openBook,briefMaybe});
+if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas,kill:e=>hurtEnemy(e,1e6,e.x,e.y,e.z),openBook,briefMaybe,ev:s=>eval(s)});   /* ev: tests reach any of the game's own names (dev only) */
   Object.defineProperties(I,{M:{get:()=>M},AIM:{get:()=>AIM},PL:{get:()=>PL}});}   /* getters: M is made later */

@@ -45,7 +45,8 @@ function updPlayer(c,dt){
   const B=BND();if(nx<B.x0||nx>B.x1){nx=clamp(nx,B.x0,B.x1);P.vx*=.2;}if(nz<B.z0||nz>B.z1){nz=clamp(nz,B.z0,B.z1);P.vz*=.2;}
   P.dist+=Math.hypot(nx-P.x,nz-P.z);P.x=nx;P.z=nz;
   const g=hgt(P.x,P.z);
-  if(P.air){if(P.y<=g&&P.vy<0){const k=clamp(-P.vy/16,0,1.3);P.y=g;P.air=false;P.vy=0;P.groundT=0;P.land=Math.max(P.land,.18+k*.32);P.ev.push({t:'land',k});
+  if(P.air&&P.y<g&&P.vy>=0&&!P.hovering)P.y=g;   /* rising up a slope: ride over it, never into it */
+  if(P.air){if(P.y<=g&&(P.vy<0||P.hovering)){const k=clamp(-P.vy/16,0,1.3);P.y=g;P.air=false;P.vy=0;P.groundT=0;P.land=Math.max(P.land,.18+k*.32);P.ev.push({t:'land',k});
     /* stomp landing (jets upgrade 3): hurts machines under you */
     if(UP.stomp&&k>.35)for(const e of EN){if(e.dead||e.spawnT>0)continue;const d=Math.hypot(e.x-P.x,e.z-P.z);if(d<7){hurtEnemy(e,60*k*(1-d/9),e.x,e.y+1,e.z);e.kx+=(e.x-P.x)/(d||1)*12;e.kz+=(e.z-P.z)/(d||1)*12;}}}}
   else P.y=g;

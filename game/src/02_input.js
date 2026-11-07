@@ -6,7 +6,7 @@ const MOUSE={dx:0,dy:0,locked:false,l:false,rHit:false};
 addEventListener('mousedown',e=>{if(!MOUSE.locked)return;if(e.button===0)MOUSE.l=true;if(e.button===2)MOUSE.rHit=true;});
 addEventListener('mouseup',e=>{if(e.button===0)MOUSE.l=false;});
 addEventListener('contextmenu',e=>e.preventDefault());
-const TS={id:-1,ox:0,oy:0,ax:0,ay:0,look:-1,lx:0,ly:0,ldx:0,ldy:0,jet:false,jetHit:false,fire:false,fireId:-1,msl:false,vent:false,salvo:false};
+const TS={id:-1,ox:0,oy:0,ax:0,ay:0,look:-1,lx:0,ly:0,fx:0,fy:0,ldx:0,ldy:0,jet:false,jetHit:false,fire:false,fireId:-1,msl:false,vent:false,salvo:false};
 let PAD_PREV={};
 addEventListener('keydown',e=>{if(e.repeat)return;KEYS.add(e.code);HIT.add(e.code);if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();});
 addEventListener('keyup',e=>KEYS.delete(e.code));
@@ -32,7 +32,8 @@ function touchMove(e){if(BAY.open)return;
     if(t.identifier===TS.id){let dx=t.clientX-TS.ox,dy=t.clientY-TS.oy;const d=Math.hypot(dx,dy);
       if(d>STICK_R){/* the stick base follows the thumb so it never runs out of room */TS.ox+=dx/d*(d-STICK_R);TS.oy+=dy/d*(d-STICK_R);dx=t.clientX-TS.ox;dy=t.clientY-TS.oy;}
       TS.ax=dx/STICK_R;TS.ay=dy/STICK_R;HUD.stick(true,TS.ox,TS.oy,dx,dy);}
-    else if(t.identifier===TS.look||t.identifier===TS.fireId){TS.ldx+=t.clientX-TS.lx;TS.ldy+=t.clientY-TS.ly;TS.lx=t.clientX;TS.ly=t.clientY;}
+    else if(t.identifier===TS.look){TS.ldx+=t.clientX-TS.lx;TS.ldy+=t.clientY-TS.ly;TS.lx=t.clientX;TS.ly=t.clientY;}
+    else if(t.identifier===TS.fireId){TS.ldx+=t.clientX-TS.fx;TS.ldy+=t.clientY-TS.fy;TS.fx=t.clientX;TS.fy=t.clientY;}   /* the FIRE finger keeps its own last spot */
   }
   if(G.mode==='play')e.preventDefault();
 }

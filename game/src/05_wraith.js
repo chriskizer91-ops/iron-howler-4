@@ -23,8 +23,8 @@ function kitStem(id,slot){const k=KIT[id];return k.stem||(slot&&slot.endsWith('_
 /* files: combat model and its maps, or the full model and its print */
 function kitFiles(dir,stem,full,orm){const b=IH4M+dir+'/'+stem;
   return full?{glb:b+'_full.glb',map:b+'_full_print.webp'}:{glb:b+'_combat.glb',map:b+'_combat_albedo.webp',nrm:b+'_combat_normal.webp',orm:IH4M+dir+'/'+(orm||stem+'_combat_orm')+'.webp'};}
-const GLBC={},KMAT={};
-function loadGLB(url,lm){if(!GLBC[url])GLBC[url]=new Promise((res,rej)=>new THREE.GLTFLoader(lm||LM).load(url,g=>res(g.scene),undefined,rej));
+const GLBC={},GLBP={},KMAT={};   /* GLBP[url]: told how far a model's download has got (0..1) */
+function loadGLB(url,lm){if(!GLBC[url])GLBC[url]=new Promise((res,rej)=>new THREE.GLTFLoader(lm||LM).load(url,g=>res(g.scene),ev=>{const f=GLBP[url];if(f&&ev&&ev.total)f(ev.loaded/ev.total);},rej)).catch(e=>{delete GLBC[url];throw e;});   /* a failed load can be tried again */
   return GLBC[url].then(sc=>sc.clone(true));}
 function k4tex(url){const t=new THREE.TextureLoader(LM).load(url);t.flipY=false;t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;}
 function k4lin(url){const t=k4tex(url);t.colorSpace=THREE.NoColorSpace;return t;}
@@ -45,13 +45,13 @@ function buildWraithModel(full,world,lm){
   const wf=kitFiles(WRAITH.dir,WRAITH.stem,full);
   return loadGLB(wf.glb,lm).then(sc=>{dressModel(sc,kitMat(wf,world));W.root.add(sc);sc.traverse(o=>{if(o.name)W.J[o.name]=W.J[o.name]||o;});W.body=sc;
     return refitModel(W,loadout(),full,world,lm);}).then(()=>W);}
-function refitModel(W,L,full,world,lm){
+function refitModel(W,L,full,world,lm){const gen=W.gen=(W.gen||0)+1;   /* a newer refit wins: pieces an older one loads late are dropped */
   for(const s in W.holds){const h=W.holds[s];if(h&&h.parent)h.parent.remove(h);}W.holds={};W.kit={};
   const jobs=SLOTS.filter(s=>s!=='drone'&&L[s]&&KIT[L[s]]).map(s=>{const id=L[s],k=KIT[id],stem=kitStem(id,s),f=kitFiles(k.dir,stem,full,k.orm);
-    return loadGLB(f.glb,lm).then(sc=>{dressModel(sc,kitMat(f,world));W.holds[s]=onMount(W.J[s],sc);W.kit[s]=id;});});
+    return loadGLB(f.glb,lm).then(sc=>{if(W.gen!==gen)return;dressModel(sc,kitMat(f,world));W.holds[s]=onMount(W.J[s],sc);W.kit[s]=id;});});
   return Promise.all(jobs).then(()=>{   /* the drone docks on the jet pack */
-    if(L.drone==='drone'&&W.holds.bk){const dock=W.holds.bk.getObjectByName('drone_dock');const k=KIT.drone,f=kitFiles(k.dir,k.stem,full);
-      if(dock)return loadGLB(f.glb,lm).then(sc=>{dressModel(sc,kitMat(f,world));W.holds.drone=onMount(dock,sc);W.kit.drone='drone';});}});}
+    if(W.gen===gen&&L.drone==='drone'&&W.holds.bk){const dock=W.holds.bk.getObjectByName('drone_dock');const k=KIT.drone,f=kitFiles(k.dir,k.stem,full);
+      if(dock)return loadGLB(f.glb,lm).then(sc=>{if(W.gen!==gen)return;dressModel(sc,kitMat(f,world));W.holds.drone=onMount(dock,sc);W.kit.drone='drone';});}});}
 
 /* ---------------- the Wraith in the field ---------------- */
 function buildMech(){
@@ -61,14 +61,19 @@ function buildMech(){
     M.hips=J.hips;M.torso=J.torso;M.head=J.head;M.hip0=J.hips.position.y;M.tor0=J.torso.position.y;
     W.root.updateMatrixWorld(true);M.legs=[-1,1].map(sd=>legSetup(J,sd<0?'L':'R',sd,M.hip0));
     M.jl=new THREE.PointLight(0xff9a40,0,14,1.8);M.jl.position.set(0,0,1.6);M.torso.add(M.jl);
+    M.rest=[M.hips,M.torso,J.arm_L,J.arm_R].filter(Boolean).map(o=>[o,o.rotation.clone()]);   /* the standing pose, for placing muzzles */
     rigKit(M);M.ready=true;M.tier=0;setTier(M,GUN.tier||1);});
   return M;
 }
 /* after the bay changes the loadout */
 function refitKit(M){if(!M||!M.W)return Promise.resolve();M.ready=false;
-  return refitModel(M.W,loadout(),false,true).then(()=>{rigKit(M);M.ready=true;const t=M.tier;M.tier=0;setTier(M,t||GUN.tier||1);});}
+  const p=refitModel(M.W,loadout(),false,true),gen=M.W.gen,done=()=>{if(M.W.gen!==gen)return;rigKit(M);M.ready=true;const t=M.tier;M.tier=0;setTier(M,t||GUN.tier||1);};
+  return p.then(done,e=>{console.warn('refit',e);done();});}   /* a piece that fails to load leaves its mount empty, never a frozen mech */
 /* muzzles, missile tubes and jet nozzles from the fitted kit */
-function rigKit(M){const W=M.W,_p=new THREE.Vector3();W.root.updateMatrixWorld(true);
+const JETG=[];   /* the jet flames' shapes, shared by every refit */
+function rigKit(M){const W=M.W,_p=new THREE.Vector3();
+  /* measure in the standing pose: a turned torso or raised arm would put the muzzle on the side of the weapon */
+  const now=(M.rest||[]).map(([o,r])=>{const c=o.rotation.clone();o.rotation.copy(r);return [o,c];});W.root.updateMatrixWorld(true);
   M.arms=['fa_L','fa_R'].map((s,i)=>{const hold=W.holds[s],arm=W.J[i?'arm_R':'arm_L'];if(!hold)return {sh:arm,muzzle:arm,hold:null,kick:0,sd:i?1:-1};
     /* forward = the Wraith's front (-z) seen from the mount; the muzzle sits at the front face of the weapon's box */
     const q=new THREE.Quaternion();W.root.getWorldQuaternion(q);const wf=new THREE.Vector3(0,0,-1).applyQuaternion(q);
@@ -76,12 +81,13 @@ function rigKit(M){const W=M.W,_p=new THREE.Vector3();W.root.updateMatrixWorld(t
     const bb=localBox(hold),mz=new THREE.Object3D();hold.add(mz);bb.getCenter(_p);
     const ax=['x','y','z'].sort((a,b)=>Math.abs(fwd[b])-Math.abs(fwd[a]))[0];_p[ax]=fwd[ax]>0?bb.max[ax]:bb.min[ax];mz.position.copy(_p);
     return {sh:arm,muzzle:mz,hold,base:hold.position.clone(),fwd,kick:0,sd:i?1:-1,kind:W.kit[s]};});
-  M.pods=[];for(const s of ['sh_R','sh_L']){const h=W.holds[s];if(h&&W.kit[s]==='mpod')for(let i=0;i<9;i++){const t=h.getObjectByName('tube'+i);if(t)M.pods.push(t);}}
+  M.pods=[];for(let i=0;i<9;i++)for(const s of ['sh_R','sh_L']){const h=W.holds[s];if(h&&W.kit[s]==='mpod'){const t=h.getObjectByName('tube'+i);if(t)M.pods.push(t);}}   /* tubes in firing order, right and left pods taking turns */
   if(!M.pods.length)M.pods=[W.J.sh_R,W.J.sh_L];
-  M.jets=[];const jp=W.holds.bk;
+  M.jets=[];const jp=W.holds.bk;if(!JETG.length)JETG.push(new THREE.CylinderGeometry(.22,.02,1,10,1,true),new THREE.CylinderGeometry(.12,.01,1,8,1,true));
   for(const s of ['R','L']){const n=jp&&jp.getObjectByName('exhaust_'+s);if(!n)continue;   /* the jet pack's nozzles point their +y along the thrust */
-    const f1=new THREE.Mesh(new THREE.CylinderGeometry(.22,.02,1,10,1,true),MT.flame);f1.castShadow=false;n.add(f1);
-    const f2=new THREE.Mesh(new THREE.CylinderGeometry(.12,.01,1,8,1,true),MT.flame2);f2.castShadow=false;n.add(f2);M.jets.push({n,f1,f2});}
+    const f1=new THREE.Mesh(JETG[0],MT.flame);f1.castShadow=false;n.add(f1);
+    const f2=new THREE.Mesh(JETG[1],MT.flame2);f2.castShadow=false;n.add(f2);M.jets.push({n,f1,f2});}
+  for(const [o,c] of now)o.rotation.copy(c);W.root.updateMatrixWorld(true);
 }
 /* a group's box in its own frame (works whatever way the mech is standing) */
 function localBox(g){const bb=new THREE.Box3(),inv=new THREE.Matrix4(),m=new THREE.Matrix4();g.updateMatrixWorld(true);inv.copy(g.matrixWorld).invert();

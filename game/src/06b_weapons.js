@@ -9,7 +9,7 @@ const BOLTS=[],EBOLTS=[],MISS=[];
 const SALVO={cd:0,cool:12,n:14,left:0,t:0,dmg:16,range:48};
 const BOLT={speed:150,range:170};
 let BM=null,EBM=null,MSM=null,MFL=null;
-const _v=new THREE.Vector3(),_w=new THREE.Vector3(),_m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_z=new THREE.Vector3(0,0,1);
+const _sc=new THREE.Vector3(),_v=new THREE.Vector3(),_w=new THREE.Vector3(),_m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_z=new THREE.Vector3(0,0,1);
 function buildWeapons(){
   const g=new THREE.CylinderGeometry(.1,.1,1,6,1,true);g.rotateX(Math.PI/2);
   BM=new THREE.InstancedMesh(g,new THREE.MeshBasicMaterial({color:new THREE.Color(1,.78,.4).multiplyScalar(3),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}),160);
@@ -47,7 +47,7 @@ function updSalvo(c,dt){
 }
 function salvoRound(i){
   const near=EN.filter(e=>!e.dead&&e.spawnT<=0&&Math.hypot(e.x-P.x,e.z-P.z)<SALVO.range).sort((a,b)=>Math.hypot(a.x-P.x,a.z-P.z)-Math.hypot(b.x-P.x,b.z-P.z));
-  const pod=M.ready?M.pods[i%2]:null;if(pod)pod.getWorldPosition(_w);else _w.set(P.x,P.y+5,P.z);
+  const pod=M.ready?M.pods[i%M.pods.length]:null;if(pod)pod.getWorldPosition(_w);else _w.set(P.x,P.y+5,P.z);
   let tx,ty,tz;
   /* spread the rounds: the nearest machine that is not already going to die from rounds in the air */
   let tg=null;if(near.length){const e=tg=near.find(o=>o.hp-(o.pend||0)>0)||near[0];e.pend=(e.pend||0)+SALVO.dmg;tx=e.x+(Math.random()-.5)*.4;ty=e.y+e.d.cy;tz=e.z+(Math.random()-.5)*.4;}
@@ -96,7 +96,7 @@ function updGun(c,dt){
     else{MSL.cd=.7;
       /* IH4: locked machines first (06k_kit.js); a missile at a locked machine turns hard, at one not yet locked gently */
       const cand=lockCands();
-      const n=Math.min(MSL.salvo,MSL.ammo);for(let i=0;i<n;i++){const tg=cand.length?cand[i%cand.length]:null,pod=M.ready?M.pods[i%2]:null;
+      const n=Math.min(MSL.salvo,MSL.ammo);for(let i=0;i<n;i++){const tg=cand.length?cand[i%cand.length]:null,pod=M.ready?M.pods[(MSL.tube=(MSL.tube||0)+1)%M.pods.length]:null;
         if(pod)pod.getWorldPosition(_w);else _w.set(P.x,P.y+4.4,P.z);
         const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
         MISS.push({x:_w.x,y:_w.y,z:_w.z,vx:fx*14+(i%2?3:-3),vy:9,vz:fz*14,t:0,tg,life:4.5,ax:AIM.x,ay:AIM.y,az:AIM.z,delay:i*.09,turn:tg&&tg.lk>=1?4.2:1.7});}
@@ -137,11 +137,11 @@ function segSphere(x0,y0,z0,x1,y1,z1,cx,cy,cz,r){const dx=x1-x0,dy=y1-y0,dz=z1-z
   if(c<0)return 0;const D=b*b-4*a*c;if(D<0||a<1e-9)return -1;const t=(-b-Math.sqrt(D))/(2*a);return t>=0&&t<=1?t:-1;}
 function drawShots(){
   let n=0;for(const b of BOLTS){if(n>=160)break;const l=Math.hypot(b.vx,b.vy,b.vz);_v.set(b.vx/l,b.vy/l,b.vz/l);_q.setFromUnitVectors(_z,_v);
-    _m4.compose(_w.set(b.x-_v.x*1.8,b.y-_v.y*1.8,b.z-_v.z*1.8),_q,V3(1,1,3.6));BM.setMatrixAt(n++,_m4);}
+    _m4.compose(_w.set(b.x-_v.x*1.8,b.y-_v.y*1.8,b.z-_v.z*1.8),_q,_sc.set(1,1,3.6));BM.setMatrixAt(n++,_m4);}
   BM.count=n;BM.instanceMatrix.needsUpdate=true;BM.visible=n>0;
-  n=0;for(const b of EBOLTS){if(n>=220)break;const l=Math.hypot(b.vx,b.vy,b.vz);_v.set(b.vx/l,b.vy/l,b.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(b.x,b.y,b.z),_q,V3(b.s||1,b.s||1,b.s||1));EBM.setMatrixAt(n++,_m4);}
+  n=0;for(const b of EBOLTS){if(n>=220)break;const l=Math.hypot(b.vx,b.vy,b.vz);_v.set(b.vx/l,b.vy/l,b.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(b.x,b.y,b.z),_q,_sc.setScalar(b.s||1));EBM.setMatrixAt(n++,_m4);}
   EBM.count=n;EBM.instanceMatrix.needsUpdate=true;EBM.visible=n>0;
-  n=0;for(const m of MISS){if(m.t<m.delay)continue;const l=Math.hypot(m.vx,m.vy,m.vz)||1;_v.set(m.vx/l,m.vy/l,m.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(m.x,m.y,m.z),_q,V3(1,1,1));MSM.setMatrixAt(n++,_m4);}
+  n=0;for(const m of MISS){if(n>=40)break;if(m.t<m.delay)continue;const l=Math.hypot(m.vx,m.vy,m.vz)||1;_v.set(m.vx/l,m.vy/l,m.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(m.x,m.y,m.z),_q,_sc.set(1,1,1));MSM.setMatrixAt(n++,_m4);}
   MSM.count=n;MSM.instanceMatrix.needsUpdate=true;MSM.visible=n>0;
 }
 function sparks(x,y,z,n,col){if(n>2)part({x,y,z,vx:0,vy:0,vz:0,life:.14,s0:.7,s1:1.6,a:1.3,col:[1,1,1],glow:true,img:3});for(let i=0;i<n;i++){const a=Math.random()*TAU,b=Math.random()*2-1,s=4+Math.random()*7;

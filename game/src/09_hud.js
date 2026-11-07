@@ -55,7 +55,7 @@ function setupHud(){
   const hold=(id,on,off)=>{const b=$(id);b.addEventListener('touchstart',e=>{e.preventDefault();on(e);b.classList.add('on');},{passive:false});
     const up=e=>{off&&off(e);b.classList.remove('on');};b.addEventListener('touchend',up);b.addEventListener('touchcancel',up);};
   hold('bjet',()=>{TS.jet=true;TS.jetHit=true;},()=>{TS.jet=false;});
-  hold('bfire',e=>{const t=e.changedTouches[0];TS.fire=true;TS.fireId=t.identifier;TS.lx=t.clientX;TS.ly=t.clientY;},()=>{TS.fire=false;TS.fireId=-1;});
+  hold('bfire',e=>{const t=e.changedTouches[0];TS.fire=true;TS.fireId=t.identifier;TS.fx=t.clientX;TS.fy=t.clientY;},()=>{TS.fire=false;TS.fireId=-1;});
   hold('bmsl',()=>{TS.msl=true;});hold('bvent',()=>{TS.vent=true;});hold('bsalvo',()=>{TS.salvo=true;});
   $('bview').onclick=e=>{e.stopPropagation();cycleView();};
   $('bpause').onclick=e=>{e.stopPropagation();if(G.mode==='play')setPause(!G.paused);};

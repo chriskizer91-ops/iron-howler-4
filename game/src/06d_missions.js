@@ -94,13 +94,18 @@ const RADIO=[];let radioT=0;
 function radio(lines){for(const l of lines)RADIO.push(l);}
 function updRadio(dt){radioT-=dt;if(radioT<=0){const el=$('radio');if(RADIO.length){const [who,txt]=RADIO.shift();const foe=who==='FORGE'||who==='UNKNOWN';el.innerHTML='<b class="'+(foe?'fg':'rk')+'">'+who+'</b> '+txt;el.style.opacity=1;radioT=3.8;if(foe)sEShot();else sClick();}else if(el.style.opacity!=='0'){el.style.opacity=0;}}}
 /* ---- running a mission ---- */
-function spawnGroup(def,cx,cz,ring){for(const id in def){let x=cx,z=cz;
-    for(let k=0;k<30;k++){const a=Math.random()*TAU,d=(ring||[12,26]);x=cx+Math.cos(a)*(d[0]+Math.random()*(d[1]-d[0]));z=cz+Math.sin(a)*(d[0]+Math.random()*(d[1]-d[0]));const B=BND();x=clamp(x,B.x0+4,B.x1-4);z=clamp(z,B.z0+4,B.z1-4);
-      const c=navCell(x,z);if(c>=0&&!NAV.block[c]&&Math.hypot(x-P.x,z-P.z)>30)break;}
+function spawnGroup(def,cx,cz,ring){const B=BND(),d=ring||[12,26];for(const id in def){let x=cx,z=cz,bx=null,bz=0,bd=-1;
+    /* a clear spot more than 30 m from you; failing that, the clear spot furthest from you; failing that, the group's centre */
+    for(let k=0;k<30;k++){const a=Math.random()*TAU,r=d[0]+Math.random()*(d[1]-d[0]);x=clamp(cx+Math.cos(a)*r,B.x0+4,B.x1-4);z=clamp(cz+Math.sin(a)*r,B.z0+4,B.z1-4);
+      const c=navCell(x,z);if(c<0||NAV.block[c])continue;const pd=Math.hypot(x-P.x,z-P.z);if(pd>30){bx=x;bz=z;break;}if(pd>bd){bd=pd;bx=x;bz=z;}}
+    if(bx!==null){x=bx;z=bz;}else{x=cx;z=cz;}
     BEACONS.push({x,z,t:1.3});for(let i=0;i<def[id];i++){const a=Math.random()*TAU,r=Math.random()*5+(i?2:0),c=collide(x+Math.cos(a)*r,z+Math.sin(a)*r,EDEF[id].r);spawnEnemy(id,c[0],c[1]);}}}
-function stepPos(s){if(MS.wpos)return MS.wpos;if(s.spawners||s.lights){return MS.objs.find(t=>!t.dead)||null;}if(s.masts)return MAPS.field.mastObjs[s.masts[0]];if(s.consoles){const live=MS.objs.find(t=>!t.dead);return live||{x:s.consoles[0][0],z:s.consoles[0][1]};}if(s.at)return {x:s.at[0],z:s.at[1]};return null;}
+/* the marker points at the nearest thing still standing (masts, pods, lights, consoles); on a clear step, at the nearest straggler once they are all far away */
+function nearLive(list){let b=null,bd=1e18;for(const t of list){if(t.dead)continue;const d=(t.x-P.x)**2+(t.z-P.z)**2;if(d<bd){bd=d;b=t;}}return b;}
+function stepPos(s){if(MS.wpos)return MS.wpos;if(s.spawners||s.lights||s.masts||s.consoles){const t=nearLive(MS.objs);if(t)return t;return s.consoles?{x:s.consoles[0][0],z:s.consoles[0][1]}:null;}
+  if(s.t==='clear'&&MS.strag&&!MS.strag.dead)return MS.strag;if(s.at)return s._at||(s._at={x:s.at[0],z:s.at[1]});return null;}
 function beginStep(i){
-  MS.step=i;MS.t=0;MS.wi=0;MS.waveT=4;MS.hold=0;MS.objs=[];const s=MISSION.steps[i];if(!s)return finishMission(true);
+  MS.step=i;MS.t=0;MS.wi=0;MS.waveT=4;MS.hold=0;MS.objs=[];MS.strag=null;const s=MISSION.steps[i];if(!s)return finishMission(true);
   if(MS.zone){S.remove(MS.zone);MS.zone=null;}
   if(s.cp)MS.cp={step:i,x:P.x,z:P.z,yaw:P.yaw,tier:GUN.tier};MS.wpos=null;
   const first=!MS.built[i];
@@ -122,14 +127,14 @@ function updMission(dt){
   MS.t+=dt;MS.time+=dt;const s=MISSION.steps[MS.step];if(!s)return;
   for(const m of MAPS.field.mastObjs||[])if(m.fall&&m.fall<90){m.fall+=dt*60;m.tower.rotation.z=Math.min(1.5,(m.fall/60)*(m.fall/60)*1.5);}
   let txt=s.label,ok=false;
-  if(s.t==='destroy'){const left=MS.objs.filter(t=>!t.dead).length;txt+=' '+(MS.objs.length-left)+'/'+MS.objs.length;
-    if(s.masts){const all=MISSION.steps.filter(q=>q.masts).length,doneN=MISSION.steps.indexOf(s);txt=s.label+' '+(doneN+(left?0:1))+'/'+all;}ok=left===0;}
+  if(s.t==='destroy'){let left=0;for(const t of MS.objs)if(!t.dead)left++;txt+=' '+(MS.objs.length-left)+'/'+MS.objs.length;ok=left===0;}
   else if(s.t==='reach'){ok=Math.hypot(P.x-s.at[0],P.z-s.at[1])<s.r;}
   else if(s.t==='escort'){const r=escortStep(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
   else if(s.t==='endless'){const r=endlessStep(s,dt);txt=r.txt;ok=false;MS.wpos=r.pos;}
   else if(s.t==='capture'){const r=captureStep(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
   else if(s.t==='boss'){const r=BOSS_DEF[MISSION.boss].step(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
-  else if(s.t==='clear'){ok=MS.t>3&&EN.filter(e=>!e.dead).length===0&&BEACONS.length===0;}
+  else if(s.t==='clear'){let n=0,b=null,bd=1e18;for(const e of EN){if(e.dead)continue;n++;const d=(e.x-P.x)**2+(e.z-P.z)**2;if(d<bd){bd=d;b=e;}}
+    ok=MS.t>3&&n===0&&BEACONS.length===0;MS.strag=MS.t>3&&b&&bd>45*45?b:null;}
   else if(s.t==='hold'){const inside=Math.hypot(P.x-s.at[0],P.z-s.at[1])<s.r;if(inside)MS.hold+=dt;const left=Math.max(0,s.time-MS.hold);
     txt+=' '+Math.floor(left/60)+':'+String(Math.floor(left%60)).padStart(2,'0')+(inside?'':' · GET BACK IN THE RING');
     MS.waveT-=dt;if(MS.waveT<=0&&left>0){MS.waveT=s.every;const w=s.waves[MS.wi%s.waves.length];MS.wi++;const a=Math.random()*TAU;spawnGroup(w,s.at[0]+Math.cos(a)*70,s.at[1]+Math.sin(a)*70,[0,14]);}

@@ -42,7 +42,7 @@ const MOUSE={dx:0,dy:0,locked:false,l:false,rHit:false};
 addEventListener('mousedown',e=>{if(!MOUSE.locked)return;if(e.button===0)MOUSE.l=true;if(e.button===2)MOUSE.rHit=true;});
 addEventListener('mouseup',e=>{if(e.button===0)MOUSE.l=false;});
 addEventListener('contextmenu',e=>e.preventDefault());
-const TS={id:-1,ox:0,oy:0,ax:0,ay:0,look:-1,lx:0,ly:0,ldx:0,ldy:0,jet:false,jetHit:false,fire:false,fireId:-1,msl:false,vent:false,salvo:false};
+const TS={id:-1,ox:0,oy:0,ax:0,ay:0,look:-1,lx:0,ly:0,fx:0,fy:0,ldx:0,ldy:0,jet:false,jetHit:false,fire:false,fireId:-1,msl:false,vent:false,salvo:false};
 let PAD_PREV={};
 addEventListener('keydown',e=>{if(e.repeat)return;KEYS.add(e.code);HIT.add(e.code);if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();});
 addEventListener('keyup',e=>KEYS.delete(e.code));
@@ -68,7 +68,8 @@ function touchMove(e){if(BAY.open)return;
     if(t.identifier===TS.id){let dx=t.clientX-TS.ox,dy=t.clientY-TS.oy;const d=Math.hypot(dx,dy);
       if(d>STICK_R){/* the stick base follows the thumb so it never runs out of room */TS.ox+=dx/d*(d-STICK_R);TS.oy+=dy/d*(d-STICK_R);dx=t.clientX-TS.ox;dy=t.clientY-TS.oy;}
       TS.ax=dx/STICK_R;TS.ay=dy/STICK_R;HUD.stick(true,TS.ox,TS.oy,dx,dy);}
-    else if(t.identifier===TS.look||t.identifier===TS.fireId){TS.ldx+=t.clientX-TS.lx;TS.ldy+=t.clientY-TS.ly;TS.lx=t.clientX;TS.ly=t.clientY;}
+    else if(t.identifier===TS.look){TS.ldx+=t.clientX-TS.lx;TS.ldy+=t.clientY-TS.ly;TS.lx=t.clientX;TS.ly=t.clientY;}
+    else if(t.identifier===TS.fireId){TS.ldx+=t.clientX-TS.fx;TS.ldy+=t.clientY-TS.fy;TS.fx=t.clientX;TS.fy=t.clientY;}   /* the FIRE finger keeps its own last spot */
   }
   if(G.mode==='play')e.preventDefault();
 }
@@ -796,8 +797,8 @@ function kitStem(id,slot){const k=KIT[id];return k.stem||(slot&&slot.endsWith('_
 /* files: combat model and its maps, or the full model and its print */
 function kitFiles(dir,stem,full,orm){const b=IH4M+dir+'/'+stem;
   return full?{glb:b+'_full.glb',map:b+'_full_print.webp'}:{glb:b+'_combat.glb',map:b+'_combat_albedo.webp',nrm:b+'_combat_normal.webp',orm:IH4M+dir+'/'+(orm||stem+'_combat_orm')+'.webp'};}
-const GLBC={},KMAT={};
-function loadGLB(url,lm){if(!GLBC[url])GLBC[url]=new Promise((res,rej)=>new THREE.GLTFLoader(lm||LM).load(url,g=>res(g.scene),undefined,rej));
+const GLBC={},GLBP={},KMAT={};   /* GLBP[url]: told how far a model's download has got (0..1) */
+function loadGLB(url,lm){if(!GLBC[url])GLBC[url]=new Promise((res,rej)=>new THREE.GLTFLoader(lm||LM).load(url,g=>res(g.scene),ev=>{const f=GLBP[url];if(f&&ev&&ev.total)f(ev.loaded/ev.total);},rej)).catch(e=>{delete GLBC[url];throw e;});   /* a failed load can be tried again */
   return GLBC[url].then(sc=>sc.clone(true));}
 function k4tex(url){const t=new THREE.TextureLoader(LM).load(url);t.flipY=false;t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;}
 function k4lin(url){const t=k4tex(url);t.colorSpace=THREE.NoColorSpace;return t;}
@@ -818,13 +819,13 @@ function buildWraithModel(full,world,lm){
   const wf=kitFiles(WRAITH.dir,WRAITH.stem,full);
   return loadGLB(wf.glb,lm).then(sc=>{dressModel(sc,kitMat(wf,world));W.root.add(sc);sc.traverse(o=>{if(o.name)W.J[o.name]=W.J[o.name]||o;});W.body=sc;
     return refitModel(W,loadout(),full,world,lm);}).then(()=>W);}
-function refitModel(W,L,full,world,lm){
+function refitModel(W,L,full,world,lm){const gen=W.gen=(W.gen||0)+1;   /* a newer refit wins: pieces an older one loads late are dropped */
   for(const s in W.holds){const h=W.holds[s];if(h&&h.parent)h.parent.remove(h);}W.holds={};W.kit={};
   const jobs=SLOTS.filter(s=>s!=='drone'&&L[s]&&KIT[L[s]]).map(s=>{const id=L[s],k=KIT[id],stem=kitStem(id,s),f=kitFiles(k.dir,stem,full,k.orm);
-    return loadGLB(f.glb,lm).then(sc=>{dressModel(sc,kitMat(f,world));W.holds[s]=onMount(W.J[s],sc);W.kit[s]=id;});});
+    return loadGLB(f.glb,lm).then(sc=>{if(W.gen!==gen)return;dressModel(sc,kitMat(f,world));W.holds[s]=onMount(W.J[s],sc);W.kit[s]=id;});});
   return Promise.all(jobs).then(()=>{   /* the drone docks on the jet pack */
-    if(L.drone==='drone'&&W.holds.bk){const dock=W.holds.bk.getObjectByName('drone_dock');const k=KIT.drone,f=kitFiles(k.dir,k.stem,full);
-      if(dock)return loadGLB(f.glb,lm).then(sc=>{dressModel(sc,kitMat(f,world));W.holds.drone=onMount(dock,sc);W.kit.drone='drone';});}});}
+    if(W.gen===gen&&L.drone==='drone'&&W.holds.bk){const dock=W.holds.bk.getObjectByName('drone_dock');const k=KIT.drone,f=kitFiles(k.dir,k.stem,full);
+      if(dock)return loadGLB(f.glb,lm).then(sc=>{if(W.gen!==gen)return;dressModel(sc,kitMat(f,world));W.holds.drone=onMount(dock,sc);W.kit.drone='drone';});}});}
 
 /* ---------------- the Wraith in the field ---------------- */
 function buildMech(){
@@ -834,14 +835,19 @@ function buildMech(){
     M.hips=J.hips;M.torso=J.torso;M.head=J.head;M.hip0=J.hips.position.y;M.tor0=J.torso.position.y;
     W.root.updateMatrixWorld(true);M.legs=[-1,1].map(sd=>legSetup(J,sd<0?'L':'R',sd,M.hip0));
     M.jl=new THREE.PointLight(0xff9a40,0,14,1.8);M.jl.position.set(0,0,1.6);M.torso.add(M.jl);
+    M.rest=[M.hips,M.torso,J.arm_L,J.arm_R].filter(Boolean).map(o=>[o,o.rotation.clone()]);   /* the standing pose, for placing muzzles */
     rigKit(M);M.ready=true;M.tier=0;setTier(M,GUN.tier||1);});
   return M;
 }
 /* after the bay changes the loadout */
 function refitKit(M){if(!M||!M.W)return Promise.resolve();M.ready=false;
-  return refitModel(M.W,loadout(),false,true).then(()=>{rigKit(M);M.ready=true;const t=M.tier;M.tier=0;setTier(M,t||GUN.tier||1);});}
+  const p=refitModel(M.W,loadout(),false,true),gen=M.W.gen,done=()=>{if(M.W.gen!==gen)return;rigKit(M);M.ready=true;const t=M.tier;M.tier=0;setTier(M,t||GUN.tier||1);};
+  return p.then(done,e=>{console.warn('refit',e);done();});}   /* a piece that fails to load leaves its mount empty, never a frozen mech */
 /* muzzles, missile tubes and jet nozzles from the fitted kit */
-function rigKit(M){const W=M.W,_p=new THREE.Vector3();W.root.updateMatrixWorld(true);
+const JETG=[];   /* the jet flames' shapes, shared by every refit */
+function rigKit(M){const W=M.W,_p=new THREE.Vector3();
+  /* measure in the standing pose: a turned torso or raised arm would put the muzzle on the side of the weapon */
+  const now=(M.rest||[]).map(([o,r])=>{const c=o.rotation.clone();o.rotation.copy(r);return [o,c];});W.root.updateMatrixWorld(true);
   M.arms=['fa_L','fa_R'].map((s,i)=>{const hold=W.holds[s],arm=W.J[i?'arm_R':'arm_L'];if(!hold)return {sh:arm,muzzle:arm,hold:null,kick:0,sd:i?1:-1};
     /* forward = the Wraith's front (-z) seen from the mount; the muzzle sits at the front face of the weapon's box */
     const q=new THREE.Quaternion();W.root.getWorldQuaternion(q);const wf=new THREE.Vector3(0,0,-1).applyQuaternion(q);
@@ -849,12 +855,13 @@ function rigKit(M){const W=M.W,_p=new THREE.Vector3();W.root.updateMatrixWorld(t
     const bb=localBox(hold),mz=new THREE.Object3D();hold.add(mz);bb.getCenter(_p);
     const ax=['x','y','z'].sort((a,b)=>Math.abs(fwd[b])-Math.abs(fwd[a]))[0];_p[ax]=fwd[ax]>0?bb.max[ax]:bb.min[ax];mz.position.copy(_p);
     return {sh:arm,muzzle:mz,hold,base:hold.position.clone(),fwd,kick:0,sd:i?1:-1,kind:W.kit[s]};});
-  M.pods=[];for(const s of ['sh_R','sh_L']){const h=W.holds[s];if(h&&W.kit[s]==='mpod')for(let i=0;i<9;i++){const t=h.getObjectByName('tube'+i);if(t)M.pods.push(t);}}
+  M.pods=[];for(let i=0;i<9;i++)for(const s of ['sh_R','sh_L']){const h=W.holds[s];if(h&&W.kit[s]==='mpod'){const t=h.getObjectByName('tube'+i);if(t)M.pods.push(t);}}   /* tubes in firing order, right and left pods taking turns */
   if(!M.pods.length)M.pods=[W.J.sh_R,W.J.sh_L];
-  M.jets=[];const jp=W.holds.bk;
+  M.jets=[];const jp=W.holds.bk;if(!JETG.length)JETG.push(new THREE.CylinderGeometry(.22,.02,1,10,1,true),new THREE.CylinderGeometry(.12,.01,1,8,1,true));
   for(const s of ['R','L']){const n=jp&&jp.getObjectByName('exhaust_'+s);if(!n)continue;   /* the jet pack's nozzles point their +y along the thrust */
-    const f1=new THREE.Mesh(new THREE.CylinderGeometry(.22,.02,1,10,1,true),MT.flame);f1.castShadow=false;n.add(f1);
-    const f2=new THREE.Mesh(new THREE.CylinderGeometry(.12,.01,1,8,1,true),MT.flame2);f2.castShadow=false;n.add(f2);M.jets.push({n,f1,f2});}
+    const f1=new THREE.Mesh(JETG[0],MT.flame);f1.castShadow=false;n.add(f1);
+    const f2=new THREE.Mesh(JETG[1],MT.flame2);f2.castShadow=false;n.add(f2);M.jets.push({n,f1,f2});}
+  for(const [o,c] of now)o.rotation.copy(c);W.root.updateMatrixWorld(true);
 }
 /* a group's box in its own frame (works whatever way the mech is standing) */
 function localBox(g){const bb=new THREE.Box3(),inv=new THREE.Matrix4(),m=new THREE.Matrix4();g.updateMatrixWorld(true);inv.copy(g.matrixWorld).invert();
@@ -962,7 +969,8 @@ function updPlayer(c,dt){
   const B=BND();if(nx<B.x0||nx>B.x1){nx=clamp(nx,B.x0,B.x1);P.vx*=.2;}if(nz<B.z0||nz>B.z1){nz=clamp(nz,B.z0,B.z1);P.vz*=.2;}
   P.dist+=Math.hypot(nx-P.x,nz-P.z);P.x=nx;P.z=nz;
   const g=hgt(P.x,P.z);
-  if(P.air){if(P.y<=g&&P.vy<0){const k=clamp(-P.vy/16,0,1.3);P.y=g;P.air=false;P.vy=0;P.groundT=0;P.land=Math.max(P.land,.18+k*.32);P.ev.push({t:'land',k});
+  if(P.air&&P.y<g&&P.vy>=0&&!P.hovering)P.y=g;   /* rising up a slope: ride over it, never into it */
+  if(P.air){if(P.y<=g&&(P.vy<0||P.hovering)){const k=clamp(-P.vy/16,0,1.3);P.y=g;P.air=false;P.vy=0;P.groundT=0;P.land=Math.max(P.land,.18+k*.32);P.ev.push({t:'land',k});
     /* stomp landing (jets upgrade 3): hurts machines under you */
     if(UP.stomp&&k>.35)for(const e of EN){if(e.dead||e.spawnT>0)continue;const d=Math.hypot(e.x-P.x,e.z-P.z);if(d<7){hurtEnemy(e,60*k*(1-d/9),e.x,e.y+1,e.z);e.kx+=(e.x-P.x)/(d||1)*12;e.kz+=(e.z-P.z)/(d||1)*12;}}}}
   else P.y=g;
@@ -988,7 +996,7 @@ const BOLTS=[],EBOLTS=[],MISS=[];
 const SALVO={cd:0,cool:12,n:14,left:0,t:0,dmg:16,range:48};
 const BOLT={speed:150,range:170};
 let BM=null,EBM=null,MSM=null,MFL=null;
-const _v=new THREE.Vector3(),_w=new THREE.Vector3(),_m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_z=new THREE.Vector3(0,0,1);
+const _sc=new THREE.Vector3(),_v=new THREE.Vector3(),_w=new THREE.Vector3(),_m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_z=new THREE.Vector3(0,0,1);
 function buildWeapons(){
   const g=new THREE.CylinderGeometry(.1,.1,1,6,1,true);g.rotateX(Math.PI/2);
   BM=new THREE.InstancedMesh(g,new THREE.MeshBasicMaterial({color:new THREE.Color(1,.78,.4).multiplyScalar(3),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}),160);
@@ -1026,7 +1034,7 @@ function updSalvo(c,dt){
 }
 function salvoRound(i){
   const near=EN.filter(e=>!e.dead&&e.spawnT<=0&&Math.hypot(e.x-P.x,e.z-P.z)<SALVO.range).sort((a,b)=>Math.hypot(a.x-P.x,a.z-P.z)-Math.hypot(b.x-P.x,b.z-P.z));
-  const pod=M.ready?M.pods[i%2]:null;if(pod)pod.getWorldPosition(_w);else _w.set(P.x,P.y+5,P.z);
+  const pod=M.ready?M.pods[i%M.pods.length]:null;if(pod)pod.getWorldPosition(_w);else _w.set(P.x,P.y+5,P.z);
   let tx,ty,tz;
   /* spread the rounds: the nearest machine that is not already going to die from rounds in the air */
   let tg=null;if(near.length){const e=tg=near.find(o=>o.hp-(o.pend||0)>0)||near[0];e.pend=(e.pend||0)+SALVO.dmg;tx=e.x+(Math.random()-.5)*.4;ty=e.y+e.d.cy;tz=e.z+(Math.random()-.5)*.4;}
@@ -1075,7 +1083,7 @@ function updGun(c,dt){
     else{MSL.cd=.7;
       /* IH4: locked machines first (06k_kit.js); a missile at a locked machine turns hard, at one not yet locked gently */
       const cand=lockCands();
-      const n=Math.min(MSL.salvo,MSL.ammo);for(let i=0;i<n;i++){const tg=cand.length?cand[i%cand.length]:null,pod=M.ready?M.pods[i%2]:null;
+      const n=Math.min(MSL.salvo,MSL.ammo);for(let i=0;i<n;i++){const tg=cand.length?cand[i%cand.length]:null,pod=M.ready?M.pods[(MSL.tube=(MSL.tube||0)+1)%M.pods.length]:null;
         if(pod)pod.getWorldPosition(_w);else _w.set(P.x,P.y+4.4,P.z);
         const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
         MISS.push({x:_w.x,y:_w.y,z:_w.z,vx:fx*14+(i%2?3:-3),vy:9,vz:fz*14,t:0,tg,life:4.5,ax:AIM.x,ay:AIM.y,az:AIM.z,delay:i*.09,turn:tg&&tg.lk>=1?4.2:1.7});}
@@ -1116,11 +1124,11 @@ function segSphere(x0,y0,z0,x1,y1,z1,cx,cy,cz,r){const dx=x1-x0,dy=y1-y0,dz=z1-z
   if(c<0)return 0;const D=b*b-4*a*c;if(D<0||a<1e-9)return -1;const t=(-b-Math.sqrt(D))/(2*a);return t>=0&&t<=1?t:-1;}
 function drawShots(){
   let n=0;for(const b of BOLTS){if(n>=160)break;const l=Math.hypot(b.vx,b.vy,b.vz);_v.set(b.vx/l,b.vy/l,b.vz/l);_q.setFromUnitVectors(_z,_v);
-    _m4.compose(_w.set(b.x-_v.x*1.8,b.y-_v.y*1.8,b.z-_v.z*1.8),_q,V3(1,1,3.6));BM.setMatrixAt(n++,_m4);}
+    _m4.compose(_w.set(b.x-_v.x*1.8,b.y-_v.y*1.8,b.z-_v.z*1.8),_q,_sc.set(1,1,3.6));BM.setMatrixAt(n++,_m4);}
   BM.count=n;BM.instanceMatrix.needsUpdate=true;BM.visible=n>0;
-  n=0;for(const b of EBOLTS){if(n>=220)break;const l=Math.hypot(b.vx,b.vy,b.vz);_v.set(b.vx/l,b.vy/l,b.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(b.x,b.y,b.z),_q,V3(b.s||1,b.s||1,b.s||1));EBM.setMatrixAt(n++,_m4);}
+  n=0;for(const b of EBOLTS){if(n>=220)break;const l=Math.hypot(b.vx,b.vy,b.vz);_v.set(b.vx/l,b.vy/l,b.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(b.x,b.y,b.z),_q,_sc.setScalar(b.s||1));EBM.setMatrixAt(n++,_m4);}
   EBM.count=n;EBM.instanceMatrix.needsUpdate=true;EBM.visible=n>0;
-  n=0;for(const m of MISS){if(m.t<m.delay)continue;const l=Math.hypot(m.vx,m.vy,m.vz)||1;_v.set(m.vx/l,m.vy/l,m.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(m.x,m.y,m.z),_q,V3(1,1,1));MSM.setMatrixAt(n++,_m4);}
+  n=0;for(const m of MISS){if(n>=40)break;if(m.t<m.delay)continue;const l=Math.hypot(m.vx,m.vy,m.vz)||1;_v.set(m.vx/l,m.vy/l,m.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(m.x,m.y,m.z),_q,_sc.set(1,1,1));MSM.setMatrixAt(n++,_m4);}
   MSM.count=n;MSM.instanceMatrix.needsUpdate=true;MSM.visible=n>0;
 }
 function sparks(x,y,z,n,col){if(n>2)part({x,y,z,vx:0,vy:0,vz:0,life:.14,s0:.7,s1:1.6,a:1.3,col:[1,1,1],glow:true,img:3});for(let i=0;i<n;i++){const a=Math.random()*TAU,b=Math.random()*2-1,s=4+Math.random()*7;
@@ -1267,7 +1275,7 @@ function updEnemies(dt){
     else if(e.id==='skitter'){
       if(e.st==='hop'){/* IH4: after a zap it springs back a few metres, then comes again (gives you a moment to shoot it) */
         mvx=-dx/dist;mvz=-dz/dist;sp=e.d.speed*.85;want=face;if(e.t>.5){e.st='move';e.t=0;}}
-      else if(dist>2.8){const nd=navDir(e.x,e.z);mvx=nd[0];mvz=nd[1];want=Math.atan2(-mvx,-mvz);
+      else if(dist>e.d.r+RAD+.6){const nd=navDir(e.x,e.z);mvx=nd[0];mvz=nd[1];want=Math.atan2(-mvx,-mvz);
         const s=Math.sin(e.t*3+e.phase)*.5;mvx+=-nd[1]*s;mvz+=nd[0]*s;}
       else if(e.cd<=0&&!P.dead&&P.y-hgt(P.x,P.z)<3){e.cd=1.2;e.st='hop';e.t=0;hurtPlayer(e.d.zap||4,e.x,e.z);sZap();sparks(lerp(e.x,P.x,.6),e.y+1.2,lerp(e.z,P.z,.6),6,[.6,.85,1]);}
     }else if(e.id==='hound'){
@@ -1438,13 +1446,18 @@ const RADIO=[];let radioT=0;
 function radio(lines){for(const l of lines)RADIO.push(l);}
 function updRadio(dt){radioT-=dt;if(radioT<=0){const el=$('radio');if(RADIO.length){const [who,txt]=RADIO.shift();const foe=who==='FORGE'||who==='UNKNOWN';el.innerHTML='<b class="'+(foe?'fg':'rk')+'">'+who+'</b> '+txt;el.style.opacity=1;radioT=3.8;if(foe)sEShot();else sClick();}else if(el.style.opacity!=='0'){el.style.opacity=0;}}}
 /* ---- running a mission ---- */
-function spawnGroup(def,cx,cz,ring){for(const id in def){let x=cx,z=cz;
-    for(let k=0;k<30;k++){const a=Math.random()*TAU,d=(ring||[12,26]);x=cx+Math.cos(a)*(d[0]+Math.random()*(d[1]-d[0]));z=cz+Math.sin(a)*(d[0]+Math.random()*(d[1]-d[0]));const B=BND();x=clamp(x,B.x0+4,B.x1-4);z=clamp(z,B.z0+4,B.z1-4);
-      const c=navCell(x,z);if(c>=0&&!NAV.block[c]&&Math.hypot(x-P.x,z-P.z)>30)break;}
+function spawnGroup(def,cx,cz,ring){const B=BND(),d=ring||[12,26];for(const id in def){let x=cx,z=cz,bx=null,bz=0,bd=-1;
+    /* a clear spot more than 30 m from you; failing that, the clear spot furthest from you; failing that, the group's centre */
+    for(let k=0;k<30;k++){const a=Math.random()*TAU,r=d[0]+Math.random()*(d[1]-d[0]);x=clamp(cx+Math.cos(a)*r,B.x0+4,B.x1-4);z=clamp(cz+Math.sin(a)*r,B.z0+4,B.z1-4);
+      const c=navCell(x,z);if(c<0||NAV.block[c])continue;const pd=Math.hypot(x-P.x,z-P.z);if(pd>30){bx=x;bz=z;break;}if(pd>bd){bd=pd;bx=x;bz=z;}}
+    if(bx!==null){x=bx;z=bz;}else{x=cx;z=cz;}
     BEACONS.push({x,z,t:1.3});for(let i=0;i<def[id];i++){const a=Math.random()*TAU,r=Math.random()*5+(i?2:0),c=collide(x+Math.cos(a)*r,z+Math.sin(a)*r,EDEF[id].r);spawnEnemy(id,c[0],c[1]);}}}
-function stepPos(s){if(MS.wpos)return MS.wpos;if(s.spawners||s.lights){return MS.objs.find(t=>!t.dead)||null;}if(s.masts)return MAPS.field.mastObjs[s.masts[0]];if(s.consoles){const live=MS.objs.find(t=>!t.dead);return live||{x:s.consoles[0][0],z:s.consoles[0][1]};}if(s.at)return {x:s.at[0],z:s.at[1]};return null;}
+/* the marker points at the nearest thing still standing (masts, pods, lights, consoles); on a clear step, at the nearest straggler once they are all far away */
+function nearLive(list){let b=null,bd=1e18;for(const t of list){if(t.dead)continue;const d=(t.x-P.x)**2+(t.z-P.z)**2;if(d<bd){bd=d;b=t;}}return b;}
+function stepPos(s){if(MS.wpos)return MS.wpos;if(s.spawners||s.lights||s.masts||s.consoles){const t=nearLive(MS.objs);if(t)return t;return s.consoles?{x:s.consoles[0][0],z:s.consoles[0][1]}:null;}
+  if(s.t==='clear'&&MS.strag&&!MS.strag.dead)return MS.strag;if(s.at)return s._at||(s._at={x:s.at[0],z:s.at[1]});return null;}
 function beginStep(i){
-  MS.step=i;MS.t=0;MS.wi=0;MS.waveT=4;MS.hold=0;MS.objs=[];const s=MISSION.steps[i];if(!s)return finishMission(true);
+  MS.step=i;MS.t=0;MS.wi=0;MS.waveT=4;MS.hold=0;MS.objs=[];MS.strag=null;const s=MISSION.steps[i];if(!s)return finishMission(true);
   if(MS.zone){S.remove(MS.zone);MS.zone=null;}
   if(s.cp)MS.cp={step:i,x:P.x,z:P.z,yaw:P.yaw,tier:GUN.tier};MS.wpos=null;
   const first=!MS.built[i];
@@ -1466,14 +1479,14 @@ function updMission(dt){
   MS.t+=dt;MS.time+=dt;const s=MISSION.steps[MS.step];if(!s)return;
   for(const m of MAPS.field.mastObjs||[])if(m.fall&&m.fall<90){m.fall+=dt*60;m.tower.rotation.z=Math.min(1.5,(m.fall/60)*(m.fall/60)*1.5);}
   let txt=s.label,ok=false;
-  if(s.t==='destroy'){const left=MS.objs.filter(t=>!t.dead).length;txt+=' '+(MS.objs.length-left)+'/'+MS.objs.length;
-    if(s.masts){const all=MISSION.steps.filter(q=>q.masts).length,doneN=MISSION.steps.indexOf(s);txt=s.label+' '+(doneN+(left?0:1))+'/'+all;}ok=left===0;}
+  if(s.t==='destroy'){let left=0;for(const t of MS.objs)if(!t.dead)left++;txt+=' '+(MS.objs.length-left)+'/'+MS.objs.length;ok=left===0;}
   else if(s.t==='reach'){ok=Math.hypot(P.x-s.at[0],P.z-s.at[1])<s.r;}
   else if(s.t==='escort'){const r=escortStep(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
   else if(s.t==='endless'){const r=endlessStep(s,dt);txt=r.txt;ok=false;MS.wpos=r.pos;}
   else if(s.t==='capture'){const r=captureStep(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
   else if(s.t==='boss'){const r=BOSS_DEF[MISSION.boss].step(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
-  else if(s.t==='clear'){ok=MS.t>3&&EN.filter(e=>!e.dead).length===0&&BEACONS.length===0;}
+  else if(s.t==='clear'){let n=0,b=null,bd=1e18;for(const e of EN){if(e.dead)continue;n++;const d=(e.x-P.x)**2+(e.z-P.z)**2;if(d<bd){bd=d;b=e;}}
+    ok=MS.t>3&&n===0&&BEACONS.length===0;MS.strag=MS.t>3&&b&&bd>45*45?b:null;}
   else if(s.t==='hold'){const inside=Math.hypot(P.x-s.at[0],P.z-s.at[1])<s.r;if(inside)MS.hold+=dt;const left=Math.max(0,s.time-MS.hold);
     txt+=' '+Math.floor(left/60)+':'+String(Math.floor(left%60)).padStart(2,'0')+(inside?'':' · GET BACK IN THE RING');
     MS.waveT-=dt;if(MS.waveT<=0&&left>0){MS.waveT=s.every;const w=s.waves[MS.wi%s.waves.length];MS.wi++;const a=Math.random()*TAU;spawnGroup(w,s.at[0]+Math.cos(a)*70,s.at[1]+Math.sin(a)*70,[0,14]);}
@@ -2285,7 +2298,7 @@ const DRN={gun:5,rate:3,range:60,repair:2,shield:40,wake:70,recharge:4};
 const KX={beams:[],bm:null,col:new THREE.Color(),m4:new THREE.Matrix4(),q:new THREE.Quaternion(),s:new THREE.Vector3(),p:new THREE.Vector3(),z:new THREE.Vector3(0,0,1),d:new THREE.Vector3()};
 const _ka=new THREE.Vector3(),_kb=new THREE.Vector3();
 function kitKind(i){const A=M&&M.ready&&M.arms[i];return A&&A.kind||'ac';}
-function kitHas(id){return !!(M&&M.W&&Object.values(M.W.kit).includes(id));}
+function kitHas(id){if(!M||!M.W)return false;const K=M.W.kit;for(const k in K)if(K[k]===id)return true;return false;}
 
 /* ---- beams: one instanced mesh of glowing cylinders for the rail shots, the lightning and the drone's repair beam ---- */
 function kitFxInit(){if(KX.bm)return;const g=new THREE.CylinderGeometry(1,1,1,6,1,true);g.rotateX(Math.PI/2);
@@ -2317,7 +2330,8 @@ function lanceArm(A,hold,dt,k){A.cd=Math.max(0,(A.cd||0)-dt);if(A.ch==null)A.ch=
   else if(!hold&&A.chg){A.chg=false;if(A.ch>=.25)railShot(A,A.ch);A.ch=0;}
   else if(!hold)A.ch=0;
   /* the charge: a glow at the muzzle that grows, and sparks drawn into it */
-  if(!A.glow){A.glow=new THREE.Mesh(new THREE.SphereGeometry(1,12,8),new THREE.MeshBasicMaterial({color:new THREE.Color(.5,.8,1).multiplyScalar(4),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}));
+  if(!A.glow){const si=A.sd>0?1:0;if(!KX.lg){KX.lg=new THREE.SphereGeometry(1,12,8);KX.lm=[0,1].map(()=>new THREE.MeshBasicMaterial({color:new THREE.Color(.5,.8,1).multiplyScalar(4),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}));}
+    A.glow=new THREE.Mesh(KX.lg,KX.lm[si]);   /* one shape and one material per side, kept across refits */
     A.glow.renderOrder=5;A.muzzle.add(A.glow);}
   const ch=Math.max(0,A.ch||0);A.glow.visible=ch>0;if(ch>0){const s=.08+ch*.32+(ch>=.99?Math.random()*.06:0);A.glow.scale.setScalar(s/Math.max(1e-3,A.muzzle.getWorldScale(_kb).x));A.glow.material.opacity=.5+ch*.5;
     if(Math.random()<dt*40*ch){A.muzzle.getWorldPosition(_ka);const a=Math.random()*TAU,b=Math.random()*TAU,r=1.2;
@@ -2362,9 +2376,9 @@ function arcZap(A){A.muzzle.getWorldPosition(_ka);const s=_ka.clone(),fx=-Math.s
 
 /* ---- missile lock (MP-9): a machine near the crosshair for 0.6 s is locked (0.36 s with the Watcher); missiles at locked
    machines turn hard, missiles at others turn gently, and with nothing in front they fly at the crosshair ---- */
-function updLock(dt){const T=LOCK.time*(kitHas('watcher')?WATCH.lockK:1)*(UP.lockK||1);cam.getWorldDirection(_kb);
+function updLock(dt){const T=LOCK.time*(kitHas('watcher')?WATCH.lockK:1)*(UP.lockK||1),pod=MSL.ammo>0&&kitHas('mpod');cam.getWorldDirection(_kb);
   for(const e of EN){if(e.dead||e.spawnT>0){e.lk=0;continue;}const ex=e.x-cam.position.x,ey=e.y+e.d.cy-cam.position.y,ez=e.z-cam.position.z,d=Math.hypot(ex,ey,ez);
-    const a=Math.acos(clamp((ex*_kb.x+ey*_kb.y+ez*_kb.z)/(d||1),-1,1));e.lka=a;const inC=MSL.ammo>0&&kitHas('mpod')&&a<LOCK.cone&&d<LOCK.range;
+    const a=Math.acos(clamp((ex*_kb.x+ey*_kb.y+ez*_kb.z)/(d||1),-1,1));e.lka=a;const inC=pod&&a<LOCK.cone&&d<LOCK.range;
     const was=(e.lk||0)>=1;e.lk=inC?Math.min(1,(e.lk||0)+dt/T):Math.max(0,(e.lk||0)-dt*2);if(!was&&e.lk>=1)tone('sine',1500,1700,.05,.03);}}
 function lockCands(){return EN.filter(e=>!e.dead&&e.spawnT<=0&&e.lka<LOCK.cone&&Math.hypot(e.x-P.x,e.z-P.z)<LOCK.range).sort((a,b)=>((b.lk>=1)-(a.lk>=1))||(a.lka-b.lka));}
 
@@ -2378,52 +2392,59 @@ function updWarn(dt){WARN_T-=dt;if(!kitHas('watcher')||P.dead)return;const cx=P.
   for(const e of EN){if(e.dead)continue;if(e.st==='aim'&&e.id==='hound'){if(!e.warned){e.warned=true;if(Math.abs(angD(Math.atan2(-(e.x-P.x),-(e.z-P.z)),P.yaw))<.6)continue;HUD.warn(e.x,e.z);if(WARN_T<=0){WARN_T=.5;sWarn();}}}else if(e.st!=='charge')e.warned=false;}}
 
 /* ---- the assist drone ---- */
-const DR={st:'dock',hold:null,P:null,sh:DRN.shield,cd:0,tg:null,t:0,pos:new THREE.Vector3(),fix:0,rep:0};
+const DR={st:'dock',hold:null,P:null,sh:DRN.shield,cd:0,tg:null,t:0,pos:new THREE.Vector3(),fix:0,rep:0,pt:{}};
+const _kw=new THREE.Vector3(),_kq=new THREE.Quaternion(),_ke=new THREE.Euler();
 function droneDockNow(){const h=DR.hold;if(!h)return;const dock=M&&M.W&&M.W.holds.bk&&M.W.holds.bk.getObjectByName('drone_dock');
   if(dock&&h.parent!==dock){dock.add(h);}h.position.set(0,0,0);h.quaternion.identity();h.scale.set(1,1,1);DR.st='dock';DR.fix=0;}
 function updDrone(dt){const h=M&&M.ready&&M.W&&M.W.holds.drone;
-  if(h!==DR.hold||DR.P!==P){if(DR.hold&&DR.hold!==h&&DR.hold.parent)DR.hold.parent.remove(DR.hold);DR.hold=h||null;DR.P=P;DR.sh=DRN.shield;droneDockNow();}
+  if(h!==DR.hold||DR.P!==P){if(DR.hold&&DR.hold!==h&&DR.hold.parent)DR.hold.parent.remove(DR.hold);DR.hold=h||null;DR.P=P;DR.sh=DRN.shield;droneDockNow();
+    DR.pt=h?{gun:h.getObjectByName('gun'),muzzle:h.getObjectByName('muzzle')||h,repair:h.getObjectByName('repair')||h,fans:['fan_L','fan_R'].map(n=>h.getObjectByName(n))}:{};}
   if(!h)return;const dock=M.W.holds.bk&&M.W.holds.bk.getObjectByName('drone_dock');if(!dock)return;
   const live=(G.mode==='play'&&!G.paused)||G.mode==='demo';if(!live){if(G.mode!=='play'&&DR.st!=='dock')droneDockNow();return;}
   if(P.dead){if(DR.st!=='dock')droneDockNow();return;}
   DR.t+=dt;DR.cd-=dt;
-  const near=EN.some(e=>!e.dead&&e.spawnT<=0&&Math.hypot(e.x-P.x,e.z-P.z)<DRN.wake),fix=!near&&P.hull<P.hullMax;
-  if(DR.st==='dock'){DR.sh=Math.min(DRN.shield,DR.sh+DRN.recharge*dt);
+  /* it wakes for a machine inside 70 m, and stays out until none is inside 80 m (no flying out and back at the edge) */
+  const wr=DR.st==='dock'?DRN.wake:DRN.wake+10;let near=false;for(const e of EN)if(!e.dead&&e.spawnT<=0&&(e.x-P.x)**2+(e.z-P.z)**2<wr*wr){near=true;break;}
+  const fix=!near&&P.hull<P.hullMax;
+  if(DR.st==='dock'||DR.st==='home')DR.sh=Math.min(DRN.shield,DR.sh+DRN.recharge*dt);   /* the shield recharges on the way home too */
+  if(DR.st==='dock'){
     if((near||fix)&&DR.sh>=DRN.shield*.5){h.updateMatrixWorld(true);S.attach(h);DR.st='fly';DR.pos.copy(h.position);sJet();}
     return;}
   /* where it wants to be: beside your right shoulder, a little ahead; when repairing it circles you slowly */
-  const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw),rx=Math.cos(P.yaw),rz=-Math.sin(P.yaw);let want=new THREE.Vector3();
+  const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw),rx=Math.cos(P.yaw),rz=-Math.sin(P.yaw),want=_kw;
   const goHome=DR.st==='home'||(!near&&!fix);
   if(goHome){dock.getWorldPosition(want);}
   else if(fix){const a=DR.t*.6;want.set(P.x+Math.cos(a)*4.2,P.y+5.2+Math.sin(DR.t*1.7)*.3,P.z+Math.sin(a)*4.2);}
   else want.set(P.x+rx*2.7-fx*.4,P.y+7.8+Math.sin(DR.t*2.1)*.3,P.z+rz*2.7-fz*.4);   /* above your right shoulder: on screen on a phone too */
-  const k=damp(goHome?4.5:3,dt);h.position.lerp(want,k);
+  if(goHome){   /* home: fly straight at the jet pack at least 30 m/s (faster than you can go), and dock once close */
+    const d=h.position.distanceTo(want);if(d<1.5){droneDockNow();return;}
+    h.position.addScaledVector(_kb.subVectors(want,h.position),Math.min(d,Math.max(d*damp(4.5,dt),30*dt))/d);}
+  else h.position.lerp(want,damp(3,dt));
   /* face the target (or the way you face), lean into the flight */
   let tg=null;if(near&&!goHome){tg=AIM.e&&!AIM.e.dead&&Math.hypot(AIM.e.x-h.position.x,AIM.e.z-h.position.z)<DRN.range?AIM.e:null;
     if(!tg){let bd=DRN.range;for(const e of EN){if(e.dead||e.spawnT>0)continue;const d=Math.hypot(e.x-h.position.x,e.z-h.position.z);if(d<bd){bd=d;tg=e;}}}}
   DR.tg=tg;const yaw=tg?Math.atan2(-(tg.x-h.position.x),-(tg.z-h.position.z)):goHome?P.yaw:P.yaw;
-  const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(0,yaw,0));if(goHome){dock.getWorldQuaternion(q);}h.quaternion.slerp(q,damp(6,dt));
-  const gun=h.getObjectByName('gun');
-  if(tg){const mz=h.getObjectByName('muzzle')||h;mz.getWorldPosition(_ka);const ty=tg.y+tg.d.cy,d=Math.hypot(tg.x-_ka.x,tg.z-_ka.z);
+  const q=_kq;if(goHome)dock.getWorldQuaternion(q);else q.setFromEuler(_ke.set(0,yaw,0));h.quaternion.slerp(q,damp(6,dt));
+  const gun=DR.pt.gun;
+  if(tg){DR.pt.muzzle.getWorldPosition(_ka);const ty=tg.y+tg.d.cy,d=Math.hypot(tg.x-_ka.x,tg.z-_ka.z);
     if(gun)gun.rotation.x=clamp(Math.atan2(ty-_ka.y,d),-1,.4);
     if(DR.cd<=0){DR.cd=1/DRN.rate;let ax=tg.x-_ka.x,ay=ty-_ka.y,az=tg.z-_ka.z;const l=Math.hypot(ax,ay,az)||1;ax/=l;ay/=l;az/=l;
       BOLTS.push({x:_ka.x,y:_ka.y,z:_ka.z,vx:ax*BOLT.speed,vy:ay*BOLT.speed,vz:az*BOLT.speed,life:(DRN.range+10)/BOLT.speed,dmg:DRN.gun*UP.dmgK*(UP.droneK||1)});
       part({x:_ka.x+ax*.2,y:_ka.y+ay*.2,z:_ka.z+az*.2,vx:0,vy:0,vz:0,life:.06,s0:.7,s1:.3,a:2,col:[1,.75,.4],glow:true});nz('bandpass',2600,900,.05,.08,1);}}
   else if(gun)gun.rotation.x*=1-damp(4,dt);
   /* repairs: a green beam to your hull */
-  if(fix&&!goHome&&h.position.distanceTo(want)<2.5){P.hull=Math.min(P.hullMax,P.hull+DRN.repair*(UP.repairK||1)*dt);const rp=h.getObjectByName('repair')||h;rp.getWorldPosition(_ka);
+  if(fix&&!goHome&&h.position.distanceTo(want)<2.5){P.hull=Math.min(P.hullMax,P.hull+DRN.repair*(UP.repairK||1)*dt);DR.pt.repair.getWorldPosition(_ka);
     _kb.set(P.x+(Math.random()-.5)*1.5,P.y+3+Math.random()*1.5,P.z+(Math.random()-.5)*1.5);beam(_ka,_kb,.05,[.3,1.6,.55],.07);
     if(Math.random()<dt*14)part({x:_kb.x,y:_kb.y,z:_kb.z,vx:0,vy:1,vz:0,life:.5,s0:.4,s1:.1,a:1.4,col:[.4,1,.5],glow:true});
     DR.rep+=dt;if(DR.rep>2.5){DR.rep=0;HUD.msg('DRONE REPAIRING',1);}}
   /* FIELD REPAIR (pilot level 8): it also mends the hull during a fight, 1 a second */
-  if(near&&!goHome&&assistOn('repair')&&P.hull<P.hullMax){P.hull=Math.min(P.hullMax,P.hull+dt);if(Math.random()<dt*3){const rp=h.getObjectByName('repair')||h;rp.getWorldPosition(_ka);_kb.set(P.x,P.y+3.5,P.z);beam(_ka,_kb,.04,[.3,1.4,.5],.08);}}
+  if(near&&!goHome&&assistOn('repair')&&P.hull<P.hullMax){P.hull=Math.min(P.hullMax,P.hull+dt);if(Math.random()<dt*3){DR.pt.repair.getWorldPosition(_ka);_kb.set(P.x,P.y+3.5,P.z);beam(_ka,_kb,.04,[.3,1.4,.5],.08);}}
   /* its shield: enemy shots that pass close hit the drone instead */
   if(DR.st==='fly')for(let i=EBOLTS.length-1;i>=0;i--){const b=EBOLTS[i],dx=b.x-h.position.x,dy=b.y-h.position.y,dz=b.z-h.position.z;if(dx*dx+dy*dy+dz*dz<1.1){
     DR.sh-=b.dmg;EBOLTS.splice(i,1);sparks(b.x,b.y,b.z,5,[.5,.8,1]);if(DR.sh<=0){DR.sh=0;DR.st='home';HUD.msg('DRONE SHIELD DOWN · RETURNING',1.4);sShield();}}}
-  /* home: dock when it reaches the jet pack */
-  if(goHome){dock.getWorldPosition(_kb);if(h.position.distanceTo(_kb)<.35){droneDockNow();return;}}
+
   /* fans: a little tilt into the direction of flight */
-  for(const n of ['fan_L','fan_R']){const f=h.getObjectByName(n);if(f)f.rotation.x=Math.sin(DR.t*9+(n==='fan_L'?0:1))*.04-(goHome?0:.12);}}
+  DR.pt.fans.forEach((f,i)=>{if(f)f.rotation.x=Math.sin(DR.t*9+i)*.04-(goHome?0:.12);});}
 
 /* ---- the Watcher's HUD: radar, marks, the lock brackets; the Lance's charge bar ---- */
 const KH={marks:[],rt:0};
@@ -2455,7 +2476,7 @@ function kitHud(){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitH
     el.style.display='block';el.style.transform='translate('+((_ka.x*.5+.5)*innerWidth).toFixed(0)+'px,'+((-_ka.y*.5+.5)*innerHeight).toFixed(0)+'px)';
     const lk=e.lk||0,cls='mk'+(e.d.boss?' boss':'')+(lk>=1?' lock':lk>.02?' locking':'')+(DR.tg===e?' dr':'');if(el.className!==cls)el.className=cls;
     el.style.setProperty('--lk',lk.toFixed(2));});}
-if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas,kill:e=>hurtEnemy(e,1e6,e.x,e.y,e.z),openBook,briefMaybe});
+if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas,kill:e=>hurtEnemy(e,1e6,e.x,e.y,e.z),openBook,briefMaybe,ev:s=>eval(s)});   /* ev: tests reach any of the game's own names (dev only) */
   Object.defineProperties(I,{M:{get:()=>M},AIM:{get:()=>AIM},PL:{get:()=>PL}});}   /* getters: M is made later */
 
 /* ---- 06l_brief.js ---- */
@@ -2523,8 +2544,9 @@ function stageDress(id,sc,mat,dark){const N=n=>sc.getObjectByName(n),e={o:sc,mat
 function stageShow(id,dark){stageInit();const seq=++STG.seq;STG.id=id;STG.pct=-1;
   const wantFull=QL!=='low'&&!dark&&!!stageFiles(id,true);   /* Ironhowl 3 models have no full version */
   stageModel(id,false,dark).then(o=>{if(seq!==STG.seq)return;stagePut(o,false);BAY.yaw=.6;BAY.pitch=.12;BAY.auto=true;
-    if(wantFull){STG.pct=0;BLM.onProgress=(u,a,b)=>{if(seq===STG.seq){STG.pct=Math.round(100*a/Math.max(1,b));briefSub();}};
-      stageModel(id,true,false).then(F=>{if(seq!==STG.seq){F.traverse(q=>{if(q.isMesh)q.geometry.dispose();});return;}stagePut(F,true);STG.pct=-1;briefSub();})
+    if(wantFull){STG.pct=0;const url=stageFiles(id,true).glb;   /* the percentage follows the download's bytes (the loading manager only counts whole files) */
+      GLBP[url]=k=>{if(seq!==STG.seq)return;const n=Math.min(99,Math.round(k*100));if(n!==STG.pct){STG.pct=n;briefSub();}};
+      stageModel(id,true,false).then(F=>{delete GLBP[url];if(seq!==STG.seq){F.traverse(q=>{if(q.isMesh)q.geometry.dispose();});return;}stagePut(F,true);STG.pct=-1;briefSub();})
         .catch(err=>{console.warn('full model',id,err);STG.pct=-1;briefSub();});}
     briefSub();}).catch(err=>{console.error('stage',id,err);});}
 /* ---------- opening and closing (the bay's own open/close, in another mode) ---------- */
@@ -2601,16 +2623,18 @@ function assistOn(id){const a=PILOT.assists.find(q=>q.id===id);return !!a&&(PL.a
 /* what a level opens, in words */
 function levelGives(l){const k=Object.keys(PILOT.kit).filter(id=>PILOT.kit[id]===l).map(id=>KIT_INFO[id].name.split(' ').slice(1).join(' '));
   const a=PILOT.assists.filter(q=>q.lv===l).map(q=>q.name);return k.concat(a);}
-function addXP(n,why){if((G.mode!=='play'&&!(G.mode==='results'&&why==='mission'))||!(n>0))return;   /* the mission bonus comes as the results open */
-  n=Math.round(n*DK.xp);   /* HARD: +25 % (06n_difficulty.js) */const sv=SAVE.get(),was=pilotLv(sv.xp||0);sv.xp=(sv.xp||0)+n;SAVE.put(sv);PL.run+=n;pilotRefresh();
-  if(PL.lv>was){for(let l=was+1;l<=PL.lv;l++)PL.ups.push(l);const g=levelGives(PL.lv),kit=Object.keys(PILOT.kit).some(id=>PILOT.kit[id]===PL.lv);
+function addXP(n,why,sv){if((G.mode!=='play'&&!(G.mode==='results'&&why==='mission'))||!(n>0))return;   /* the mission bonus comes as the results open */
+  n=Math.round(n*DK.xp);   /* HARD: +25 % (06n_difficulty.js) */
+  const own=!sv;sv=sv||SAVE.get();const was=pilotLv(sv.xp||0);sv.xp=(sv.xp||0)+n;if(own)SAVE.put(sv);   /* a kill passes its save in: one read and one write */
+  PL.run+=n;PL.xp=sv.xp;PL.lv=pilotLv(PL.xp);
+  if(PL.lv>was){let g=[],kit=false;for(let l=was+1;l<=PL.lv;l++){PL.ups.push(l);g=g.concat(levelGives(l));if(Object.keys(PILOT.kit).some(id=>PILOT.kit[id]===l))kit=true;}   /* two levels at once: name what both opened */
     HUD.banner('PILOT LEVEL '+PL.lv);HUD.msg(g.length?g.join(' + ')+(kit?' UNLOCKED · FIT IT IN THE MOD BAY':' ONLINE'):'LEVEL UP',3.2);
     tone('triangle',520,1040,.35,.07);setTimeout(()=>tone('triangle',780,1560,.4,.07),160);applyAssists();}}
 /* a machine destroyed: XP, and its card for the armory book */
-function pilotKill(key,score){if(G.mode!=='play')return;const sv=SAVE.get();sv.beaten=sv.beaten||{};sv.beaten[key]=(+sv.beaten[key]||0)+1;SAVE.put(sv);addXP(score);}
+function pilotKill(key,score){if(G.mode!=='play')return;const sv=SAVE.get();sv.beaten=sv.beaten||{};sv.beaten[key]=(+sv.beaten[key]||0)+1;addXP(score,'kill',sv);SAVE.put(sv);}
 function pilotRunStart(){PL.run=0;PL.ups=[];RUNSEEN=new Set();pilotRefresh();
   /* a level reached last run may have opened kit that the default loadout carries: fit it now */
-  if(M&&M.W){const L=loadout();if(SLOTS.some(s=>(M.W.kit[s]||null)!==(L[s]||null)))refitKit(M);}}
+  if(M&&M.W&&M.ready){const L=loadout();if(SLOTS.some(s=>(M.W.kit[s]||null)!==(L[s]||null)))refitKit(M);}}
 /* the AI assists that work through numbers (the others are checked where they act) */
 function applyAssists(){UP.lockK=assistOn('lock')?.75:1;UP.repairK=assistOn('repair')?1.5:1;UP.hoverK=assistOn('hover')?1.5:1;UP.dmgK=(UP.dmgK0||1)*(assistOn('ace')?1.1:1);}
 /* the line under the title, and the results */
@@ -2807,7 +2831,7 @@ function setupHud(){
   const hold=(id,on,off)=>{const b=$(id);b.addEventListener('touchstart',e=>{e.preventDefault();on(e);b.classList.add('on');},{passive:false});
     const up=e=>{off&&off(e);b.classList.remove('on');};b.addEventListener('touchend',up);b.addEventListener('touchcancel',up);};
   hold('bjet',()=>{TS.jet=true;TS.jetHit=true;},()=>{TS.jet=false;});
-  hold('bfire',e=>{const t=e.changedTouches[0];TS.fire=true;TS.fireId=t.identifier;TS.lx=t.clientX;TS.ly=t.clientY;},()=>{TS.fire=false;TS.fireId=-1;});
+  hold('bfire',e=>{const t=e.changedTouches[0];TS.fire=true;TS.fireId=t.identifier;TS.fx=t.clientX;TS.fy=t.clientY;},()=>{TS.fire=false;TS.fireId=-1;});
   hold('bmsl',()=>{TS.msl=true;});hold('bvent',()=>{TS.vent=true;});hold('bsalvo',()=>{TS.salvo=true;});
   $('bview').onclick=e=>{e.stopPropagation();cycleView();};
   $('bpause').onclick=e=>{e.stopPropagation();if(G.mode==='play')setPause(!G.paused);};

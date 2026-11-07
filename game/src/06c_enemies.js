@@ -131,7 +131,7 @@ function updEnemies(dt){
     else if(e.id==='skitter'){
       if(e.st==='hop'){/* IH4: after a zap it springs back a few metres, then comes again (gives you a moment to shoot it) */
         mvx=-dx/dist;mvz=-dz/dist;sp=e.d.speed*.85;want=face;if(e.t>.5){e.st='move';e.t=0;}}
-      else if(dist>2.8){const nd=navDir(e.x,e.z);mvx=nd[0];mvz=nd[1];want=Math.atan2(-mvx,-mvz);
+      else if(dist>e.d.r+RAD+.6){const nd=navDir(e.x,e.z);mvx=nd[0];mvz=nd[1];want=Math.atan2(-mvx,-mvz);
         const s=Math.sin(e.t*3+e.phase)*.5;mvx+=-nd[1]*s;mvz+=nd[0]*s;}
       else if(e.cd<=0&&!P.dead&&P.y-hgt(P.x,P.z)<3){e.cd=1.2;e.st='hop';e.t=0;hurtPlayer(e.d.zap||4,e.x,e.z);sZap();sparks(lerp(e.x,P.x,.6),e.y+1.2,lerp(e.z,P.z,.6),6,[.6,.85,1]);}
     }else if(e.id==='hound'){

@@ -18,16 +18,18 @@ function assistOn(id){const a=PILOT.assists.find(q=>q.id===id);return !!a&&(PL.a
 /* what a level opens, in words */
 function levelGives(l){const k=Object.keys(PILOT.kit).filter(id=>PILOT.kit[id]===l).map(id=>KIT_INFO[id].name.split(' ').slice(1).join(' '));
   const a=PILOT.assists.filter(q=>q.lv===l).map(q=>q.name);return k.concat(a);}
-function addXP(n,why){if((G.mode!=='play'&&!(G.mode==='results'&&why==='mission'))||!(n>0))return;   /* the mission bonus comes as the results open */
-  n=Math.round(n*DK.xp);   /* HARD: +25 % (06n_difficulty.js) */const sv=SAVE.get(),was=pilotLv(sv.xp||0);sv.xp=(sv.xp||0)+n;SAVE.put(sv);PL.run+=n;pilotRefresh();
-  if(PL.lv>was){for(let l=was+1;l<=PL.lv;l++)PL.ups.push(l);const g=levelGives(PL.lv),kit=Object.keys(PILOT.kit).some(id=>PILOT.kit[id]===PL.lv);
+function addXP(n,why,sv){if((G.mode!=='play'&&!(G.mode==='results'&&why==='mission'))||!(n>0))return;   /* the mission bonus comes as the results open */
+  n=Math.round(n*DK.xp);   /* HARD: +25 % (06n_difficulty.js) */
+  const own=!sv;sv=sv||SAVE.get();const was=pilotLv(sv.xp||0);sv.xp=(sv.xp||0)+n;if(own)SAVE.put(sv);   /* a kill passes its save in: one read and one write */
+  PL.run+=n;PL.xp=sv.xp;PL.lv=pilotLv(PL.xp);
+  if(PL.lv>was){let g=[],kit=false;for(let l=was+1;l<=PL.lv;l++){PL.ups.push(l);g=g.concat(levelGives(l));if(Object.keys(PILOT.kit).some(id=>PILOT.kit[id]===l))kit=true;}   /* two levels at once: name what both opened */
     HUD.banner('PILOT LEVEL '+PL.lv);HUD.msg(g.length?g.join(' + ')+(kit?' UNLOCKED · FIT IT IN THE MOD BAY':' ONLINE'):'LEVEL UP',3.2);
     tone('triangle',520,1040,.35,.07);setTimeout(()=>tone('triangle',780,1560,.4,.07),160);applyAssists();}}
 /* a machine destroyed: XP, and its card for the armory book */
-function pilotKill(key,score){if(G.mode!=='play')return;const sv=SAVE.get();sv.beaten=sv.beaten||{};sv.beaten[key]=(+sv.beaten[key]||0)+1;SAVE.put(sv);addXP(score);}
+function pilotKill(key,score){if(G.mode!=='play')return;const sv=SAVE.get();sv.beaten=sv.beaten||{};sv.beaten[key]=(+sv.beaten[key]||0)+1;addXP(score,'kill',sv);SAVE.put(sv);}
 function pilotRunStart(){PL.run=0;PL.ups=[];RUNSEEN=new Set();pilotRefresh();
   /* a level reached last run may have opened kit that the default loadout carries: fit it now */
-  if(M&&M.W){const L=loadout();if(SLOTS.some(s=>(M.W.kit[s]||null)!==(L[s]||null)))refitKit(M);}}
+  if(M&&M.W&&M.ready){const L=loadout();if(SLOTS.some(s=>(M.W.kit[s]||null)!==(L[s]||null)))refitKit(M);}}
 /* the AI assists that work through numbers (the others are checked where they act) */
 function applyAssists(){UP.lockK=assistOn('lock')?.75:1;UP.repairK=assistOn('repair')?1.5:1;UP.hoverK=assistOn('hover')?1.5:1;UP.dmgK=(UP.dmgK0||1)*(assistOn('ace')?1.1:1);}
 /* the line under the title, and the results */
