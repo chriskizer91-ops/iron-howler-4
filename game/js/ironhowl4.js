@@ -256,6 +256,8 @@ function postSetup(){const want=!!QC.bloom&&!Q.has('nobloom');
     POST.bloom=new THREE.UnrealBloomPass(new THREE.Vector2(256,256),.55,.42,1.7);POST.bloom.highPassUniforms.smoothWidth.value=.6;
     POST.bloom.materialHighPassFilter.fragmentShader=HP_FRAG;POST.bloom.materialHighPassFilter.needsUpdate=true;
     POST.comp.addPass(POST.bloom);POST.comp.addPass(new THREE.OutputPass());}
+  /* glow switched off: its buffers (several screen-sized images) are freed, not kept */
+  if(!want&&POST.comp){POST.comp.dispose();if(POST.bloom&&POST.bloom.dispose)POST.bloom.dispose();POST.comp=null;POST.bloom=null;}
   POST.on=want;postResize();}
 function postResize(){if(!POST.comp)return;POST.comp.setPixelRatio(R.getPixelRatio());POST.comp.setSize(innerWidth,innerHeight);}
 function renderFrame(){if(POST.on){R.info.autoReset=false;R.info.reset();POST.comp.render();}else{R.info.autoReset=true;R.render(S,cam);}}
@@ -404,10 +406,15 @@ function updVeg(dt,mx,my,mz){
         if(t>-.05&&t<1.08){const px=dx-segx*t,pz=dz-segz*t,dp=Math.sqrt(px*px+pz*pz);if(dp<s.cr*.7+1.4)tgt=.86;}
         if(dx*dx+dz*dz<s.cr*s.cr*.4)tgt=1;
         s.f+=(tgt-s.f)*damp(tgt>s.f?10:4,dt);}}
-    for(const lod of ['near','far']){const L=lod==='near'?sn:sf;
-      for(const p of a.parts[lod]){const arr=p.im.instanceMatrix.array,fa=p.fade.array;
-        for(let k=0;k<L.length;k++){const i=L[k];arr.set(p.big.subarray(i*16,i*16+16),k*16);fa[k]=lod==='near'&&isT?a.inst[i].f:0;}
-        p.im.count=L.length;p.im.visible=L.length>0;p.im.instanceMatrix.needsUpdate=true;p.fade.needsUpdate=true;
+    for(const lod of ['near','far']){const L=lod==='near'?sn:sf,PV=lod==='near'?(a.psn||(a.psn=[])):(a.psf||(a.psf=[]));
+      /* only send what changed, and only the part in use: the same plants as last frame (no fading trees) send nothing */
+      let same=!(isT&&lod==='near')&&PV.length===L.length;if(same)for(let k=0;k<L.length;k++)if(PV[k]!==L[k]){same=false;break;}
+      if(!same){PV.length=L.length;for(let k=0;k<L.length;k++)PV[k]=L[k];}
+      for(const p of a.parts[lod]){
+        if(!same){const arr=p.im.instanceMatrix.array,fa=p.fade.array,big=p.big;
+          for(let k=0;k<L.length;k++){const i=L[k]*16,o=k*16;for(let j=0;j<16;j++)arr[o+j]=big[i+j];fa[k]=lod==='near'&&isT?a.inst[L[k]].f:0;}
+          p.im.count=L.length;p.im.visible=L.length>0;
+          if(L.length){const ia=p.im.instanceMatrix;ia.clearUpdateRanges();ia.addUpdateRange(0,L.length*16);ia.needsUpdate=true;p.fade.clearUpdateRanges();p.fade.addUpdateRange(0,L.length);p.fade.needsUpdate=true;}}
         const tt=L.length*(p.geo.index?p.geo.index.count:p.geo.attributes.position.count)/3;tris+=tt;inst+=L.length;if(DEV){const k=a.kind+'.'+lod;VEGN.by[k]=(VEGN.by[k]||0)+tt;}}}
   }
   VEGN.tris=tris|0;VEGN.inst=inst;
@@ -569,13 +576,21 @@ function poolTex(){const c=document.createElement('canvas');c.width=c.height=128
 const BND=()=>MAPDEF.bounds||{x0:-PLAY-6,x1:PLAY+6,z0:-PLAY-6,z1:PLAY+6};
 function boxAt(x,z,y){const a=VEG.cols.get(colKey(x,z));if(!a)return false;for(const c of a)if(c.b&&x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&y<c.y0+c.h)return true;return false;}
 /* after a map is built, join its fixed single-material meshes into one mesh per material (fences, posts, crane beams, lamps...) */
+/* a vertex range of a non-indexed geometry, as its own geometry (one material's part of a many-material mesh) */
+function geoRange(g,start,count){const out=new THREE.BufferGeometry(),e=Math.min(g.attributes.position.count,start+count);
+  for(const k in g.attributes){const a=g.attributes[k],s=a.itemSize;out.setAttribute(k,new THREE.BufferAttribute(a.array.slice(start*s,e*s),s));}return out;}
 function mergeStatic(before){
   const by=new Map();
-  for(const o of S.children.slice()){if(before.has(o)||!o.isMesh||o.isInstancedMesh||Array.isArray(o.material)||o.material.transparent&&!o.material.alphaTest||o.userData.keep)continue;
+  for(const o of S.children.slice()){if(before.has(o)||!o.isMesh||o.isInstancedMesh||o.userData.keep)continue;
+    const multi=Array.isArray(o.material),mats=multi?o.material:[o.material];   /* IH4: buildings with a roof and walls (several materials) merge too */
+    if(mats.some(m=>m.transparent&&!m.alphaTest)||multi&&!o.geometry.groups.length)continue;
     o.updateMatrixWorld(true);let g=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();g.applyMatrix4(o.matrixWorld);
-    for(const k of Object.keys(g.attributes))if(!['position','normal','uv'].includes(k))g.deleteAttribute(k);if(!g.attributes.uv)continue;
-    if(!by.has(o.material))by.set(o.material,{gs:[],cast:o.castShadow});by.get(o.material).gs.push(g);S.remove(o);}
-  let n=0;for(const [m,v] of by){const mm=new THREE.Mesh(THREE.mergeGeometries(v.gs,false),m);mm.castShadow=v.cast;mm.receiveShadow=true;S.add(mm);n+=v.gs.length;}
+    for(const k of Object.keys(g.attributes))if(!['position','normal','uv'].includes(k))g.deleteAttribute(k);
+    if(!g.attributes.uv||!g.attributes.normal||Object.values(g.attributes).some(a=>a.isInterleavedBufferAttribute))continue;
+    const parts=multi?g.groups.map(q=>[mats[q.materialIndex],geoRange(g,q.start,q.count)]):[[o.material,g]];
+    for(const [m,pg] of parts){if(!m||!pg.attributes.position.count)continue;const key=m.uuid+(o.castShadow?'|c':'');   /* shadow casters and the rest stay apart */
+      if(!by.has(key))by.set(key,{m,gs:[],cast:o.castShadow});by.get(key).gs.push(pg);}S.remove(o);}
+  let n=0;for(const [,v] of by){const mm=new THREE.Mesh(THREE.mergeGeometries(v.gs,false),v.m);mm.castShadow=v.cast;mm.receiveShadow=true;S.add(mm);n+=v.gs.length;}
   return n;}
 
 /* ---- 04c_foundry.js ---- */
@@ -674,15 +689,15 @@ function puddles(n,fn,size,o={}){const g=new THREE.PlaneGeometry(1,1);g.rotateX(
 /* ---------------- per map ---------------- */
 MAPS.woods.dress=function(){
   const rock=tmat('83-mossy-boulder-rock',{r:.95,m:0}),bark=new THREE.MeshStandardMaterial({color:0x4a3c30,roughness:.95,normalMap:nmap('83-mossy-boulder-rock'),normalScale:new THREE.Vector2(1.4,1.4)});
-  scatter(rockGeo(.35,3),rock,900,r=>inPlay(r),{s0:.5,s1:1.6,y:.1,seed:41});                                  // pebbles and stones
+  scatter(rockGeo(.35,3),rock,900,r=>inPlay(r),{s0:.5,s1:1.6,y:.1,seed:41,shadow:false});                     // pebbles and stones (no shadow: 130,000 triangles drawn again for a shadow you can't see)
   const log=new THREE.CylinderGeometry(.42,.48,1,10);log.rotateZ(Math.PI/2);
-  scatter(log,bark,90,r=>{const q=inPlay(r);return clearD(q[0],q[1])>4&&trailD(q[0],q[1])>5?q:null;},{s0:4,s1:8,sy:.12,y:.05,seed:43,n2:1});   // fallen logs
-  scatter(new THREE.CylinderGeometry(.5,.65,1,10),bark,150,r=>inPlay(r),{s0:.8,s1:1.3,y:.5,sy:.7,seed:47});          // stumps
+  scatter(log,bark,90,r=>{const q=inPlay(r);return clearD(q[0],q[1])>4&&trailD(q[0],q[1])>5?q:null;},{s0:4,s1:8,sy:.12,y:.05,seed:43,n2:1,shadow:false});   // fallen logs
+  scatter(new THREE.CylinderGeometry(.5,.65,1,10),bark,150,r=>inPlay(r),{s0:.8,s1:1.3,y:.5,sy:.7,seed:47,shadow:false});          // stumps
   groundDecals('40-scorch-mark',120,r=>inPlay(r),[2,4.5],{col:0x3a3020,a:.55,seed:49});                                   // dark leaf litter patches
 };
 MAPS.field.dress=function(){
   const rock=tmat('83-mossy-boulder-rock',{r:.95,m:0,col:0xb8b0a0}),wood=tmat('16-wooden-crate'),gm=tmat('24-gunmetal'),drum=tmat('18-red-drum-label',{r:.5,m:.4});
-  scatter(rockGeo(.4,7),rock,700,r=>inPlay(r),{s0:.4,s1:1.5,y:.1,seed:51});
+  scatter(rockGeo(.4,7),rock,700,r=>inPlay(r),{s0:.4,s1:1.5,y:.1,seed:51,shadow:false});
   const F=MAPS.field.farm;
   scatter(new THREE.BoxGeometry(1.2,.16,1.2),wood,26,r=>[F.x+(r()-.5)*40,F.z+(r()-.5)*36],{s0:1,s1:1.2,y:.08,seed:53});            // pallets by the farm
   scatter(new THREE.CylinderGeometry(.45,.45,1.3,12),drum,18,r=>[F.x+(r()-.5)*44,F.z+(r()-.5)*40],{s0:1,s1:1,y:.65,seed:55});        // drums
@@ -800,8 +815,10 @@ function kitFiles(dir,stem,full,orm){const b=IH4M+dir+'/'+stem;
 const GLBC={},GLBP={},KMAT={};   /* GLBP[url]: told how far a model's download has got (0..1) */
 function loadGLB(url,lm){if(!GLBC[url])GLBC[url]=new Promise((res,rej)=>new THREE.GLTFLoader(lm||LM).load(url,g=>res(g.scene),ev=>{const f=GLBP[url];if(f&&ev&&ev.total)f(ev.loaded/ev.total);},rej)).catch(e=>{delete GLBC[url];throw e;});   /* a failed load can be tried again */
   return GLBC[url].then(sc=>sc.clone(true));}
-function k4tex(url){const t=new THREE.TextureLoader(LM).load(url);t.flipY=false;t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;}
-function k4lin(url){const t=k4tex(url);t.colorSpace=THREE.NoColorSpace;return t;}
+/* textures by file: the field, the bay, the brief and the book share one copy, and the ORM map (roughness + metalness) loads once */
+const TEXC={};
+function k4tex(url,lin){const key=url+(lin?'|lin':'');if(TEXC[key])return TEXC[key];const t=new THREE.TextureLoader(LM).load(url);t.flipY=false;t.colorSpace=lin?THREE.NoColorSpace:THREE.SRGBColorSpace;t.anisotropy=4;return TEXC[key]=t;}
+function k4lin(url){return k4tex(url,true);}
 /* one material per model: the print (full) or the baked maps (combat) */
 function kitMat(f,world){const key=f.map+(world?'w':'');if(KMAT[key])return KMAT[key];
   const m=f.nrm?new THREE.MeshStandardMaterial({map:k4tex(f.map),normalMap:k4lin(f.nrm),roughnessMap:k4lin(f.orm),metalnessMap:k4lin(f.orm),roughness:1,metalness:1})
@@ -855,6 +872,7 @@ function rigKit(M){const W=M.W,_p=new THREE.Vector3();
     const bb=localBox(hold),mz=new THREE.Object3D();hold.add(mz);bb.getCenter(_p);
     const ax=['x','y','z'].sort((a,b)=>Math.abs(fwd[b])-Math.abs(fwd[a]))[0];_p[ax]=fwd[ax]>0?bb.max[ax]:bb.min[ax];mz.position.copy(_p);
     return {sh:arm,muzzle:mz,hold,base:hold.position.clone(),fwd,kick:0,sd:i?1:-1,kind:W.kit[s]};});
+  M.ac=M.arms.filter(a=>!a.kind||a.kind==='ac');   /* the autocannon arms, for the gun each frame */
   M.pods=[];for(let i=0;i<9;i++)for(const s of ['sh_R','sh_L']){const h=W.holds[s];if(h&&W.kit[s]==='mpod'){const t=h.getObjectByName('tube'+i);if(t)M.pods.push(t);}}   /* tubes in firing order, right and left pods taking turns */
   if(!M.pods.length)M.pods=[W.J.sh_R,W.J.sh_L];
   M.jets=[];const jp=W.holds.bk;if(!JETG.length)JETG.push(new THREE.CylinderGeometry(.22,.02,1,10,1,true),new THREE.CylinderGeometry(.12,.01,1,8,1,true));
@@ -996,7 +1014,7 @@ const BOLTS=[],EBOLTS=[],MISS=[];
 const SALVO={cd:0,cool:12,n:14,left:0,t:0,dmg:16,range:48};
 const BOLT={speed:150,range:170};
 let BM=null,EBM=null,MSM=null,MFL=null;
-const _sc=new THREE.Vector3(),_v=new THREE.Vector3(),_w=new THREE.Vector3(),_m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_z=new THREE.Vector3(0,0,1);
+const NOARM=[null],_sc=new THREE.Vector3(),_v=new THREE.Vector3(),_w=new THREE.Vector3(),_m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_z=new THREE.Vector3(0,0,1);
 function buildWeapons(){
   const g=new THREE.CylinderGeometry(.1,.1,1,6,1,true);g.rotateX(Math.PI/2);
   BM=new THREE.InstancedMesh(g,new THREE.MeshBasicMaterial({color:new THREE.Color(1,.78,.4).multiplyScalar(3),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}),160);
@@ -1048,7 +1066,7 @@ function updGun(c,dt){
   GUN.cd-=dt;GUN.ventCd=Math.max(0,GUN.ventCd-dt);GUN.flash=Math.max(0,GUN.flash-dt*12);GUN.hitT=Math.max(0,GUN.hitT-dt);
   if(M.ready)setTier(M,GUN.tier);
   /* IH4: only the arms that carry an autocannon fire gun rounds (the Lance and the Arc are in 06k_kit.js); one autocannon arm fires at 60 % of the pair's rate */
-  const AC=M.ready?M.arms.filter(a=>!a.kind||a.kind==='ac'):[null],firing=c.fire&&!GUN.over&&!P.dead&&AC.length>0;
+  const AC=M.ready?M.ac:NOARM,firing=c.fire&&!GUN.over&&!P.dead&&AC.length>0;
   kitArms(c,dt);
   if(firing&&GUN.cd<=0){
     const t=GUN.tier,A=AC[GUN.side%AC.length];GUN.cd+=1/(GUN.rate[t]*(AC.length<2?.6:1));if(GUN.cd<0)GUN.cd=0;GUN.side=(GUN.side+1)%AC.length;
@@ -1261,7 +1279,9 @@ function collect(k){sPickup();
   addScore(25);}
 /* ---- enemy brains ---- */
 function updEnemies(dt){
-  NAV.t-=dt;if(NAV.t<=0||navCell(P.x,P.z)!==NAV.pc){navBuild();NAV.t=.5;}
+  /* the path map: rebuilt when you move to a new cell (at most 4 times a second) or every 0.5 s, and only while a machine is alive to use it */
+  NAV.t-=dt;let walk=false;for(const e of EN)if(!e.dead){walk=true;break;}
+  if(walk&&(NAV.t<=0||NAV.t<.25&&navCell(P.x,P.z)!==NAV.pc)){navBuild();NAV.t=.5;}
   for(let i=BEACONS.length-1;i>=0;i--){const b=BEACONS[i];b.t-=dt;if(Math.random()<dt*30)part({x:b.x+(Math.random()-.5)*2,y:hgt(b.x,b.z)+.3,z:b.z+(Math.random()-.5)*2,vx:0,vy:8+Math.random()*6,vz:0,life:.5,s0:.9,s1:.3,a:1.4,col:[1,.2,.08],glow:true});if(b.t<=0)BEACONS.splice(i,1);}
   let alive=0;
   for(const e of EN){if(e.dead)continue;alive++;
@@ -1986,18 +2006,19 @@ function endlessBegin(){MS.repairs=0;Object.assign(EW,{wave:0,state:'break',t:6,
   radio([['ROOK','Endless. They keep coming, and every wave is a little worse.'],['ROOK','Supplies drop between waves. Every tenth wave, something big.']]);}
 function startEWave(){const n=++EW.wave;G.hpK=Math.min(2.2,1+.035*(n-1));DIFF.dmg=Math.min(1.6,.9+.025*(n-1));
   if(n>1)addXP(100+50*(n-1),'wave');const w=endlessWave(n),list=[];briefMaybe(w,'WAVE '+n);for(const id in w)for(let i=0;i<w[id];i++)list.push(id);list.sort(()=>Math.random()-.5);
-  EW.queue=[];for(let i=0;i<list.length;i+=6){const g={};for(const id of list.slice(i,i+6))g[id]=(g[id]||0)+1;EW.queue.push(g);}EW.qt=0;EW.state='fight';
+  EW.queue=[];EW.qn=list.length;for(let i=0;i<list.length;i+=6){const g={};for(const id of list.slice(i,i+6))g[id]=(g[id]||0)+1;EW.queue.push(g);}EW.qt=0;EW.state='fight';
   if(n%10===0&&MISSION.boss){if(BOSS.o&&BOSS.kind!=='forge')S.remove(BOSS.o);if(!(MISSION.boss==='forge'&&BOSS.o&&!BOSS.dead)){BOSS_DEF[MISSION.boss].make(...MISSION.bossAt);}
     BOSS.idle=false;EW.boss=true;radio([['FORGE',['SOMETHING LARGER IS COMING.','MEET MY BEST WORK.','YOU WILL NOT SURVIVE THIS ONE.'][(n/10-1)%3]]]);}
   HUD.banner(n%10===0?'WAVE '+n+' · BOSS':n%5===0?'WAVE '+n+' · HEAVY':'WAVE '+n);sClick();
   if(n>1&&n%4===1)radio([[Math.random()<.5?'ROOK':'FORGE',ENDLESS_LINES[Math.random()<.5?0:1][(Math.random()*6)|0]]]);}
 const ENDLESS_LINES=[['Still standing. Good.','They are getting tougher, Wraith. So are you.','Keep moving. Do not let them box you in.','Watch the edges. They like to flank.','Use the breaks. Grab the crates.','Another wave. Deep breath.'],
   ['YOUR RESISTANCE IS NOTED.','I HAVE MORE MACHINES THAN YOU HAVE TIME.','EVERY WAVE IS AN EXPERIMENT. YOU ARE THE SUBJECT.','RECALCULATING.','YOU CANNOT DO THIS FOREVER.','THE FACTORY NEVER SLEEPS.']];
-function endlessStep(s,dt){const alive=EN.filter(e=>!e.dead).length;
+function aliveN(){let n=0;for(const e of EN)if(!e.dead)n++;return n;}
+function endlessStep(s,dt){const alive=aliveN();
   if(EW.state==='break'){EW.t-=dt;if(EW.t<=0)startEWave();return {txt:'WAVE '+(EW.wave+1)+' IN '+Math.max(1,Math.ceil(EW.t)),ok:false,pos:null};}
   let bossPos=null;if(EW.boss&&BOSS.o){const r=BOSS_DEF[MISSION.boss].step(s,dt);bossPos=r.pos;if(BOSS.dead&&BOSS.deadT>2.5){EW.boss=false;addScore(3000);}}
-  if(EW.queue.length&&(EW.qt-=dt)<=0){EW.qt=7;const g=EW.queue.shift(),q=spawnSpot();spawnGroup(g,q[0],q[1],[0,10]);}
-  const left=alive+EW.queue.reduce((a,g)=>a+Object.values(g).reduce((x,y)=>x+y,0),0);
+  if(EW.queue.length&&(EW.qt-=dt)<=0){EW.qt=7;const g=EW.queue.shift(),q=spawnSpot();for(const id in g)EW.qn-=g[id];spawnGroup(g,q[0],q[1],[0,10]);}
+  const left=alive+(EW.queue.length?EW.qn:0);   /* machines still to come are counted as the groups leave the queue */
   if(!left&&!EW.boss){addScore(EW.wave*200);EW.state='break';EW.t=8;HUD.banner('WAVE '+EW.wave+' CLEARED');sPickup();
     const f=fwdOf(P.yaw),dx=P.x+f[0]*9,dz=P.z+f[1]*9;dropPickup(dx-2,dz,'repair');dropPickup(dx+2,dz,'shield');if(EW.wave%3===0)dropPickup(dx,dz+2,'chip');
     return {txt:'WAVE '+EW.wave+' CLEARED',ok:false,pos:null};}
@@ -2029,7 +2050,7 @@ function updRadioX(dt){if(G.mode!=='play'||!MISSION||MS.done||P.dead)return;
 /* ---- attract demo: walks the route, and when machines show up it turns, shoots, hops over charges and fires the salvo. It cannot die. ---- */
 const DM={spawnT:6,viewT:9,orbT:30,orbit:0,aimT:0,view:'far'};
 function demoFight(c,dt){
-  DM.spawnT-=dt;if(DM.spawnT<=0){DM.spawnT=12;if(EN.filter(e=>!e.dead).length<4){const q=spawnSpot();spawnGroup(Math.random()<.6?{skitter:3}:{hound:1,skitter:2},q[0],q[1],[0,8]);}}
+  DM.spawnT-=dt;if(DM.spawnT<=0){DM.spawnT=12;if(aliveN()<4){const q=spawnSpot();spawnGroup(Math.random()<.6?{skitter:3}:{hound:1,skitter:2},q[0],q[1],[0,8]);}}
   let near=null,nd=60;for(const e of EN){if(e.dead||e.spawnT>0)continue;const d=Math.hypot(e.x-P.x,e.z-P.z);if(d<nd&&los(e.x,e.z)){nd=d;near=e;}}
   if(near){const want=Math.atan2(-(near.x-P.x),-(near.z-P.z)),d=angD(want,P.yaw);c.turn=-clamp(d,-2.4*dt,2.4*dt);c.my=nd>24?.6:nd<10?-.5:0;
     c.pitch=clamp((Math.atan2(near.y+near.d.cy-(P.y+3.3),nd)-(P.pitch||0))*.5,-.05,.05);c.fire=Math.abs(d)<.25;
@@ -2064,7 +2085,7 @@ const KIT_INFO={
     stats:[['GUN','5 a shot, 3 a second'],['REPAIR','2 hull a second'],['SHIELD','40'],['RANGE','60 m']],live:'IN THE FIELD NOW · FLIES WHEN MACHINES COME CLOSE'}};
 const BAY_SLOTS=[{s:'fa_L',n:'LEFT ARM',o:['ac','ln','ar']},{s:'fa_R',n:'RIGHT ARM',o:['ac','ln','ar']},{s:'sh_L',n:'LEFT SHOULDER',o:['watcher','mpod',null]},
   {s:'sh_R',n:'RIGHT SHOULDER',o:['mpod','watcher',null]},{s:'bk',n:'BACK',o:['jetpack']},{s:'drone',n:'DRONE',o:['drone',null]}];
-const BAY={open:false,scene:null,cam:null,W:null,yaw:.55,pitch:.1,dist:14,ty:3.3,tgt:new THREE.Vector3(0,3.3,0),want:{x:0,y:3.3,z:0,d:14},sel:null,changed:false,
+const BAY={shT:0,shDirty:true,open:false,scene:null,cam:null,W:null,yaw:.55,pitch:.1,dist:14,ty:3.3,tgt:new THREE.Vector3(0,3.3,0),want:{x:0,y:3.3,z:0,d:14},sel:null,changed:false,
   marks:{},auto:true,prev:null,full:true,mode:'bay'};   /* mode: bay, brief or book (06l_brief.js) */
 const BLM=new THREE.LoadingManager();
 function bayInit(){
@@ -2090,7 +2111,7 @@ function bayInit(){
   bayInput();
 }
 function openBay(){
-  bayInit();BAY.open=true;BAY.prev=G.mode;G.mode='bay';BAY.changed=false;BAY.sel=null;BAY.auto=true;BAY.mode='bay';BAY.want={x:0,y:3.3,z:0,d:14};
+  bayInit();BAY.open=true;BAY.shDirty=true;BAY.prev=G.mode;G.mode='bay';BAY.changed=false;BAY.sel=null;BAY.auto=true;BAY.mode='bay';BAY.want={x:0,y:3.3,z:0,d:14};
   if(typeof STG!=='undefined'&&STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayname').querySelector('b').textContent='MODIFICATION BAY';$('bayup').style.display='';$('baydone').textContent='DONE';
   for(const id of ['title','results','down'])$(id).dataset.was=$(id).style.display,$(id).style.display='none';
   $('bay').style.display='block';document.body.classList.add('inbay');bayUI();
@@ -2151,6 +2172,7 @@ function bayTap(x,y){const v=new THREE.Vector3(),r=cv.getBoundingClientRect();le
   for(const s in BAY.marks){const m=BAY.marks[s];if(!m.visible)continue;v.copy(m.position).project(BAY.cam);
     const sx=r.left+(v.x+1)/2*r.width,sy=r.top+(1-v.y)/2*r.height,d=Math.hypot(sx-x,sy-y);if(d<bd){bd=d;best=s;}}
   if(best)baySelect(best);}
+const _bp=new THREE.Vector3(),_bb=new THREE.Box3();
 function bayFrame(dt){
   const c=BAY.cam,w=cv.clientWidth||innerWidth,h=cv.clientHeight||innerHeight;if(Math.abs(c.aspect-w/h)>.001){c.aspect=w/h;c.fov=w<h?50:38;c.updateProjectionMatrix();}
   if(BAY.auto)BAY.yaw+=dt*.18;
@@ -2159,14 +2181,16 @@ function bayFrame(dt){
   if(c.aspect<1)c.setViewOffset(w,h,0,h*.16,w,h);else c.clearViewOffset();   /* phone: the model sits above the card */
   c.position.set(BAY.tgt.x+Math.sin(BAY.yaw)*Math.cos(BAY.pitch)*d,ty+Math.sin(BAY.pitch)*d,BAY.tgt.z+Math.cos(BAY.yaw)*Math.cos(BAY.pitch)*d);c.lookAt(BAY.tgt.x,ty,BAY.tgt.z);
   /* rings sit on the mounts; the chosen one is brighter, the others dim */
-  const W=BAY.W,L=loadout(),p=new THREE.Vector3();
+  const W=BAY.W,p=_bp;
   for(const B of BAY_SLOTS){const m=BAY.marks[B.s];let n=null;
     if(BAY.mode!=='bay'){m.visible=false;continue;}
     if(W){if(B.s==='drone')n=W.holds.drone||(W.holds.bk&&W.holds.bk.getObjectByName('drone_dock'));else n=W.holds[B.s]||W.J[B.s];}
     m.visible=!!n;if(!n)continue;
-    if(W.holds[B.s]){const bb=new THREE.Box3().setFromObject(W.holds[B.s]);bb.getCenter(p);}else n.getWorldPosition(p);
+    if(W.holds[B.s]){_bb.setFromObject(W.holds[B.s]).getCenter(p);}else n.getWorldPosition(p);
     m.position.copy(p);m.material.opacity=BAY.sel?(BAY.sel===B.s?1:.35):.85;m.scale.setScalar((BAY.sel===B.s?.55:.42)*(BAY.dist/14)**.5);}
-  const ex=R.toneMappingExposure;R.toneMappingExposure=1.18;R.render(BAY.scene,c);R.toneMappingExposure=ex;   /* the room has its own light, whatever the map's exposure */
+  /* nothing in the room moves (the camera circles), so its shadow is redrawn twice a second, or at once after a change, not every frame */
+  const au=R.shadowMap.autoUpdate;R.shadowMap.autoUpdate=false;BAY.shT-=dt;if(BAY.shT<=0||BAY.shDirty){R.shadowMap.needsUpdate=true;BAY.shT=.5;BAY.shDirty=false;}
+  const ex=R.toneMappingExposure;R.toneMappingExposure=1.18;R.render(BAY.scene,c);R.toneMappingExposure=ex;R.shadowMap.autoUpdate=au;   /* the room has its own light, whatever the map's exposure */
 }
 
 /* ---- 06j_forge.js ---- */
@@ -2448,15 +2472,15 @@ function updDrone(dt){const h=M&&M.ready&&M.W&&M.W.holds.drone;
 
 /* ---- the Watcher's HUD: radar, marks, the lock brackets; the Lance's charge bar ---- */
 const KH={marks:[],rt:0};
-function kitHud(){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitHas('mpod');
+function kitHud(dt){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitHas('mpod');
   /* lance charge bar under the crosshair, only while charging */
   let ch=0;for(const A of M.arms)if(A.kind==='ln')ch=Math.max(ch,A.ch||0);
   HUD.set('lch','cls',ch>0?(ch>=.99?'on full':'on'):'');HUD.set('lchb','width',Math.round(ch*100)+'%');
   /* the heat bar belongs to the autocannon */
-  const ac=M.arms.some(A=>A.kind==='ac'||!A.kind);$('heat').style.visibility=ac?'':'hidden';
+  let ac=false;for(const A of M.arms)if(A.kind==='ac'||!A.kind)ac=true;HUD.set('heat','visibility',ac?'':'hidden');
   /* radar (Watcher) */
-  const rd=$('radar');rd.style.display=W&&G.mode==='play'?'block':'none';
-  if(W&&G.mode==='play'&&(KH.rt-=1/60)<=0){KH.rt=.1;const cv=rd,g=cv.getContext('2d'),w=cv.width,r=w/2-3,k=r/WATCH.radar;g.clearRect(0,0,w,w);
+  const rd=$('radar');HUD.set('radar','display',W&&G.mode==='play'?'block':'none');
+  if(W&&G.mode==='play'&&(KH.rt-=dt)<=0){   /* the radar redraws 10 times a second, whatever the frame rate */KH.rt=.1;const cv=rd,g=cv.getContext('2d'),w=cv.width,r=w/2-3,k=r/WATCH.radar;g.clearRect(0,0,w,w);
     g.fillStyle='rgba(8,14,18,.55)';g.beginPath();g.arc(w/2,w/2,r,0,TAU);g.fill();g.strokeStyle='rgba(124,240,255,.35)';g.lineWidth=1;
     for(const f of [1,.5]){g.beginPath();g.arc(w/2,w/2,r*f,0,TAU);g.stroke();}
     const sw=(G.t*1.6)%TAU;g.fillStyle='rgba(124,240,255,.10)';g.beginPath();g.moveTo(w/2,w/2);g.arc(w/2,w/2,r,sw-.5,sw);g.fill();
@@ -2471,11 +2495,11 @@ function kitHud(){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitH
     if(W?d<WATCH.radar:hasM&&(e.lk||0)>.02)list.push([e,(e.d.boss?0:e.id==='gunner'?1e3:2e3)+d]);}}
   list.sort((a,b)=>a[1]-b[1]);list=list.slice(0,W?WATCH.marks:4);
   while(KH.marks.length<8){const el=document.createElement('div');el.className='mk';el.innerHTML='<i></i>';document.body.appendChild(el);KH.marks.push(el);}
-  KH.marks.forEach((el,i)=>{const it=list[i];if(!it){if(el.style.display!=='none')el.style.display='none';return;}const e=it[0],sc=e.d.sc||1;
-    _ka.set(e.x,e.y+e.d.cy+e.d.r*.9+.6,e.z).project(cam);if(_ka.z>1||Math.abs(_ka.x)>1.05||Math.abs(_ka.y)>1.05){el.style.display='none';return;}
-    el.style.display='block';el.style.transform='translate('+((_ka.x*.5+.5)*innerWidth).toFixed(0)+'px,'+((-_ka.y*.5+.5)*innerHeight).toFixed(0)+'px)';
+  KH.marks.forEach((el,i)=>{const it=list[i];if(!it){sty(el,'display','none');return;}const e=it[0],sc=e.d.sc||1;
+    _ka.set(e.x,e.y+e.d.cy+e.d.r*.9+.6,e.z).project(cam);if(_ka.z>1||Math.abs(_ka.x)>1.05||Math.abs(_ka.y)>1.05){sty(el,'display','none');return;}
+    sty(el,'display','block');sty(el,'transform','translate('+((_ka.x*.5+.5)*innerWidth).toFixed(0)+'px,'+((-_ka.y*.5+.5)*innerHeight).toFixed(0)+'px)');
     const lk=e.lk||0,cls='mk'+(e.d.boss?' boss':'')+(lk>=1?' lock':lk>.02?' locking':'')+(DR.tg===e?' dr':'');if(el.className!==cls)el.className=cls;
-    el.style.setProperty('--lk',lk.toFixed(2));});}
+    const lv=lk.toFixed(2);if(el._lk!==lv){el._lk=lv;el.style.setProperty('--lk',lv);}});}
 if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas,kill:e=>hurtEnemy(e,1e6,e.x,e.y,e.z),openBook,briefMaybe,ev:s=>eval(s)});   /* ev: tests reach any of the game's own names (dev only) */
   Object.defineProperties(I,{M:{get:()=>M},AIM:{get:()=>AIM},PL:{get:()=>PL}});}   /* getters: M is made later */
 
@@ -2522,14 +2546,22 @@ let RUNSEEN=new Set();   /* machines briefed in this run */
 
 /* ---------- the stage: one model, scaled so its biggest side fits the room, standing on the floor ---------- */
 function stageInit(){bayInit();if(STG.grp)return;STG.grp=new THREE.Group();BAY.scene.add(STG.grp);}
-function stageClear(){if(!STG.obj)return;STG.grp.remove(STG.obj);if(STG.obj.userData.full)STG.obj.traverse(o=>{if(o.isMesh)o.geometry.dispose();});STG.obj=null;}
+function stageClear(){if(!STG.obj)return;const u=STG.obj.userData;STG.grp.remove(STG.obj);if(u.full)STG.obj.traverse(o=>{if(o.isMesh)o.geometry.dispose();});
+  if(u.ownMat)u.ownMat.dispose();STG.obj=null;}   /* its own copy of the material goes too (the textures stay: they are shared) */
+/* full detail is for the bay, the brief and the book: when play starts (or a brief ends), those models and their prints leave memory */
+function freeFull(){if(BAY.loading)return;
+  if(BAY.W&&BAY.full&&!BAY.open){BAY.scene.remove(BAY.W.root);BAY.W.root.traverse(o=>{if(o.isMesh)o.geometry.dispose();});BAY.W=null;}
+  if(STG.obj&&STG.obj.userData.full&&!BAY.open)stageClear();
+  for(const u in GLBC)if(/_full\.glb$/.test(u)){GLBC[u].then(sc=>sc.traverse(o=>{if(o.isMesh)o.geometry.dispose();}),()=>{});delete GLBC[u];}
+  for(const k in KMAT)if(/_full_print/.test(k)){KMAT[k].dispose();delete KMAT[k];}
+  for(const k in TEXC)if(/_full_print/.test(k)){TEXC[k].dispose();delete TEXC[k];}}
 function stagePut(o,full){stageClear();const b=new THREE.Box3().setFromObject(o),s=b.getSize(new THREE.Vector3());
-  const k=4.2/Math.max(s.y,s.x*.78,s.z*.78,.01);o.scale.multiplyScalar(k);o.position.y-=b.min.y*k;o.userData.full=full;STG.obj=o;STG.grp.add(o);
+  const k=4.2/Math.max(s.y,s.x*.78,s.z*.78,.01);o.scale.multiplyScalar(k);o.position.y-=b.min.y*k;o.userData.full=full;STG.obj=o;STG.grp.add(o);BAY.shDirty=true;
   BAY.want={x:0,y:s.y*k*.5,z:0,d:11.5};}
 /* build a model for the stage: a machine (EDEF id or the spawner pod) or a kit piece; dark = a shape not yet known */
 function stageModel(id,full,dark){
   const f=stageFiles(id,full);let p;
-  if(f)p=loadGLB(f.glb,full?BLM:undefined).then(sc=>{const mat=dark?darkMat():kitMat(f,false).clone();dressModel(sc,mat);stageDress(id,sc,mat,dark);return sc;});
+  if(f)p=loadGLB(f.glb,full?BLM:undefined).then(sc=>{const mat=dark?darkMat():kitMat(f,false).clone();dressModel(sc,mat);stageDress(id,sc,mat,dark);sc.userData.ownMat=dark?null:mat;return sc;});
   else if(ETPL[id])p=Promise.resolve(ETPL[id].clone(true)).then(sc=>{if(dark)sc.traverse(o=>{if(o.isMesh)o.material=darkMat();});return sc;});   /* Ironhowl 3 models */
   else p=Promise.reject(new Error('no model for '+id));
   return p;}
@@ -2580,7 +2612,7 @@ function foeCard(id,n){const I=FOE_INFO[id],d=EDEF[id]||{},hp=I.hp||d.hp,sp=I.sp
   return '<b>'+I.name+'</b><span class="role"><i class="cls">'+I.cls+'</i> '+I.fight+'</span>'+
     statRows([['HIT POINTS',(hp||0).toLocaleString('en-US')],['TOP SPEED',sp?sp+' m/s':'does not move'],['ATTACK',I.atk],['SIZE',I.size],['SCRAP',scr?scr+' a wreck':'—']].concat(n?[['COMING',n]]:[]))+
     '<span class="live">'+I.tip+'</span>';}
-function briefDone(){viewClose();closeBay();if(!touchy&&G.mode==='play')lockMouse();if(BRF.after)HUD.banner(BRF.after);   /* the banner it covered */if(BRF.done){const f=BRF.done;BRF.done=null;f();}}
+function briefDone(){viewClose();closeBay();freeFull();if(!touchy&&G.mode==='play')lockMouse();if(BRF.after)HUD.banner(BRF.after);   /* the banner it covered */if(BRF.done){const f=BRF.done;BRF.done=null;f();}}
 function sBriefBoss(){thump(70,30,.6,.35,0,0);tone('sawtooth',220,110,.5,.05);}
 
 /* ---------- armory book ---------- */
@@ -2687,17 +2719,19 @@ function buildFX(){
   PFX.mesh=new THREE.Mesh(g,m);PFX.mesh.frustumCulled=false;PFX.mesh.renderOrder=5;S.add(PFX.mesh);
 }
 /* o: {x,y,z, vx,vy,vz, life, s0,s1 (size start/end), a (alpha), col [r,g,b], glow (bool), drag, grav, vr} */
-function part(o){if(PFX.list.length>=PFX.max)PFX.list.shift();o.t=0;o.rot=Math.random()*TAU;o.vr=o.vr==null?(Math.random()-.5)*1.2:o.vr;PFX.list.push(o);}
+function part(o){o.t=0;o.rot=Math.random()*TAU;o.vr=o.vr==null?(Math.random()-.5)*1.2:o.vr;const L=PFX.list;
+  if(L.length>=PFX.max)L[(PFX.ri=((PFX.ri|0)+1)%PFX.max)]=o;else L.push(o);}   /* full: this one takes an old one's place (no shifting the whole list) */
 const DUST=[.5,.43,.33],SMOKE=[.55,.55,.57];
 function dustPuff(x,z,n,k){const y=hgt(x,z)+.2;for(let i=0;i<n;i++){const a=Math.random()*TAU,s=(1.5+Math.random()*2.5)*k;
   part({x:x+Math.cos(a)*.6,y,z:z+Math.sin(a)*.6,vx:Math.cos(a)*s,vy:.4+Math.random()*.9*k,vz:Math.sin(a)*s,life:1.1+Math.random()*.9,s0:.9*k,s1:3.2*k,a:.38,col:DUST,drag:2.2,grav:-.1});}}
 function updFX(dt){
   const L=PFX.list;let n=0;const P_=PFX.iP.array,S_=PFX.iS.array,C_=PFX.iC.array;
-  for(let i=L.length-1;i>=0;i--){const p=L[i];p.t+=dt;if(p.t>=p.life){L.splice(i,1);continue;}}
-  for(const p of L){const dr=Math.exp(-(p.drag||0)*dt);p.vx*=dr;p.vy*=dr;p.vz*=dr;p.vy-=(p.grav||0)*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.rot+=p.vr*dt;
+  let w=0;for(let i=0;i<L.length;i++){const p=L[i];p.t+=dt;if(p.t>=p.life)continue;L[w++]=p;   /* one pass: finished ones drop out as the list closes up */
+    const dr=Math.exp(-(p.drag||0)*dt);p.vx*=dr;p.vy*=dr;p.vz*=dr;p.vy-=(p.grav||0)*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.rot+=p.vr*dt;
     const f=p.t/p.life,s=lerp(p.s0,p.s1,Math.sqrt(f)),a=p.a*(p.glow?(1-f):Math.min(1,f*6)*(1-f)*(1-f));
     P_[n*3]=p.x;P_[n*3+1]=p.y;P_[n*3+2]=p.z;S_[n*4]=s;S_[n*4+1]=p.rot;S_[n*4+2]=a;S_[n*4+3]=p.img!=null?2+p.img:p.glow?1:0;C_[n*3]=p.col[0];C_[n*3+1]=p.col[1];C_[n*3+2]=p.col[2];n++;}
-  PFX.mesh.geometry.instanceCount=n;PFX.iP.needsUpdate=PFX.iS.needsUpdate=PFX.iC.needsUpdate=true;
+  L.length=w;PFX.mesh.geometry.instanceCount=n;
+  if(n)for(const A of [PFX.iP,PFX.iS,PFX.iC]){A.clearUpdateRanges();A.addUpdateRange(0,n*A.itemSize);A.needsUpdate=true;}   /* send only the part in use */
 }
 /* ===================== sound (all made on the fly, nothing to download) ===================== */
 const AU={c:null,out:null,nb:null,jet:null,jetF:null,wind:null};
@@ -2776,6 +2810,8 @@ function updCam(dt,p,view){
 /* ---- 09_hud.js ---- */
 /* ===================== HUD: kept small. Top left: shield, hull, jets, gun tier, missiles. Top middle: score. Crosshair with heat. ===================== */
 const ROMAN=['','I','II','III','IV'];
+/* a style write only when the value changes (the browser re-checks the page's layout after each write) */
+function sty(el,k,v){const c=el._st||(el._st={});if(c[k]!==v){c[k]=v;el.style[k]=v;}}
 const HUD={_c:{},
   load(p){const b=$('ldbar');if(b)b.style.width=Math.round(p*100)+'%';},
   stick(on,x,y,dx,dy){const s=$('stick');if(!on){s.style.display='none';return;}s.style.display='block';s.style.left=x+'px';s.style.top=y+'px';$('knob').style.transform='translate('+dx+'px,'+dy+'px)';},
@@ -2794,13 +2830,14 @@ const HUD={_c:{},
   /* a yellow arc at the screen edge (Watcher): something is about to hit you from there */
   warn(fx,fz){const a=Math.atan2(fx-P.x,fz-P.z),rel=angD(a,P.yaw+Math.PI);const d=$('dmg'+(HUD._di=(HUD._di+1||0)%4));
     if(DEV)window.__wc=(window.__wc||0)+1;d.className='dmg w';d.style.transform='rotate('+(-rel)+'rad)';d.style.opacity=1;clearTimeout(d._t);d._t=setTimeout(()=>d.style.opacity=0,700);},
-  frame(){
+  frame(dt){
     if(!P)return;
     this.set('bshield','width',(P.shield/P.shieldMax*100).toFixed(0)+'%');this.set('bhull','width',(P.hull/P.hullMax*100).toFixed(0)+'%');
     this.set('bhull','cls',P.hull<30?'low':'');
-    {const k=M&&M.ready?M.arms.map(A=>A.kind||'ac'):['ac'],t=[];if(k.includes('ac'))t.push('GUN '+ROMAN[GUN.tier]);if(k.includes('ln'))t.push('LANCE');if(k.includes('ar'))t.push('ARC');this.set('gtier','text',t.join(' · '));}
+    {let ac=!(M&&M.ready),ln=false,ar=false;if(M&&M.ready)for(const A of M.arms){const k=A.kind||'ac';if(k==='ac')ac=true;else if(k==='ln')ln=true;else if(k==='ar')ar=true;}
+     this.set('gtier','text',(ac?'GUN '+ROMAN[GUN.tier]:'')+(ln?(ac?' · ':'')+'LANCE':'')+(ar?(ac||ln?' · ':'')+'ARC':''));}
     this.set('hov','cls',P.hovering?'on act':P.hov<.999?'on':'');this.set('hovb','width',(P.hov*100).toFixed(0)+'%');
-    kitHud();this.set('mslc','text','MSL '+MSL.ammo);this.set('bmsl','text','MSL '+MSL.ammo);
+    kitHud(dt||1/60);this.set('mslc','text','MSL '+MSL.ammo);this.set('bmsl','text','MSL '+MSL.ammo);
     this.set('score','text',G.score.toLocaleString('en-US'));if(!MISSION)this.set('obj','text','');const cm=G.t-G.lastKill<3&&G.combo>1;this.set('combo','text',cm?'x'+Math.min(3,1+.25*(G.combo-1)).toFixed(2).replace(/\.?0+$/,''):'');
     this.set('heatb','width',GUN.heat.toFixed(0)+'%');this.set('heat','cls',GUN.over?'over':GUN.heat>70?'warm':'');
     this.set('cross','cls',GUN.hitT>0?'hit':AIM.e?'on':'');
@@ -2810,15 +2847,15 @@ const HUD={_c:{},
     /* arrows at the screen edge for machines you cannot see within 60 m */
     let k=0;const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
     for(const e of EN){if(k>=6)break;if(e.dead||e.spawnT>0)continue;const dx=e.x-P.x,dz=e.z-P.z,d=Math.hypot(dx,dz);if(d>60)continue;
-      const rel=angD(Math.atan2(-dx,-dz),P.yaw);if(Math.abs(rel)<.75)continue;const el=$('ea'+k++);el.style.display='block';el.style.transform='rotate('+(-rel)+'rad)';el.style.opacity=d<25?1:.6;}
-    for(;k<6;k++){const el=$('ea'+k);if(el.style.display!=='none')el.style.display='none';}
+      const rel=angD(Math.atan2(-dx,-dz),P.yaw);if(Math.abs(rel)<.75)continue;const el=$('ea'+k++);sty(el,'display','block');sty(el,'transform','rotate('+(-rel).toFixed(2)+'rad)');sty(el,'opacity',d<25?'1':'.6');}
+    for(;k<6;k++)sty($('ea'+k),'display','none');
     /* mission waypoint: a marker over the objective, pinned to the screen edge when it is off screen, with the distance */
     const wp=$('wp');if(MISSION&&!MS.done&&G.mode==='play'){const s=MISSION.steps[MS.step],p=s&&stepPos(s);
       if(p){const v=V3(p.x,hgt(p.x,p.z)+(s.masts?14:5),p.z).project(cam);let sx=(v.x*.5+.5)*innerWidth,sy=(-v.y*.5+.5)*innerHeight;const behind=v.z>1;
         if(behind){sx=innerWidth-sx;sy=innerHeight-sy;}const m=46,off=behind||sx<m||sx>innerWidth-m||sy<m+40||sy>innerHeight-m;
         if(off){const cx=innerWidth/2,cy=innerHeight/2;let dx=sx-cx,dy=sy-cy;if(behind&&Math.abs(dy)<1)dy=1;const k2=Math.min((cx-m)/Math.abs(dx||1e-3),(cy-m-20)/Math.abs(dy||1e-3));sx=cx+dx*k2;sy=cy+dy*k2;}
-        wp.style.display='block';wp.style.transform='translate('+sx.toFixed(0)+'px,'+sy.toFixed(0)+'px)';this.set('wpd','text',Math.round(Math.hypot(p.x-P.x,p.z-P.z))+' m');this.set('wp','cls',off?'off':'');}
-      else wp.style.display='none';}else if(wp.style.display!=='none')wp.style.display='none';
+        sty(wp,'display','block');sty(wp,'transform','translate('+sx.toFixed(0)+'px,'+sy.toFixed(0)+'px)');this.set('wpd','text',Math.round(Math.hypot(p.x-P.x,p.z-P.z))+' m');this.set('wp','cls',off?'off':'');}
+      else sty(wp,'display','none');}else sty(wp,'display','none');
   },
   menu(){const m=$('menu');$('mview').textContent='CAMERA: '+(SET.view==='close'?'NEAR':'FAR');
     $('mqual').textContent='QUALITY: '+(SET.quality==='auto'?'AUTO ('+QL.toUpperCase()+')':SET.quality.toUpperCase());
@@ -2864,7 +2901,7 @@ function playerDown(){if(P.dead)return;P.dead=true;P.thrust=0;boom(P.x,P.y+2.5,P
   $('dscore').textContent='SCORE '+G.score.toLocaleString('en-US')+'  ·  WAVE '+G.wave+'  ·  BEST '+Math.max(best,G.score).toLocaleString('en-US')+'  ·  +'+PL.run.toLocaleString('en-US')+' XP · PILOT LV '+PL.lv;
   ARC.over(G.score,Math.min(60,Math.floor(G.score/400)+G.wave));}
 function fpsLabel(){$('mfps').textContent='FRAME RATE: '+(SET.fps?'ON':'OFF');$('fps').style.display=SET.fps?'block':'none';}
-function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();pilotRunStart();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();if(MISSION)startMission();
+function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();freeFull();pilotRunStart();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();if(MISSION)startMission();
   else briefMaybe(WAVES[0],'WAVE 1');   /* IH4: the intel brief before the sandbox's first wave */
   if(!touchy){lockMouse();HUD.hint('WASD MOVE · MOUSE AIM · SPACE JET HOP, HOLD TO HOVER · V CAMERA · ESC PAUSE',9);}else HUD.hint('LEFT THUMB MOVES · RIGHT THUMB AIMS · JET TO HOP, HOLD TO HOVER',7);}
 function startDemo(){resetRun();G.mode='demo';G.paused=false;G.demoI=1;$('title').style.display='none';HUD.menu();Object.assign(DM,{spawnT:4,viewT:9,orbT:20,orbit:0,view:'far'});CAMX=null;$('attract').style.display='block';}
@@ -2916,12 +2953,14 @@ function tick(dt){
   updVeg(dt,P.x,3,P.z);
   jetLoop(live?P.thrust:0);
   if(live){G.birdT-=dt;if(G.birdT<0){sBird();G.birdT=4+Math.random()*8;}}
-  HUD.fuel(P);HUD.frame();
+  HUD.fuel(P);HUD.frame(dt);
 }
 /* auto quality: if frames are slow, lower the render scale, then the quality level */
 function autoQ(dt){if(SET.quality!=='auto'||G.mode!=='play'||G.paused)return;const pf=G.perf;pf.t+=dt;pf.n++;
   if(pf.t>=1.8){const avg=pf.t/pf.n;pf.t=0;pf.n=0;
-    if(avg>1/44){if(DYN>.66){DYN*=.88;resize();}else if(QL!=='low'){setQuality(QL==='high'?'med':'low');}}
+    if(avg>1/44){if(DYN>.66){DYN*=.88;resize();}
+      /* Medium to Low turns shadows off, which rebuilds every shader (a hitch): wait for a moment with no machines alive */
+      else if(QL==='high')setQuality('med');else if(QL==='med'){let fight=false;for(const e of EN)if(!e.dead){fight=true;break;}if(!fight)setQuality('low');}}
     else if(avg<1/57&&DYN<1){DYN=Math.min(1,DYN*1.06);resize();}}}
 let last=performance.now();
 function frame(now){

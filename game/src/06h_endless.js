@@ -21,18 +21,19 @@ function endlessBegin(){MS.repairs=0;Object.assign(EW,{wave:0,state:'break',t:6,
   radio([['ROOK','Endless. They keep coming, and every wave is a little worse.'],['ROOK','Supplies drop between waves. Every tenth wave, something big.']]);}
 function startEWave(){const n=++EW.wave;G.hpK=Math.min(2.2,1+.035*(n-1));DIFF.dmg=Math.min(1.6,.9+.025*(n-1));
   if(n>1)addXP(100+50*(n-1),'wave');const w=endlessWave(n),list=[];briefMaybe(w,'WAVE '+n);for(const id in w)for(let i=0;i<w[id];i++)list.push(id);list.sort(()=>Math.random()-.5);
-  EW.queue=[];for(let i=0;i<list.length;i+=6){const g={};for(const id of list.slice(i,i+6))g[id]=(g[id]||0)+1;EW.queue.push(g);}EW.qt=0;EW.state='fight';
+  EW.queue=[];EW.qn=list.length;for(let i=0;i<list.length;i+=6){const g={};for(const id of list.slice(i,i+6))g[id]=(g[id]||0)+1;EW.queue.push(g);}EW.qt=0;EW.state='fight';
   if(n%10===0&&MISSION.boss){if(BOSS.o&&BOSS.kind!=='forge')S.remove(BOSS.o);if(!(MISSION.boss==='forge'&&BOSS.o&&!BOSS.dead)){BOSS_DEF[MISSION.boss].make(...MISSION.bossAt);}
     BOSS.idle=false;EW.boss=true;radio([['FORGE',['SOMETHING LARGER IS COMING.','MEET MY BEST WORK.','YOU WILL NOT SURVIVE THIS ONE.'][(n/10-1)%3]]]);}
   HUD.banner(n%10===0?'WAVE '+n+' · BOSS':n%5===0?'WAVE '+n+' · HEAVY':'WAVE '+n);sClick();
   if(n>1&&n%4===1)radio([[Math.random()<.5?'ROOK':'FORGE',ENDLESS_LINES[Math.random()<.5?0:1][(Math.random()*6)|0]]]);}
 const ENDLESS_LINES=[['Still standing. Good.','They are getting tougher, Wraith. So are you.','Keep moving. Do not let them box you in.','Watch the edges. They like to flank.','Use the breaks. Grab the crates.','Another wave. Deep breath.'],
   ['YOUR RESISTANCE IS NOTED.','I HAVE MORE MACHINES THAN YOU HAVE TIME.','EVERY WAVE IS AN EXPERIMENT. YOU ARE THE SUBJECT.','RECALCULATING.','YOU CANNOT DO THIS FOREVER.','THE FACTORY NEVER SLEEPS.']];
-function endlessStep(s,dt){const alive=EN.filter(e=>!e.dead).length;
+function aliveN(){let n=0;for(const e of EN)if(!e.dead)n++;return n;}
+function endlessStep(s,dt){const alive=aliveN();
   if(EW.state==='break'){EW.t-=dt;if(EW.t<=0)startEWave();return {txt:'WAVE '+(EW.wave+1)+' IN '+Math.max(1,Math.ceil(EW.t)),ok:false,pos:null};}
   let bossPos=null;if(EW.boss&&BOSS.o){const r=BOSS_DEF[MISSION.boss].step(s,dt);bossPos=r.pos;if(BOSS.dead&&BOSS.deadT>2.5){EW.boss=false;addScore(3000);}}
-  if(EW.queue.length&&(EW.qt-=dt)<=0){EW.qt=7;const g=EW.queue.shift(),q=spawnSpot();spawnGroup(g,q[0],q[1],[0,10]);}
-  const left=alive+EW.queue.reduce((a,g)=>a+Object.values(g).reduce((x,y)=>x+y,0),0);
+  if(EW.queue.length&&(EW.qt-=dt)<=0){EW.qt=7;const g=EW.queue.shift(),q=spawnSpot();for(const id in g)EW.qn-=g[id];spawnGroup(g,q[0],q[1],[0,10]);}
+  const left=alive+(EW.queue.length?EW.qn:0);   /* machines still to come are counted as the groups leave the queue */
   if(!left&&!EW.boss){addScore(EW.wave*200);EW.state='break';EW.t=8;HUD.banner('WAVE '+EW.wave+' CLEARED');sPickup();
     const f=fwdOf(P.yaw),dx=P.x+f[0]*9,dz=P.z+f[1]*9;dropPickup(dx-2,dz,'repair');dropPickup(dx+2,dz,'shield');if(EW.wave%3===0)dropPickup(dx,dz+2,'chip');
     return {txt:'WAVE '+EW.wave+' CLEARED',ok:false,pos:null};}
@@ -64,7 +65,7 @@ function updRadioX(dt){if(G.mode!=='play'||!MISSION||MS.done||P.dead)return;
 /* ---- attract demo: walks the route, and when machines show up it turns, shoots, hops over charges and fires the salvo. It cannot die. ---- */
 const DM={spawnT:6,viewT:9,orbT:30,orbit:0,aimT:0,view:'far'};
 function demoFight(c,dt){
-  DM.spawnT-=dt;if(DM.spawnT<=0){DM.spawnT=12;if(EN.filter(e=>!e.dead).length<4){const q=spawnSpot();spawnGroup(Math.random()<.6?{skitter:3}:{hound:1,skitter:2},q[0],q[1],[0,8]);}}
+  DM.spawnT-=dt;if(DM.spawnT<=0){DM.spawnT=12;if(aliveN()<4){const q=spawnSpot();spawnGroup(Math.random()<.6?{skitter:3}:{hound:1,skitter:2},q[0],q[1],[0,8]);}}
   let near=null,nd=60;for(const e of EN){if(e.dead||e.spawnT>0)continue;const d=Math.hypot(e.x-P.x,e.z-P.z);if(d<nd&&los(e.x,e.z)){nd=d;near=e;}}
   if(near){const want=Math.atan2(-(near.x-P.x),-(near.z-P.z)),d=angD(want,P.yaw);c.turn=-clamp(d,-2.4*dt,2.4*dt);c.my=nd>24?.6:nd<10?-.5:0;
     c.pitch=clamp((Math.atan2(near.y+near.d.cy-(P.y+3.3),nd)-(P.pitch||0))*.5,-.05,.05);c.fire=Math.abs(d)<.25;

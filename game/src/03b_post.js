@@ -21,6 +21,8 @@ function postSetup(){const want=!!QC.bloom&&!Q.has('nobloom');
     POST.bloom=new THREE.UnrealBloomPass(new THREE.Vector2(256,256),.55,.42,1.7);POST.bloom.highPassUniforms.smoothWidth.value=.6;
     POST.bloom.materialHighPassFilter.fragmentShader=HP_FRAG;POST.bloom.materialHighPassFilter.needsUpdate=true;
     POST.comp.addPass(POST.bloom);POST.comp.addPass(new THREE.OutputPass());}
+  /* glow switched off: its buffers (several screen-sized images) are freed, not kept */
+  if(!want&&POST.comp){POST.comp.dispose();if(POST.bloom&&POST.bloom.dispose)POST.bloom.dispose();POST.comp=null;POST.bloom=null;}
   POST.on=want;postResize();}
 function postResize(){if(!POST.comp)return;POST.comp.setPixelRatio(R.getPixelRatio());POST.comp.setSize(innerWidth,innerHeight);}
 function renderFrame(){if(POST.on){R.info.autoReset=false;R.info.reset();POST.comp.render();}else{R.info.autoReset=true;R.render(S,cam);}}

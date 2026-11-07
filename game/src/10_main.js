@@ -15,7 +15,7 @@ function playerDown(){if(P.dead)return;P.dead=true;P.thrust=0;boom(P.x,P.y+2.5,P
   $('dscore').textContent='SCORE '+G.score.toLocaleString('en-US')+'  ·  WAVE '+G.wave+'  ·  BEST '+Math.max(best,G.score).toLocaleString('en-US')+'  ·  +'+PL.run.toLocaleString('en-US')+' XP · PILOT LV '+PL.lv;
   ARC.over(G.score,Math.min(60,Math.floor(G.score/400)+G.wave));}
 function fpsLabel(){$('mfps').textContent='FRAME RATE: '+(SET.fps?'ON':'OFF');$('fps').style.display=SET.fps?'block':'none';}
-function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();pilotRunStart();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();if(MISSION)startMission();
+function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();freeFull();pilotRunStart();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();if(MISSION)startMission();
   else briefMaybe(WAVES[0],'WAVE 1');   /* IH4: the intel brief before the sandbox's first wave */
   if(!touchy){lockMouse();HUD.hint('WASD MOVE · MOUSE AIM · SPACE JET HOP, HOLD TO HOVER · V CAMERA · ESC PAUSE',9);}else HUD.hint('LEFT THUMB MOVES · RIGHT THUMB AIMS · JET TO HOP, HOLD TO HOVER',7);}
 function startDemo(){resetRun();G.mode='demo';G.paused=false;G.demoI=1;$('title').style.display='none';HUD.menu();Object.assign(DM,{spawnT:4,viewT:9,orbT:20,orbit:0,view:'far'});CAMX=null;$('attract').style.display='block';}
@@ -67,12 +67,14 @@ function tick(dt){
   updVeg(dt,P.x,3,P.z);
   jetLoop(live?P.thrust:0);
   if(live){G.birdT-=dt;if(G.birdT<0){sBird();G.birdT=4+Math.random()*8;}}
-  HUD.fuel(P);HUD.frame();
+  HUD.fuel(P);HUD.frame(dt);
 }
 /* auto quality: if frames are slow, lower the render scale, then the quality level */
 function autoQ(dt){if(SET.quality!=='auto'||G.mode!=='play'||G.paused)return;const pf=G.perf;pf.t+=dt;pf.n++;
   if(pf.t>=1.8){const avg=pf.t/pf.n;pf.t=0;pf.n=0;
-    if(avg>1/44){if(DYN>.66){DYN*=.88;resize();}else if(QL!=='low'){setQuality(QL==='high'?'med':'low');}}
+    if(avg>1/44){if(DYN>.66){DYN*=.88;resize();}
+      /* Medium to Low turns shadows off, which rebuilds every shader (a hitch): wait for a moment with no machines alive */
+      else if(QL==='high')setQuality('med');else if(QL==='med'){let fight=false;for(const e of EN)if(!e.dead){fight=true;break;}if(!fight)setQuality('low');}}
     else if(avg<1/57&&DYN<1){DYN=Math.min(1,DYN*1.06);resize();}}}
 let last=performance.now();
 function frame(now){

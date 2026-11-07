@@ -113,10 +113,15 @@ function updVeg(dt,mx,my,mz){
         if(t>-.05&&t<1.08){const px=dx-segx*t,pz=dz-segz*t,dp=Math.sqrt(px*px+pz*pz);if(dp<s.cr*.7+1.4)tgt=.86;}
         if(dx*dx+dz*dz<s.cr*s.cr*.4)tgt=1;
         s.f+=(tgt-s.f)*damp(tgt>s.f?10:4,dt);}}
-    for(const lod of ['near','far']){const L=lod==='near'?sn:sf;
-      for(const p of a.parts[lod]){const arr=p.im.instanceMatrix.array,fa=p.fade.array;
-        for(let k=0;k<L.length;k++){const i=L[k];arr.set(p.big.subarray(i*16,i*16+16),k*16);fa[k]=lod==='near'&&isT?a.inst[i].f:0;}
-        p.im.count=L.length;p.im.visible=L.length>0;p.im.instanceMatrix.needsUpdate=true;p.fade.needsUpdate=true;
+    for(const lod of ['near','far']){const L=lod==='near'?sn:sf,PV=lod==='near'?(a.psn||(a.psn=[])):(a.psf||(a.psf=[]));
+      /* only send what changed, and only the part in use: the same plants as last frame (no fading trees) send nothing */
+      let same=!(isT&&lod==='near')&&PV.length===L.length;if(same)for(let k=0;k<L.length;k++)if(PV[k]!==L[k]){same=false;break;}
+      if(!same){PV.length=L.length;for(let k=0;k<L.length;k++)PV[k]=L[k];}
+      for(const p of a.parts[lod]){
+        if(!same){const arr=p.im.instanceMatrix.array,fa=p.fade.array,big=p.big;
+          for(let k=0;k<L.length;k++){const i=L[k]*16,o=k*16;for(let j=0;j<16;j++)arr[o+j]=big[i+j];fa[k]=lod==='near'&&isT?a.inst[L[k]].f:0;}
+          p.im.count=L.length;p.im.visible=L.length>0;
+          if(L.length){const ia=p.im.instanceMatrix;ia.clearUpdateRanges();ia.addUpdateRange(0,L.length*16);ia.needsUpdate=true;p.fade.clearUpdateRanges();p.fade.addUpdateRange(0,L.length);p.fade.needsUpdate=true;}}
         const tt=L.length*(p.geo.index?p.geo.index.count:p.geo.attributes.position.count)/3;tris+=tt;inst+=L.length;if(DEV){const k=a.kind+'.'+lod;VEGN.by[k]=(VEGN.by[k]||0)+tt;}}}
   }
   VEGN.tris=tris|0;VEGN.inst=inst;

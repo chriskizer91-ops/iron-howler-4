@@ -1,5 +1,7 @@
 /* ===================== HUD: kept small. Top left: shield, hull, jets, gun tier, missiles. Top middle: score. Crosshair with heat. ===================== */
 const ROMAN=['','I','II','III','IV'];
+/* a style write only when the value changes (the browser re-checks the page's layout after each write) */
+function sty(el,k,v){const c=el._st||(el._st={});if(c[k]!==v){c[k]=v;el.style[k]=v;}}
 const HUD={_c:{},
   load(p){const b=$('ldbar');if(b)b.style.width=Math.round(p*100)+'%';},
   stick(on,x,y,dx,dy){const s=$('stick');if(!on){s.style.display='none';return;}s.style.display='block';s.style.left=x+'px';s.style.top=y+'px';$('knob').style.transform='translate('+dx+'px,'+dy+'px)';},
@@ -18,13 +20,14 @@ const HUD={_c:{},
   /* a yellow arc at the screen edge (Watcher): something is about to hit you from there */
   warn(fx,fz){const a=Math.atan2(fx-P.x,fz-P.z),rel=angD(a,P.yaw+Math.PI);const d=$('dmg'+(HUD._di=(HUD._di+1||0)%4));
     if(DEV)window.__wc=(window.__wc||0)+1;d.className='dmg w';d.style.transform='rotate('+(-rel)+'rad)';d.style.opacity=1;clearTimeout(d._t);d._t=setTimeout(()=>d.style.opacity=0,700);},
-  frame(){
+  frame(dt){
     if(!P)return;
     this.set('bshield','width',(P.shield/P.shieldMax*100).toFixed(0)+'%');this.set('bhull','width',(P.hull/P.hullMax*100).toFixed(0)+'%');
     this.set('bhull','cls',P.hull<30?'low':'');
-    {const k=M&&M.ready?M.arms.map(A=>A.kind||'ac'):['ac'],t=[];if(k.includes('ac'))t.push('GUN '+ROMAN[GUN.tier]);if(k.includes('ln'))t.push('LANCE');if(k.includes('ar'))t.push('ARC');this.set('gtier','text',t.join(' · '));}
+    {let ac=!(M&&M.ready),ln=false,ar=false;if(M&&M.ready)for(const A of M.arms){const k=A.kind||'ac';if(k==='ac')ac=true;else if(k==='ln')ln=true;else if(k==='ar')ar=true;}
+     this.set('gtier','text',(ac?'GUN '+ROMAN[GUN.tier]:'')+(ln?(ac?' · ':'')+'LANCE':'')+(ar?(ac||ln?' · ':'')+'ARC':''));}
     this.set('hov','cls',P.hovering?'on act':P.hov<.999?'on':'');this.set('hovb','width',(P.hov*100).toFixed(0)+'%');
-    kitHud();this.set('mslc','text','MSL '+MSL.ammo);this.set('bmsl','text','MSL '+MSL.ammo);
+    kitHud(dt||1/60);this.set('mslc','text','MSL '+MSL.ammo);this.set('bmsl','text','MSL '+MSL.ammo);
     this.set('score','text',G.score.toLocaleString('en-US'));if(!MISSION)this.set('obj','text','');const cm=G.t-G.lastKill<3&&G.combo>1;this.set('combo','text',cm?'x'+Math.min(3,1+.25*(G.combo-1)).toFixed(2).replace(/\.?0+$/,''):'');
     this.set('heatb','width',GUN.heat.toFixed(0)+'%');this.set('heat','cls',GUN.over?'over':GUN.heat>70?'warm':'');
     this.set('cross','cls',GUN.hitT>0?'hit':AIM.e?'on':'');
@@ -34,15 +37,15 @@ const HUD={_c:{},
     /* arrows at the screen edge for machines you cannot see within 60 m */
     let k=0;const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
     for(const e of EN){if(k>=6)break;if(e.dead||e.spawnT>0)continue;const dx=e.x-P.x,dz=e.z-P.z,d=Math.hypot(dx,dz);if(d>60)continue;
-      const rel=angD(Math.atan2(-dx,-dz),P.yaw);if(Math.abs(rel)<.75)continue;const el=$('ea'+k++);el.style.display='block';el.style.transform='rotate('+(-rel)+'rad)';el.style.opacity=d<25?1:.6;}
-    for(;k<6;k++){const el=$('ea'+k);if(el.style.display!=='none')el.style.display='none';}
+      const rel=angD(Math.atan2(-dx,-dz),P.yaw);if(Math.abs(rel)<.75)continue;const el=$('ea'+k++);sty(el,'display','block');sty(el,'transform','rotate('+(-rel).toFixed(2)+'rad)');sty(el,'opacity',d<25?'1':'.6');}
+    for(;k<6;k++)sty($('ea'+k),'display','none');
     /* mission waypoint: a marker over the objective, pinned to the screen edge when it is off screen, with the distance */
     const wp=$('wp');if(MISSION&&!MS.done&&G.mode==='play'){const s=MISSION.steps[MS.step],p=s&&stepPos(s);
       if(p){const v=V3(p.x,hgt(p.x,p.z)+(s.masts?14:5),p.z).project(cam);let sx=(v.x*.5+.5)*innerWidth,sy=(-v.y*.5+.5)*innerHeight;const behind=v.z>1;
         if(behind){sx=innerWidth-sx;sy=innerHeight-sy;}const m=46,off=behind||sx<m||sx>innerWidth-m||sy<m+40||sy>innerHeight-m;
         if(off){const cx=innerWidth/2,cy=innerHeight/2;let dx=sx-cx,dy=sy-cy;if(behind&&Math.abs(dy)<1)dy=1;const k2=Math.min((cx-m)/Math.abs(dx||1e-3),(cy-m-20)/Math.abs(dy||1e-3));sx=cx+dx*k2;sy=cy+dy*k2;}
-        wp.style.display='block';wp.style.transform='translate('+sx.toFixed(0)+'px,'+sy.toFixed(0)+'px)';this.set('wpd','text',Math.round(Math.hypot(p.x-P.x,p.z-P.z))+' m');this.set('wp','cls',off?'off':'');}
-      else wp.style.display='none';}else if(wp.style.display!=='none')wp.style.display='none';
+        sty(wp,'display','block');sty(wp,'transform','translate('+sx.toFixed(0)+'px,'+sy.toFixed(0)+'px)');this.set('wpd','text',Math.round(Math.hypot(p.x-P.x,p.z-P.z))+' m');this.set('wp','cls',off?'off':'');}
+      else sty(wp,'display','none');}else sty(wp,'display','none');
   },
   menu(){const m=$('menu');$('mview').textContent='CAMERA: '+(SET.view==='close'?'NEAR':'FAR');
     $('mqual').textContent='QUALITY: '+(SET.quality==='auto'?'AUTO ('+QL.toUpperCase()+')':SET.quality.toUpperCase());

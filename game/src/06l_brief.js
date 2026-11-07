@@ -40,14 +40,22 @@ let RUNSEEN=new Set();   /* machines briefed in this run */
 
 /* ---------- the stage: one model, scaled so its biggest side fits the room, standing on the floor ---------- */
 function stageInit(){bayInit();if(STG.grp)return;STG.grp=new THREE.Group();BAY.scene.add(STG.grp);}
-function stageClear(){if(!STG.obj)return;STG.grp.remove(STG.obj);if(STG.obj.userData.full)STG.obj.traverse(o=>{if(o.isMesh)o.geometry.dispose();});STG.obj=null;}
+function stageClear(){if(!STG.obj)return;const u=STG.obj.userData;STG.grp.remove(STG.obj);if(u.full)STG.obj.traverse(o=>{if(o.isMesh)o.geometry.dispose();});
+  if(u.ownMat)u.ownMat.dispose();STG.obj=null;}   /* its own copy of the material goes too (the textures stay: they are shared) */
+/* full detail is for the bay, the brief and the book: when play starts (or a brief ends), those models and their prints leave memory */
+function freeFull(){if(BAY.loading)return;
+  if(BAY.W&&BAY.full&&!BAY.open){BAY.scene.remove(BAY.W.root);BAY.W.root.traverse(o=>{if(o.isMesh)o.geometry.dispose();});BAY.W=null;}
+  if(STG.obj&&STG.obj.userData.full&&!BAY.open)stageClear();
+  for(const u in GLBC)if(/_full\.glb$/.test(u)){GLBC[u].then(sc=>sc.traverse(o=>{if(o.isMesh)o.geometry.dispose();}),()=>{});delete GLBC[u];}
+  for(const k in KMAT)if(/_full_print/.test(k)){KMAT[k].dispose();delete KMAT[k];}
+  for(const k in TEXC)if(/_full_print/.test(k)){TEXC[k].dispose();delete TEXC[k];}}
 function stagePut(o,full){stageClear();const b=new THREE.Box3().setFromObject(o),s=b.getSize(new THREE.Vector3());
-  const k=4.2/Math.max(s.y,s.x*.78,s.z*.78,.01);o.scale.multiplyScalar(k);o.position.y-=b.min.y*k;o.userData.full=full;STG.obj=o;STG.grp.add(o);
+  const k=4.2/Math.max(s.y,s.x*.78,s.z*.78,.01);o.scale.multiplyScalar(k);o.position.y-=b.min.y*k;o.userData.full=full;STG.obj=o;STG.grp.add(o);BAY.shDirty=true;
   BAY.want={x:0,y:s.y*k*.5,z:0,d:11.5};}
 /* build a model for the stage: a machine (EDEF id or the spawner pod) or a kit piece; dark = a shape not yet known */
 function stageModel(id,full,dark){
   const f=stageFiles(id,full);let p;
-  if(f)p=loadGLB(f.glb,full?BLM:undefined).then(sc=>{const mat=dark?darkMat():kitMat(f,false).clone();dressModel(sc,mat);stageDress(id,sc,mat,dark);return sc;});
+  if(f)p=loadGLB(f.glb,full?BLM:undefined).then(sc=>{const mat=dark?darkMat():kitMat(f,false).clone();dressModel(sc,mat);stageDress(id,sc,mat,dark);sc.userData.ownMat=dark?null:mat;return sc;});
   else if(ETPL[id])p=Promise.resolve(ETPL[id].clone(true)).then(sc=>{if(dark)sc.traverse(o=>{if(o.isMesh)o.material=darkMat();});return sc;});   /* Ironhowl 3 models */
   else p=Promise.reject(new Error('no model for '+id));
   return p;}
@@ -98,7 +106,7 @@ function foeCard(id,n){const I=FOE_INFO[id],d=EDEF[id]||{},hp=I.hp||d.hp,sp=I.sp
   return '<b>'+I.name+'</b><span class="role"><i class="cls">'+I.cls+'</i> '+I.fight+'</span>'+
     statRows([['HIT POINTS',(hp||0).toLocaleString('en-US')],['TOP SPEED',sp?sp+' m/s':'does not move'],['ATTACK',I.atk],['SIZE',I.size],['SCRAP',scr?scr+' a wreck':'—']].concat(n?[['COMING',n]]:[]))+
     '<span class="live">'+I.tip+'</span>';}
-function briefDone(){viewClose();closeBay();if(!touchy&&G.mode==='play')lockMouse();if(BRF.after)HUD.banner(BRF.after);   /* the banner it covered */if(BRF.done){const f=BRF.done;BRF.done=null;f();}}
+function briefDone(){viewClose();closeBay();freeFull();if(!touchy&&G.mode==='play')lockMouse();if(BRF.after)HUD.banner(BRF.after);   /* the banner it covered */if(BRF.done){const f=BRF.done;BRF.done=null;f();}}
 function sBriefBoss(){thump(70,30,.6,.35,0,0);tone('sawtooth',220,110,.5,.05);}
 
 /* ---------- armory book ---------- */

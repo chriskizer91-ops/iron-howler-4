@@ -153,11 +153,19 @@ function poolTex(){const c=document.createElement('canvas');c.width=c.height=128
 const BND=()=>MAPDEF.bounds||{x0:-PLAY-6,x1:PLAY+6,z0:-PLAY-6,z1:PLAY+6};
 function boxAt(x,z,y){const a=VEG.cols.get(colKey(x,z));if(!a)return false;for(const c of a)if(c.b&&x>c.x0&&x<c.x1&&z>c.z0&&z<c.z1&&y<c.y0+c.h)return true;return false;}
 /* after a map is built, join its fixed single-material meshes into one mesh per material (fences, posts, crane beams, lamps...) */
+/* a vertex range of a non-indexed geometry, as its own geometry (one material's part of a many-material mesh) */
+function geoRange(g,start,count){const out=new THREE.BufferGeometry(),e=Math.min(g.attributes.position.count,start+count);
+  for(const k in g.attributes){const a=g.attributes[k],s=a.itemSize;out.setAttribute(k,new THREE.BufferAttribute(a.array.slice(start*s,e*s),s));}return out;}
 function mergeStatic(before){
   const by=new Map();
-  for(const o of S.children.slice()){if(before.has(o)||!o.isMesh||o.isInstancedMesh||Array.isArray(o.material)||o.material.transparent&&!o.material.alphaTest||o.userData.keep)continue;
+  for(const o of S.children.slice()){if(before.has(o)||!o.isMesh||o.isInstancedMesh||o.userData.keep)continue;
+    const multi=Array.isArray(o.material),mats=multi?o.material:[o.material];   /* IH4: buildings with a roof and walls (several materials) merge too */
+    if(mats.some(m=>m.transparent&&!m.alphaTest)||multi&&!o.geometry.groups.length)continue;
     o.updateMatrixWorld(true);let g=o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone();g.applyMatrix4(o.matrixWorld);
-    for(const k of Object.keys(g.attributes))if(!['position','normal','uv'].includes(k))g.deleteAttribute(k);if(!g.attributes.uv)continue;
-    if(!by.has(o.material))by.set(o.material,{gs:[],cast:o.castShadow});by.get(o.material).gs.push(g);S.remove(o);}
-  let n=0;for(const [m,v] of by){const mm=new THREE.Mesh(THREE.mergeGeometries(v.gs,false),m);mm.castShadow=v.cast;mm.receiveShadow=true;S.add(mm);n+=v.gs.length;}
+    for(const k of Object.keys(g.attributes))if(!['position','normal','uv'].includes(k))g.deleteAttribute(k);
+    if(!g.attributes.uv||!g.attributes.normal||Object.values(g.attributes).some(a=>a.isInterleavedBufferAttribute))continue;
+    const parts=multi?g.groups.map(q=>[mats[q.materialIndex],geoRange(g,q.start,q.count)]):[[o.material,g]];
+    for(const [m,pg] of parts){if(!m||!pg.attributes.position.count)continue;const key=m.uuid+(o.castShadow?'|c':'');   /* shadow casters and the rest stay apart */
+      if(!by.has(key))by.set(key,{m,gs:[],cast:o.castShadow});by.get(key).gs.push(pg);}S.remove(o);}
+  let n=0;for(const [,v] of by){const mm=new THREE.Mesh(THREE.mergeGeometries(v.gs,false),v.m);mm.castShadow=v.cast;mm.receiveShadow=true;S.add(mm);n+=v.gs.length;}
   return n;}

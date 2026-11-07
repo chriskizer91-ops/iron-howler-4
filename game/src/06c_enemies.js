@@ -117,7 +117,9 @@ function collect(k){sPickup();
   addScore(25);}
 /* ---- enemy brains ---- */
 function updEnemies(dt){
-  NAV.t-=dt;if(NAV.t<=0||navCell(P.x,P.z)!==NAV.pc){navBuild();NAV.t=.5;}
+  /* the path map: rebuilt when you move to a new cell (at most 4 times a second) or every 0.5 s, and only while a machine is alive to use it */
+  NAV.t-=dt;let walk=false;for(const e of EN)if(!e.dead){walk=true;break;}
+  if(walk&&(NAV.t<=0||NAV.t<.25&&navCell(P.x,P.z)!==NAV.pc)){navBuild();NAV.t=.5;}
   for(let i=BEACONS.length-1;i>=0;i--){const b=BEACONS[i];b.t-=dt;if(Math.random()<dt*30)part({x:b.x+(Math.random()-.5)*2,y:hgt(b.x,b.z)+.3,z:b.z+(Math.random()-.5)*2,vx:0,vy:8+Math.random()*6,vz:0,life:.5,s0:.9,s1:.3,a:1.4,col:[1,.2,.08],glow:true});if(b.t<=0)BEACONS.splice(i,1);}
   let alive=0;
   for(const e of EN){if(e.dead)continue;alive++;

@@ -20,7 +20,7 @@ const KIT_INFO={
     stats:[['GUN','5 a shot, 3 a second'],['REPAIR','2 hull a second'],['SHIELD','40'],['RANGE','60 m']],live:'IN THE FIELD NOW · FLIES WHEN MACHINES COME CLOSE'}};
 const BAY_SLOTS=[{s:'fa_L',n:'LEFT ARM',o:['ac','ln','ar']},{s:'fa_R',n:'RIGHT ARM',o:['ac','ln','ar']},{s:'sh_L',n:'LEFT SHOULDER',o:['watcher','mpod',null]},
   {s:'sh_R',n:'RIGHT SHOULDER',o:['mpod','watcher',null]},{s:'bk',n:'BACK',o:['jetpack']},{s:'drone',n:'DRONE',o:['drone',null]}];
-const BAY={open:false,scene:null,cam:null,W:null,yaw:.55,pitch:.1,dist:14,ty:3.3,tgt:new THREE.Vector3(0,3.3,0),want:{x:0,y:3.3,z:0,d:14},sel:null,changed:false,
+const BAY={shT:0,shDirty:true,open:false,scene:null,cam:null,W:null,yaw:.55,pitch:.1,dist:14,ty:3.3,tgt:new THREE.Vector3(0,3.3,0),want:{x:0,y:3.3,z:0,d:14},sel:null,changed:false,
   marks:{},auto:true,prev:null,full:true,mode:'bay'};   /* mode: bay, brief or book (06l_brief.js) */
 const BLM=new THREE.LoadingManager();
 function bayInit(){
@@ -46,7 +46,7 @@ function bayInit(){
   bayInput();
 }
 function openBay(){
-  bayInit();BAY.open=true;BAY.prev=G.mode;G.mode='bay';BAY.changed=false;BAY.sel=null;BAY.auto=true;BAY.mode='bay';BAY.want={x:0,y:3.3,z:0,d:14};
+  bayInit();BAY.open=true;BAY.shDirty=true;BAY.prev=G.mode;G.mode='bay';BAY.changed=false;BAY.sel=null;BAY.auto=true;BAY.mode='bay';BAY.want={x:0,y:3.3,z:0,d:14};
   if(typeof STG!=='undefined'&&STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayname').querySelector('b').textContent='MODIFICATION BAY';$('bayup').style.display='';$('baydone').textContent='DONE';
   for(const id of ['title','results','down'])$(id).dataset.was=$(id).style.display,$(id).style.display='none';
   $('bay').style.display='block';document.body.classList.add('inbay');bayUI();
@@ -107,6 +107,7 @@ function bayTap(x,y){const v=new THREE.Vector3(),r=cv.getBoundingClientRect();le
   for(const s in BAY.marks){const m=BAY.marks[s];if(!m.visible)continue;v.copy(m.position).project(BAY.cam);
     const sx=r.left+(v.x+1)/2*r.width,sy=r.top+(1-v.y)/2*r.height,d=Math.hypot(sx-x,sy-y);if(d<bd){bd=d;best=s;}}
   if(best)baySelect(best);}
+const _bp=new THREE.Vector3(),_bb=new THREE.Box3();
 function bayFrame(dt){
   const c=BAY.cam,w=cv.clientWidth||innerWidth,h=cv.clientHeight||innerHeight;if(Math.abs(c.aspect-w/h)>.001){c.aspect=w/h;c.fov=w<h?50:38;c.updateProjectionMatrix();}
   if(BAY.auto)BAY.yaw+=dt*.18;
@@ -115,12 +116,14 @@ function bayFrame(dt){
   if(c.aspect<1)c.setViewOffset(w,h,0,h*.16,w,h);else c.clearViewOffset();   /* phone: the model sits above the card */
   c.position.set(BAY.tgt.x+Math.sin(BAY.yaw)*Math.cos(BAY.pitch)*d,ty+Math.sin(BAY.pitch)*d,BAY.tgt.z+Math.cos(BAY.yaw)*Math.cos(BAY.pitch)*d);c.lookAt(BAY.tgt.x,ty,BAY.tgt.z);
   /* rings sit on the mounts; the chosen one is brighter, the others dim */
-  const W=BAY.W,L=loadout(),p=new THREE.Vector3();
+  const W=BAY.W,p=_bp;
   for(const B of BAY_SLOTS){const m=BAY.marks[B.s];let n=null;
     if(BAY.mode!=='bay'){m.visible=false;continue;}
     if(W){if(B.s==='drone')n=W.holds.drone||(W.holds.bk&&W.holds.bk.getObjectByName('drone_dock'));else n=W.holds[B.s]||W.J[B.s];}
     m.visible=!!n;if(!n)continue;
-    if(W.holds[B.s]){const bb=new THREE.Box3().setFromObject(W.holds[B.s]);bb.getCenter(p);}else n.getWorldPosition(p);
+    if(W.holds[B.s]){_bb.setFromObject(W.holds[B.s]).getCenter(p);}else n.getWorldPosition(p);
     m.position.copy(p);m.material.opacity=BAY.sel?(BAY.sel===B.s?1:.35):.85;m.scale.setScalar((BAY.sel===B.s?.55:.42)*(BAY.dist/14)**.5);}
-  const ex=R.toneMappingExposure;R.toneMappingExposure=1.18;R.render(BAY.scene,c);R.toneMappingExposure=ex;   /* the room has its own light, whatever the map's exposure */
+  /* nothing in the room moves (the camera circles), so its shadow is redrawn twice a second, or at once after a change, not every frame */
+  const au=R.shadowMap.autoUpdate;R.shadowMap.autoUpdate=false;BAY.shT-=dt;if(BAY.shT<=0||BAY.shDirty){R.shadowMap.needsUpdate=true;BAY.shT=.5;BAY.shDirty=false;}
+  const ex=R.toneMappingExposure;R.toneMappingExposure=1.18;R.render(BAY.scene,c);R.toneMappingExposure=ex;R.shadowMap.autoUpdate=au;   /* the room has its own light, whatever the map's exposure */
 }

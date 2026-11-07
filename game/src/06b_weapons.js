@@ -9,7 +9,7 @@ const BOLTS=[],EBOLTS=[],MISS=[];
 const SALVO={cd:0,cool:12,n:14,left:0,t:0,dmg:16,range:48};
 const BOLT={speed:150,range:170};
 let BM=null,EBM=null,MSM=null,MFL=null;
-const _sc=new THREE.Vector3(),_v=new THREE.Vector3(),_w=new THREE.Vector3(),_m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_z=new THREE.Vector3(0,0,1);
+const NOARM=[null],_sc=new THREE.Vector3(),_v=new THREE.Vector3(),_w=new THREE.Vector3(),_m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_z=new THREE.Vector3(0,0,1);
 function buildWeapons(){
   const g=new THREE.CylinderGeometry(.1,.1,1,6,1,true);g.rotateX(Math.PI/2);
   BM=new THREE.InstancedMesh(g,new THREE.MeshBasicMaterial({color:new THREE.Color(1,.78,.4).multiplyScalar(3),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}),160);
@@ -61,7 +61,7 @@ function updGun(c,dt){
   GUN.cd-=dt;GUN.ventCd=Math.max(0,GUN.ventCd-dt);GUN.flash=Math.max(0,GUN.flash-dt*12);GUN.hitT=Math.max(0,GUN.hitT-dt);
   if(M.ready)setTier(M,GUN.tier);
   /* IH4: only the arms that carry an autocannon fire gun rounds (the Lance and the Arc are in 06k_kit.js); one autocannon arm fires at 60 % of the pair's rate */
-  const AC=M.ready?M.arms.filter(a=>!a.kind||a.kind==='ac'):[null],firing=c.fire&&!GUN.over&&!P.dead&&AC.length>0;
+  const AC=M.ready?M.ac:NOARM,firing=c.fire&&!GUN.over&&!P.dead&&AC.length>0;
   kitArms(c,dt);
   if(firing&&GUN.cd<=0){
     const t=GUN.tier,A=AC[GUN.side%AC.length];GUN.cd+=1/(GUN.rate[t]*(AC.length<2?.6:1));if(GUN.cd<0)GUN.cd=0;GUN.side=(GUN.side+1)%AC.length;

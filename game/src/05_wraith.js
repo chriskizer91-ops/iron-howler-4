@@ -26,8 +26,10 @@ function kitFiles(dir,stem,full,orm){const b=IH4M+dir+'/'+stem;
 const GLBC={},GLBP={},KMAT={};   /* GLBP[url]: told how far a model's download has got (0..1) */
 function loadGLB(url,lm){if(!GLBC[url])GLBC[url]=new Promise((res,rej)=>new THREE.GLTFLoader(lm||LM).load(url,g=>res(g.scene),ev=>{const f=GLBP[url];if(f&&ev&&ev.total)f(ev.loaded/ev.total);},rej)).catch(e=>{delete GLBC[url];throw e;});   /* a failed load can be tried again */
   return GLBC[url].then(sc=>sc.clone(true));}
-function k4tex(url){const t=new THREE.TextureLoader(LM).load(url);t.flipY=false;t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;}
-function k4lin(url){const t=k4tex(url);t.colorSpace=THREE.NoColorSpace;return t;}
+/* textures by file: the field, the bay, the brief and the book share one copy, and the ORM map (roughness + metalness) loads once */
+const TEXC={};
+function k4tex(url,lin){const key=url+(lin?'|lin':'');if(TEXC[key])return TEXC[key];const t=new THREE.TextureLoader(LM).load(url);t.flipY=false;t.colorSpace=lin?THREE.NoColorSpace:THREE.SRGBColorSpace;t.anisotropy=4;return TEXC[key]=t;}
+function k4lin(url){return k4tex(url,true);}
 /* one material per model: the print (full) or the baked maps (combat) */
 function kitMat(f,world){const key=f.map+(world?'w':'');if(KMAT[key])return KMAT[key];
   const m=f.nrm?new THREE.MeshStandardMaterial({map:k4tex(f.map),normalMap:k4lin(f.nrm),roughnessMap:k4lin(f.orm),metalnessMap:k4lin(f.orm),roughness:1,metalness:1})
@@ -81,6 +83,7 @@ function rigKit(M){const W=M.W,_p=new THREE.Vector3();
     const bb=localBox(hold),mz=new THREE.Object3D();hold.add(mz);bb.getCenter(_p);
     const ax=['x','y','z'].sort((a,b)=>Math.abs(fwd[b])-Math.abs(fwd[a]))[0];_p[ax]=fwd[ax]>0?bb.max[ax]:bb.min[ax];mz.position.copy(_p);
     return {sh:arm,muzzle:mz,hold,base:hold.position.clone(),fwd,kick:0,sd:i?1:-1,kind:W.kit[s]};});
+  M.ac=M.arms.filter(a=>!a.kind||a.kind==='ac');   /* the autocannon arms, for the gun each frame */
   M.pods=[];for(let i=0;i<9;i++)for(const s of ['sh_R','sh_L']){const h=W.holds[s];if(h&&W.kit[s]==='mpod'){const t=h.getObjectByName('tube'+i);if(t)M.pods.push(t);}}   /* tubes in firing order, right and left pods taking turns */
   if(!M.pods.length)M.pods=[W.J.sh_R,W.J.sh_L];
   M.jets=[];const jp=W.holds.bk;if(!JETG.length)JETG.push(new THREE.CylinderGeometry(.22,.02,1,10,1,true),new THREE.CylinderGeometry(.12,.01,1,8,1,true));

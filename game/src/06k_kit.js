@@ -168,15 +168,15 @@ function updDrone(dt){const h=M&&M.ready&&M.W&&M.W.holds.drone;
 
 /* ---- the Watcher's HUD: radar, marks, the lock brackets; the Lance's charge bar ---- */
 const KH={marks:[],rt:0};
-function kitHud(){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitHas('mpod');
+function kitHud(dt){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitHas('mpod');
   /* lance charge bar under the crosshair, only while charging */
   let ch=0;for(const A of M.arms)if(A.kind==='ln')ch=Math.max(ch,A.ch||0);
   HUD.set('lch','cls',ch>0?(ch>=.99?'on full':'on'):'');HUD.set('lchb','width',Math.round(ch*100)+'%');
   /* the heat bar belongs to the autocannon */
-  const ac=M.arms.some(A=>A.kind==='ac'||!A.kind);$('heat').style.visibility=ac?'':'hidden';
+  let ac=false;for(const A of M.arms)if(A.kind==='ac'||!A.kind)ac=true;HUD.set('heat','visibility',ac?'':'hidden');
   /* radar (Watcher) */
-  const rd=$('radar');rd.style.display=W&&G.mode==='play'?'block':'none';
-  if(W&&G.mode==='play'&&(KH.rt-=1/60)<=0){KH.rt=.1;const cv=rd,g=cv.getContext('2d'),w=cv.width,r=w/2-3,k=r/WATCH.radar;g.clearRect(0,0,w,w);
+  const rd=$('radar');HUD.set('radar','display',W&&G.mode==='play'?'block':'none');
+  if(W&&G.mode==='play'&&(KH.rt-=dt)<=0){   /* the radar redraws 10 times a second, whatever the frame rate */KH.rt=.1;const cv=rd,g=cv.getContext('2d'),w=cv.width,r=w/2-3,k=r/WATCH.radar;g.clearRect(0,0,w,w);
     g.fillStyle='rgba(8,14,18,.55)';g.beginPath();g.arc(w/2,w/2,r,0,TAU);g.fill();g.strokeStyle='rgba(124,240,255,.35)';g.lineWidth=1;
     for(const f of [1,.5]){g.beginPath();g.arc(w/2,w/2,r*f,0,TAU);g.stroke();}
     const sw=(G.t*1.6)%TAU;g.fillStyle='rgba(124,240,255,.10)';g.beginPath();g.moveTo(w/2,w/2);g.arc(w/2,w/2,r,sw-.5,sw);g.fill();
@@ -191,10 +191,10 @@ function kitHud(){if(!P||!M||!M.ready)return;const W=kitHas('watcher'),hasM=kitH
     if(W?d<WATCH.radar:hasM&&(e.lk||0)>.02)list.push([e,(e.d.boss?0:e.id==='gunner'?1e3:2e3)+d]);}}
   list.sort((a,b)=>a[1]-b[1]);list=list.slice(0,W?WATCH.marks:4);
   while(KH.marks.length<8){const el=document.createElement('div');el.className='mk';el.innerHTML='<i></i>';document.body.appendChild(el);KH.marks.push(el);}
-  KH.marks.forEach((el,i)=>{const it=list[i];if(!it){if(el.style.display!=='none')el.style.display='none';return;}const e=it[0],sc=e.d.sc||1;
-    _ka.set(e.x,e.y+e.d.cy+e.d.r*.9+.6,e.z).project(cam);if(_ka.z>1||Math.abs(_ka.x)>1.05||Math.abs(_ka.y)>1.05){el.style.display='none';return;}
-    el.style.display='block';el.style.transform='translate('+((_ka.x*.5+.5)*innerWidth).toFixed(0)+'px,'+((-_ka.y*.5+.5)*innerHeight).toFixed(0)+'px)';
+  KH.marks.forEach((el,i)=>{const it=list[i];if(!it){sty(el,'display','none');return;}const e=it[0],sc=e.d.sc||1;
+    _ka.set(e.x,e.y+e.d.cy+e.d.r*.9+.6,e.z).project(cam);if(_ka.z>1||Math.abs(_ka.x)>1.05||Math.abs(_ka.y)>1.05){sty(el,'display','none');return;}
+    sty(el,'display','block');sty(el,'transform','translate('+((_ka.x*.5+.5)*innerWidth).toFixed(0)+'px,'+((-_ka.y*.5+.5)*innerHeight).toFixed(0)+'px)');
     const lk=e.lk||0,cls='mk'+(e.d.boss?' boss':'')+(lk>=1?' lock':lk>.02?' locking':'')+(DR.tg===e?' dr':'');if(el.className!==cls)el.className=cls;
-    el.style.setProperty('--lk',lk.toFixed(2));});}
+    const lv=lk.toFixed(2);if(el._lk!==lv){el._lk=lv;el.style.setProperty('--lk',lv);}});}
 if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,KX,kitHas,kill:e=>hurtEnemy(e,1e6,e.x,e.y,e.z),openBook,briefMaybe,ev:s=>eval(s)});   /* ev: tests reach any of the game's own names (dev only) */
   Object.defineProperties(I,{M:{get:()=>M},AIM:{get:()=>AIM},PL:{get:()=>PL}});}   /* getters: M is made later */
