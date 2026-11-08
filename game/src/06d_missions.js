@@ -20,7 +20,7 @@ const CHAPTER='CHAPTER 1 · THE SALVAGE RUSH';
 const MISSIONS=[
   {id:1,name:'DIG SITE',map:'field',start:[0,115,0],
    brief:['2176. FORGE’s old war zones are full of 2126 wrecks, and the wrecks are worth a fortune.','Dig Crew 4 is cutting cores out of the farm fields. Keep them safe.'],
-   steps:[{t:'reach',label:'MEET THE DIG CREW',at:[47,30],r:14,truck:1,radio:[['ROOK','Wraith, this is Rook. Crew 4 is by the barn. Walk over and say hello.'],['ROOK','Left thumb moves, right thumb aims. JET hops; hold it to hover.']]},
+   steps:[{t:'reach',label:'MEET ROOK AT THE BARN',at:[47,30],r:14,truck:1,radio:[['ROOK','Wraith, this is Rook. Crew 4 is by the barn. Walk over and say hello.'],['ROOK','Left thumb moves, right thumb aims. JET hops; hold it to hover.']]},
           {t:'hold',label:'GUARD THE DIG',at:[45,40],r:30,time:60,every:15,waves:[{skitter:4},{skitter:5},{skitter:4,hound:1},{skitter:6}],cp:1,
            radio:[['DIG CREW','Rook... something just twitched in the wreck pile.'],['ROOK','Old 2126 drones. Dead fifty years. They should not be moving.']]},
           {t:'destroy',label:'KNOCK OUT THE RELAY MASTS',masts:[0,1,2],wave:{skitter:4,hound:1},cp:1,
@@ -105,6 +105,8 @@ function nearLive(list){let b=null,bd=1e18;for(const t of list){if(t.dead)contin
 function stepPos(s){if(MS.wpos)return MS.wpos;if(s.spawners||s.lights||s.masts||s.consoles){const t=nearLive(MS.objs);if(t)return t;return s.consoles?{x:s.consoles[0][0],z:s.consoles[0][1]}:null;}
   if(s.t==='clear'&&MS.strag&&!MS.strag.dead)return MS.strag;if(s.at)return s._at||(s._at={x:s.at[0],z:s.at[1]});return null;}
 function beginStep(i){
+  /* IH4: the story scene between two fights plays before its step begins */
+  {const st=!MISSION.endless&&typeof STORY_TEXT!=='undefined'&&STORY_TEXT['m'+MISSION.id];if(st&&st.mid&&st.mid.at===i&&storyPlay('m'+MISSION.id+'.mid',()=>beginStep(i)))return;}
   MS.step=i;MS.t=0;MS.wi=0;MS.waveT=4;MS.hold=0;MS.objs=[];MS.strag=null;const s=MISSION.steps[i];if(!s)return finishMission(true);
   if(MS.zone){S.remove(MS.zone);MS.zone=null;}
   if(s.cp)MS.cp={step:i,x:P.x,z:P.z,yaw:P.yaw,tier:GUN.tier};MS.wpos=null;
@@ -129,7 +131,9 @@ function updMission(dt){
   let txt=s.label,ok=false;
   if(s.t==='destroy'){let left=0;for(const t of MS.objs)if(!t.dead)left++;txt+=' '+(MS.objs.length-left)+'/'+MS.objs.length;ok=left===0;}
   else if(s.t==='reach'){ok=Math.hypot(P.x-s.at[0],P.z-s.at[1])<s.r;}
-  else if(s.t==='escort'){const r=escortStep(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
+  else if(s.t==='escort'){const r=escortStep(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;
+    /* IH4: a mid scene marked 'half' plays when the truck is halfway along its road */
+    {const st=typeof STORY_TEXT!=='undefined'&&STORY_TEXT['m'+MISSION.id],E=MS.escort;if(st&&st.mid&&st.mid.at==='half'&&E&&E.ri>=E.route.length/2)storyPlay('m'+MISSION.id+'.mid');}}
   else if(s.t==='endless'){const r=endlessStep(s,dt);txt=r.txt;ok=false;MS.wpos=r.pos;}
   else if(s.t==='capture'){const r=captureStep(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
   else if(s.t==='boss'){const r=BOSS_DEF[MISSION.boss].step(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
@@ -146,7 +150,8 @@ function updMission(dt){
   HUD.set('obj','text',txt);
   if(ok){addScore(500);beginStep(MS.step+1);}
 }
-function finishMission(won){if(MISSION.endless)return endlessOver();if(MS.done)return;MS.done=true;G.mode='results';
+function finishMission(won){if(MISSION.endless)return endlessOver();if(MS.done)return;
+  if(won&&storyPlay('m'+MISSION.id+'.close',()=>finishMission(true)))return;   /* IH4: the closing scene, then the results */MS.done=true;G.mode='results';
   const time=MS.time|0,bonus=won?2000+Math.max(0,600-time)*5+MS.repairs*400:0;if(won){addScore(bonus);addScrap(150+MS.repairs*25);addXP(bonus/2,'mission');}const got=bankScrap();
   const sv=SAVE.get();sv.best=sv.best||{};if(won){sv.unlocked=Math.max(sv.unlocked||1,MISSION.id+1);}sv.best[MISSION.id]=Math.max(sv.best[MISSION.id]||0,G.score);SAVE.put(sv);
   const tickets=Math.min(80,Math.floor(G.score/400)+(won?10:0));ARC.over(G.score,tickets);

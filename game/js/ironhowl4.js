@@ -44,16 +44,18 @@ addEventListener('mouseup',e=>{if(e.button===0)MOUSE.l=false;});
 addEventListener('contextmenu',e=>e.preventDefault());
 const TS={id:-1,ox:0,oy:0,ax:0,ay:0,look:-1,lx:0,ly:0,fx:0,fy:0,ldx:0,ldy:0,jet:false,jetHit:false,fire:false,fireId:-1,msl:false,vent:false,salvo:false};
 let PAD_PREV={};
-addEventListener('keydown',e=>{if(e.repeat)return;KEYS.add(e.code);HIT.add(e.code);if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();});
+addEventListener('keydown',e=>{if(e.repeat)return;
+  if(STY.open){if(e.code==='Escape')storyClose();else if(['Space','Enter','ArrowRight','NumpadEnter'].includes(e.code)){e.preventDefault();storyNext();}return;}   /* IH4: a story scene takes the keys */
+  KEYS.add(e.code);HIT.add(e.code);if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();});
 addEventListener('keyup',e=>KEYS.delete(e.code));
 addEventListener('blur',()=>{KEYS.clear();TS.id=-1;TS.look=-1;TS.jet=false;TS.fire=false;TS.fireId=-1;MOUSE.l=false;});
 addEventListener('mousemove',e=>{if(MOUSE.locked){MOUSE.dx+=e.movementX||0;MOUSE.dy+=e.movementY||0;}});
 /* IH4: losing the lock while the bay's room is open (an intel brief) is not a reason to pause */
-document.addEventListener('pointerlockchange',()=>{MOUSE.locked=document.pointerLockElement===cv;if(!MOUSE.locked&&G.mode==='play'&&!G.paused&&!touchy&&!BAY.open)setPause(true);});
-function lockMouse(){if(touchy||EMBED&&!document.hasFocus()||BAY.open)return;   /* never during a brief: its buttons need the cursor */
+document.addEventListener('pointerlockchange',()=>{MOUSE.locked=document.pointerLockElement===cv;if(!MOUSE.locked&&G.mode==='play'&&!G.paused&&!touchy&&!BAY.open&&!STY.open)setPause(true);});
+function lockMouse(){if(touchy||EMBED&&!document.hasFocus()||BAY.open||STY.open)return;   /* never during a brief: its buttons need the cursor */
   try{const p=cv.requestPointerLock();if(p&&p.catch)p.catch(()=>{});}catch(e){}}
 const STICK_R=58;
-function touchStart(e){if(BAY.open)return;   /* IH4: the brief's chips and card scroll, and its drags turn the model, not the camera */
+function touchStart(e){if(BAY.open||STY.open)return;   /* IH4: the brief's chips and card scroll, and its drags turn the model, not the camera */
   let field=false;
   for(const t of e.changedTouches){
     if(t.target.closest&&t.target.closest('button'))continue;field=true;
@@ -63,7 +65,7 @@ function touchStart(e){if(BAY.open)return;   /* IH4: the brief's chips and card 
   /* only block the browser's tap handling for touches on the game itself: blocking it on buttons stopped VIEW, pause and the menu from working */
   if(G.mode==='play'&&field)e.preventDefault();
 }
-function touchMove(e){if(BAY.open)return;
+function touchMove(e){if(BAY.open||STY.open)return;
   for(const t of e.changedTouches){
     if(t.identifier===TS.id){let dx=t.clientX-TS.ox,dy=t.clientY-TS.oy;const d=Math.hypot(dx,dy);
       if(d>STICK_R){/* the stick base follows the thumb so it never runs out of room */TS.ox+=dx/d*(d-STICK_R);TS.oy+=dy/d*(d-STICK_R);dx=t.clientX-TS.ox;dy=t.clientY-TS.oy;}
@@ -1392,7 +1394,7 @@ const CHAPTER='CHAPTER 1 · THE SALVAGE RUSH';
 const MISSIONS=[
   {id:1,name:'DIG SITE',map:'field',start:[0,115,0],
    brief:['2176. FORGE’s old war zones are full of 2126 wrecks, and the wrecks are worth a fortune.','Dig Crew 4 is cutting cores out of the farm fields. Keep them safe.'],
-   steps:[{t:'reach',label:'MEET THE DIG CREW',at:[47,30],r:14,truck:1,radio:[['ROOK','Wraith, this is Rook. Crew 4 is by the barn. Walk over and say hello.'],['ROOK','Left thumb moves, right thumb aims. JET hops; hold it to hover.']]},
+   steps:[{t:'reach',label:'MEET ROOK AT THE BARN',at:[47,30],r:14,truck:1,radio:[['ROOK','Wraith, this is Rook. Crew 4 is by the barn. Walk over and say hello.'],['ROOK','Left thumb moves, right thumb aims. JET hops; hold it to hover.']]},
           {t:'hold',label:'GUARD THE DIG',at:[45,40],r:30,time:60,every:15,waves:[{skitter:4},{skitter:5},{skitter:4,hound:1},{skitter:6}],cp:1,
            radio:[['DIG CREW','Rook... something just twitched in the wreck pile.'],['ROOK','Old 2126 drones. Dead fifty years. They should not be moving.']]},
           {t:'destroy',label:'KNOCK OUT THE RELAY MASTS',masts:[0,1,2],wave:{skitter:4,hound:1},cp:1,
@@ -1477,6 +1479,8 @@ function nearLive(list){let b=null,bd=1e18;for(const t of list){if(t.dead)contin
 function stepPos(s){if(MS.wpos)return MS.wpos;if(s.spawners||s.lights||s.masts||s.consoles){const t=nearLive(MS.objs);if(t)return t;return s.consoles?{x:s.consoles[0][0],z:s.consoles[0][1]}:null;}
   if(s.t==='clear'&&MS.strag&&!MS.strag.dead)return MS.strag;if(s.at)return s._at||(s._at={x:s.at[0],z:s.at[1]});return null;}
 function beginStep(i){
+  /* IH4: the story scene between two fights plays before its step begins */
+  {const st=!MISSION.endless&&typeof STORY_TEXT!=='undefined'&&STORY_TEXT['m'+MISSION.id];if(st&&st.mid&&st.mid.at===i&&storyPlay('m'+MISSION.id+'.mid',()=>beginStep(i)))return;}
   MS.step=i;MS.t=0;MS.wi=0;MS.waveT=4;MS.hold=0;MS.objs=[];MS.strag=null;const s=MISSION.steps[i];if(!s)return finishMission(true);
   if(MS.zone){S.remove(MS.zone);MS.zone=null;}
   if(s.cp)MS.cp={step:i,x:P.x,z:P.z,yaw:P.yaw,tier:GUN.tier};MS.wpos=null;
@@ -1501,7 +1505,9 @@ function updMission(dt){
   let txt=s.label,ok=false;
   if(s.t==='destroy'){let left=0;for(const t of MS.objs)if(!t.dead)left++;txt+=' '+(MS.objs.length-left)+'/'+MS.objs.length;ok=left===0;}
   else if(s.t==='reach'){ok=Math.hypot(P.x-s.at[0],P.z-s.at[1])<s.r;}
-  else if(s.t==='escort'){const r=escortStep(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
+  else if(s.t==='escort'){const r=escortStep(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;
+    /* IH4: a mid scene marked 'half' plays when the truck is halfway along its road */
+    {const st=typeof STORY_TEXT!=='undefined'&&STORY_TEXT['m'+MISSION.id],E=MS.escort;if(st&&st.mid&&st.mid.at==='half'&&E&&E.ri>=E.route.length/2)storyPlay('m'+MISSION.id+'.mid');}}
   else if(s.t==='endless'){const r=endlessStep(s,dt);txt=r.txt;ok=false;MS.wpos=r.pos;}
   else if(s.t==='capture'){const r=captureStep(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
   else if(s.t==='boss'){const r=BOSS_DEF[MISSION.boss].step(s,dt);txt=r.txt;ok=r.ok;MS.wpos=r.pos;}
@@ -1518,7 +1524,8 @@ function updMission(dt){
   HUD.set('obj','text',txt);
   if(ok){addScore(500);beginStep(MS.step+1);}
 }
-function finishMission(won){if(MISSION.endless)return endlessOver();if(MS.done)return;MS.done=true;G.mode='results';
+function finishMission(won){if(MISSION.endless)return endlessOver();if(MS.done)return;
+  if(won&&storyPlay('m'+MISSION.id+'.close',()=>finishMission(true)))return;   /* IH4: the closing scene, then the results */MS.done=true;G.mode='results';
   const time=MS.time|0,bonus=won?2000+Math.max(0,600-time)*5+MS.repairs*400:0;if(won){addScore(bonus);addScrap(150+MS.repairs*25);addXP(bonus/2,'mission');}const got=bankScrap();
   const sv=SAVE.get();sv.best=sv.best||{};if(won){sv.unlocked=Math.max(sv.unlocked||1,MISSION.id+1);}sv.best[MISSION.id]=Math.max(sv.best[MISSION.id]||0,G.score);SAVE.put(sv);
   const tickets=Math.min(80,Math.floor(G.score/400)+(won?10:0));ARC.over(G.score,tickets);
@@ -1668,7 +1675,7 @@ function escortStep(s,dt){const E=MS.escort;
   const px=P.x-E.x,pz=P.z-E.z,pd=Math.hypot(px,pz);if(pd<4.2&&pd>.01&&P.y-hgt(P.x,P.z)<3){P.x=E.x+px/pd*4.2;P.z=E.z+pz/pd*4.2;}
   /* machines that reach the truck chew on it */
   let bite=0;for(const e of EN){if(e.dead||e.spawnT>0)continue;if(Math.hypot(e.x-E.x,e.z-E.z)<5){bite+=e.id==='hound'?14:e.id==='skitter'?6:10;if(Math.random()<dt*5)sparks(E.x+(Math.random()-.5)*2,hgt(E.x,E.z)+1.5+Math.random(),E.z+(Math.random()-.5)*3,4,[1,.6,.3]);}}
-  E.hp-=bite*dt;if(bite&&(E.hitT-=dt)<=0){E.hitT=4;radio([['ROOK',['They are on the truck!','Get them off me!','I am taking hits here!'][(Math.random()*3)|0]]]);}
+  E.hp-=bite*dt;if(bite&&(E.hitT-=dt)<=0){E.hitT=4;radio([['ROOK',['They’re on my truck!','Get them off me, Wraith!','I’m taking hits here!'][(Math.random()*3)|0]]]);}
   MS.waveT-=dt;if(MS.waveT<=0){MS.waveT=s.every;const w=s.waves[MS.wi%s.waves.length];MS.wi++;const n0=EN.length,ahead=Math.min(E.route.length-1,E.ri+1),A=E.route[ahead];
     spawnGroup(w,lerp(E.x,A[0],.7),lerp(E.z,A[1],.7),[34,52]);for(let i=n0;i<EN.length;i++)if(EN[i].id!=='gunner'&&Math.random()<.55)EN[i].tr=1;}
   if(E.hp<=0&&!MS.done){E.hp=0;boom(E.x,hgt(E.x,E.z)+2,E.z,2);boom(E.x,hgt(E.x,E.z)+3,E.z+1,1.4);HUD.msg('ROOK’S TRUCK IS DOWN',3);finishMission(false);}
@@ -1859,7 +1866,7 @@ function captureBegin(s,first){if(!first&&MS.caps)return;MS.caps=s.points.map(p=
   return {x:p[0],z:p[1],prog:0,done:false,ring,lm};});MS.waveT=6;MS.wi=0;}
 function captureStep(s,dt){let n=0,cur=null;for(const c of MS.caps){if(c.done){n++;continue;}
     if(Math.hypot(P.x-c.x,P.z-c.z)<s.r&&!P.dead){c.prog+=dt/s.time;cur=c;c.ring.material.opacity=.45+.4*Math.abs(Math.sin(G.t*6));
-      if(c.prog>=1){c.done=true;c.ring.material.color.setRGB(.3,.8,1);c.lm.color.setRGB(.3,.8,1).multiplyScalar(3);sPickup();HUD.msg('RELAY TAKEN',2);radio([['ROOK',['One relay is ours.','Two down. One to go!','That is all three!'][n]]]);n++;}}}
+      if(c.prog>=1){c.done=true;c.ring.material.color.setRGB(.3,.8,1);c.lm.color.setRGB(.3,.8,1).multiplyScalar(3);sPickup();HUD.msg('RELAY TAKEN',2);radio([['ROOK',['One relay’s ours.','Two down. One to go!','That’s all three. Tracing now.'][n]]]);n++;}}}
   MS.waveT-=dt;if(MS.waveT<=0){MS.waveT=s.every;const w=s.waves[MS.wi%s.waves.length];MS.wi++;const t=cur||MS.caps.find(c=>!c.done)||MS.caps[0];spawnGroup(w,t.x,t.z,[44,64]);}
   const next=cur||MS.caps.filter(c=>!c.done).sort((a,b)=>Math.hypot(P.x-a.x,P.z-a.z)-Math.hypot(P.x-b.x,P.z-b.z))[0];
   return {txt:s.label+' '+n+'/'+MS.caps.length+(cur?' · '+Math.floor(cur.prog*100)+'%':''),ok:n===MS.caps.length,pos:next||null};}
@@ -2693,6 +2700,805 @@ function diffUI(){const box=$('tdiff');if(!box)return;const cur=SAVE.get().diff|
   box.querySelectorAll('button').forEach(b=>b.onclick=e=>{e.stopPropagation();diffSet(b.dataset.d);});}
 diffLoad();
 
+/* ---- 06o_story.js ---- */
+/* ===== IH4: story scenes — a still picture with a few lines of text over it, between the fights (8 Nov) =====
+   Christopher: "the thing that feels off is the story in between combat … it can be like text and images".
+   STORY[mission id] = {open, mid, close}: open plays before the intel brief, mid before step `at` begins (between two
+   fights), close after the last step, before the results. Each scene is panels [{img, ph, lines:[[who, text], …]}]:
+   img → art/story/<img>.webp (Christopher's ChatGPT pictures); until that file exists, ph → art/story/ph_<ph>.webp,
+   a picture of the place taken in the game. who '' = narration. The game is stopped while a scene shows: nothing is
+   drawn behind it, and no input reaches the fight. Tap, click, Space or Enter goes on; SKIP (or Esc) ends the scene. */
+const STY={open:false,sc:null,key:'',pi:0,li:0,shown:0,full:'',done:null,seen:new Set(),lay:0,t:0};
+const STORY_WHO={ROOK:'#ffb347',UNKNOWN:'#ff4d4d'};   /* speaker colours; anyone else is pale grey, narration has no name */
+/* STORY_TEXT is filled in by the writers (06p_story_text.js); this file only plays it */
+function storyScene(key){const [m,part]=key.split('.'),s=(typeof STORY_TEXT!=='undefined')&&STORY_TEXT[m];return s&&s[part]||null;}
+function storySrc(pn,cb){const a='art/story/'+pn.img+'.webp',b='art/story/ph_'+(pn.ph||'field')+'.webp';
+  if(window.IH4_URL){cb(IH4_URL(a)||IH4_URL(b)||b);return;}   /* one-file game: its pictures are inside it */
+  const im=new Image();im.onload=()=>cb(a);im.onerror=()=>cb(b);im.src=a;}
+/* open a scene if this run hasn't shown it; returns true if it opened (then `then` runs when it closes) */
+function storyPlay(key,then){const sc=storyScene(key);if(!sc||!sc.panels||!sc.panels.length||STY.seen.has(key))return false;
+  STY.seen.add(key);STY.sc=sc;STY.key=key;STY.pi=0;STY.li=0;STY.done=then||null;STY.open=true;jetLoop(0);
+  if(document.pointerLockElement)document.exitPointerLock();
+  $('stcap').textContent=sc.cap||(MISSION&&!MISSION.endless?(CHAPTER.split(' · ')[0]+' · '+MISSION.name):'');
+  $('story').classList.add('on');storyPanel();return true;}
+function storyPanel(){const pn=STY.sc.panels[STY.pi],ly=['sta','stb'];
+  storySrc(pn,u=>{if(!STY.open)return;const nx=$(ly[1-STY.lay]),cu=$(ly[STY.lay]);nx.style.backgroundImage='url("'+u+'")';
+    nx.classList.remove('kb');void nx.offsetWidth;nx.classList.add('kb','on');cu.classList.remove('on');STY.lay=1-STY.lay;});
+  if(STY.pi>0)sClick();STY.li=0;storyLine();}
+function storyLine(){const ln=STY.sc.panels[STY.pi].lines[STY.li]||['',''];const who=ln[0]||'';
+  const w=$('stwho');w.textContent=who;w.style.display=who?'':'none';w.style.color=STORY_WHO[who]||'#c9d1d9';
+  $('stline').classList.toggle('nar',!who);STY.full=ln[1]||'';STY.shown=0;STY.t=0;$('stline').textContent='';$('stnext').classList.remove('on');}
+/* the line types itself out, about 55 letters a second */
+function storyFrame(dt){if(!STY.open||STY.shown>=STY.full.length)return;const a=Math.floor(STY.shown);STY.shown=Math.min(STY.full.length,STY.shown+dt*55);const b=Math.floor(STY.shown);
+  if(b!==a)$('stline').textContent=STY.full.slice(0,b);if(STY.shown>=STY.full.length)$('stnext').classList.add('on');}
+function storyNext(){if(!STY.open)return;
+  if(STY.shown<STY.full.length){STY.shown=STY.full.length;$('stline').textContent=STY.full;$('stnext').classList.add('on');return;}   /* first tap finishes the line */
+  const pn=STY.sc.panels[STY.pi];if(++STY.li<pn.lines.length){storyLine();return;}
+  if(++STY.pi<STY.sc.panels.length){storyPanel();return;}storyClose();}
+function storyClose(){if(!STY.open)return;STY.open=false;$('story').classList.remove('on');
+  /* nothing pressed during the scene reaches the fight */
+  KEYS.clear();HIT.clear();TS.ldx=TS.ldy=0;TS.look=-1;TS.id=-1;TS.ax=TS.ay=0;TS.fire=false;TS.fireId=-1;TS.jet=false;MOUSE.dx=MOUSE.dy=0;MOUSE.l=false;if(HUD.stick)HUD.stick(false);
+  const f=STY.done;STY.done=null;if(f)f();if(!touchy&&G.mode==='play'&&!BAY.open&&!STY.open)lockMouse();}
+(function storyInit(){const el=$('story');
+  /* on click (the last event of a tap), so the tap that ends a scene can't fall through to the brief opening under it */
+  el.addEventListener('click',e=>{if(e.target.id==='stskip')return;e.preventDefault();storyNext();});
+  $('stskip').addEventListener('click',e=>{e.preventDefault();e.stopPropagation();sClick();storyClose();});})();
+
+/* ---- 06p_story_text.js ---- */
+/* ===== IH4: the story's words, chapter 1 — from the writers' room (story bible "Always Do", 8 Nov 2026) =====
+   Made by game/tools/story_build.py from the scene file; edit the scene file and rebuild rather than this one.
+   Each mission: brief (its card on the title screen), radio (the lines during play, by step), and three scenes,
+   open / mid / close, played by 06o_story.js. Pictures: art/story/<img>.webp; until one exists, ph_<ph>.webp. */
+const STORY_TEXT={
+ "m1": {
+  "brief": [
+   "The Calloway farm. Crew 4 is digging FORGE’s old wrecks out of their own wheat.",
+   "Meet Rook at the barn, then guard the dig. The Wraith is the only mech Crew 4 has."
+  ],
+  "radio": {
+   "0": [
+    [
+     "ROOK",
+     "Wraith, this is Rook. I’m parked by the barn. Walk on over."
+    ],
+    [
+     "ROOK",
+     "Left thumb walks, right thumb aims. Tap JET to hop, hold it to hover."
+    ]
+   ],
+   "1": [
+    [
+     "DIG CREW",
+     "Rook! Something just twitched in the wreck pile."
+    ],
+    [
+     "ROOK",
+     "Scrap doesn’t twitch. Wraith, get in the ring and hold."
+    ]
+   ],
+   "2": [
+    [
+     "ROOK",
+     "Three masts. The marker shows the nearest. Keep firing till it falls."
+    ],
+    [
+     "UNKNOWN",
+     "Take your people home, Crew 4."
+    ]
+   ]
+  },
+  "open": {
+   "panels": [
+    {
+     "img": "m1_open",
+     "ph": "field",
+     "lines": [
+      [
+       "",
+       "2176. For fifty years FORGE’s war zones were fenced off. Now the fence is down, and the rush is on."
+      ],
+      [
+       "",
+       "Every dead machine out there holds a core of red glass, still warm. One core heats a farmhouse all winter."
+      ],
+      [
+       "BESS",
+       "Live ones bite. Dunk them in brine till they hiss and go grey. Then they’re safe."
+      ],
+      [
+       "PIP",
+       "Red eye, run! Grey eye, done!"
+      ]
+     ]
+    },
+    {
+     "img": "m1_open2",
+     "ph": "field",
+     "lines": [
+      [
+       "PIP",
+       "Wolves are done, Jo! Same wolves Howl had when he broke FORGE. Now it looks like a real war mech."
+      ],
+      [
+       "JO",
+       "It’s a survey mech, Pip. Right, Gran?"
+      ],
+      [
+       "BESS",
+       "Not today. The co-op’s sending a handler out. Calls herself Rook."
+      ],
+      [
+       "PIP",
+       "Bet she’s never seen wolves like these."
+      ]
+     ]
+    }
+   ]
+  },
+  "mid": {
+   "panels": [
+    {
+     "img": "m1_mid",
+     "ph": "field",
+     "lines": [
+      [
+       "ROOK",
+       "Look at the wrecks. Every eye’s turned to the masts on the ridge. Somebody’s talking to them."
+      ],
+      [
+       "UNKNOWN",
+       "Crew 4. This field is claimed. Leave it."
+      ],
+      [
+       "BESS",
+       "Claimed? My dad was born in that field."
+      ],
+      [
+       "ROOK",
+       "Wraith. Knock those masts flat."
+      ]
+     ]
+    }
+   ],
+   "at": 2
+  },
+  "close": {
+   "panels": [
+    {
+     "img": "m1_close",
+     "ph": "field",
+     "lines": [
+      [
+       "ROOK",
+       "Masts are down. Not bad shooting, Wraith."
+      ],
+      [
+       "JO",
+       "I’m a spotter, Rook. I find things. I don’t usually blow them up."
+      ],
+      [
+       "ROOK",
+       "Then find me whoever was talking through them. Bring it home, Wraith."
+      ],
+      [
+       "JO",
+       "Bring what home? I’m standing in my own yard."
+      ],
+      [
+       "ROOK",
+       "…Never mind. Old habit."
+      ]
+     ]
+    }
+   ]
+  }
+ },
+ "m2": {
+  "brief": [
+   "Harbor 9 at midnight: the boom town where every dig crew sells its cores.",
+   "Somebody planted spawner pods in the container stacks overnight. Find all four."
+  ],
+  "radio": {
+   "0": [
+    [
+     "ROOK",
+     "Stick to the lanes. Those stacks are too tall to hop, even for you."
+    ]
+   ],
+   "1": [
+    [
+     "ROOK",
+     "Pods print Skitters till you break them. The marker shows the nearest."
+    ],
+    [
+     "UNKNOWN",
+     "Those crates came off claimed ground."
+    ]
+   ],
+   "2": [
+    [
+     "ROOK",
+     "Gunner on the quay! Get under the middle crane. I’m lifting you out."
+    ]
+   ]
+  },
+  "open": {
+   "panels": [
+    {
+     "img": "m2_open",
+     "ph": "docks_night",
+     "lines": [
+      [
+       "BESS",
+       "Our crates sail on the morning boat. That’s a new barn roof, right there."
+      ],
+      [
+       "PIP",
+       "A Gunner core’s worth three hundred! What’s “LIVE: ASK AT VANE” mean?"
+      ],
+      [
+       "BESS",
+       "A red core nobody quenched. Selling those is against the law. Silas Vane pays triple anyway."
+      ],
+      [
+       "ROOK",
+       "Man in the white coat. If he calls you friend, count your fingers."
+      ]
+     ]
+    }
+   ]
+  },
+  "mid": {
+   "panels": [
+    {
+     "img": "m2_mid",
+     "ph": "docks_night",
+     "lines": [
+      [
+       "JO",
+       "Rook. All four pods were hidden in farm crates. Ours. Crew 2’s. Crew 6’s."
+      ],
+      [
+       "ROOK",
+       "And Vane’s?"
+      ],
+      [
+       "JO",
+       "Right across the lane. Not one pod. Not a scratch."
+      ],
+      [
+       "BESS",
+       "Scare the farm crews off, then buy our fields cheap. That’s Vane all over."
+      ],
+      [
+       "ROOK",
+       "Maybe. Vane’s a crook, but he’s a careful one."
+      ]
+     ]
+    }
+   ],
+   "at": 2
+  },
+  "close": {
+   "panels": [
+    {
+     "img": "m2_close",
+     "ph": "docks_night",
+     "lines": [
+      [
+       "VANE",
+       "Lovely lift, Rook. Shame about all those farm crates, friend."
+      ],
+      [
+       "VANE",
+       "When Crew 4 gets tired of digging, I’ll buy that field. Fair price."
+      ],
+      [
+       "BESS",
+       "Fair like the place across the creek? Your diggers flattened that house in a day."
+      ],
+      [
+       "VANE",
+       "Old houses come down, Mrs. Calloway. Goodnight, friends."
+      ],
+      [
+       "ROOK",
+       "Silas. You’re standing under my hook."
+      ]
+     ]
+    }
+   ]
+  }
+ },
+ "m3": {
+  "brief": [
+   "Crew 7 has gone quiet in the pine woods, out by a field of 2126 wrecks.",
+   "Find them, guard Rook while she loads them up, and watch the trees for the pack."
+  ],
+  "radio": {
+   "0": [
+    [
+     "ROOK",
+     "Their beacon’s east of the trail. Watch the trees."
+    ],
+    [
+     "ROOK",
+     "Hounds crouch, then charge dead straight. Sidestep or hop."
+    ]
+   ],
+   "1": [
+    [
+     "ROOK",
+     "Found them. All three alive, and grumpy. Give me one minute to load up."
+    ],
+    [
+     "ROOK",
+     "Keep them off my truck, Wraith. Stay in the ring."
+    ]
+   ],
+   "2": [
+    [
+     "ROOK",
+     "Eyes up. Rust-red one coming out of the trees, twice the size."
+    ],
+    [
+     "ROOK",
+     "Clear its pack first, then keep moving. It charges harder."
+    ]
+   ],
+   "3": [
+    [
+     "ROOK",
+     "Crew 7’s clear. Meet me up on the north ridge."
+    ]
+   ]
+  },
+  "open": {
+   "panels": [
+    {
+     "img": "m3_open",
+     "ph": "woods",
+     "lines": [
+      [
+       "",
+       "The pine woods burned in the war. Now they stand taller than a Gunner, and the wrecks wear moss."
+      ],
+      [
+       "ROOK",
+       "No word from Crew 7 since sunup. A dad and two kids, digging by the old wreck field."
+      ],
+      [
+       "JO",
+       "Shouldn’t you wait back at the road?"
+      ],
+      [
+       "ROOK",
+       "In 2126 I sat in a bunker and listened. I’m done sitting."
+      ]
+     ]
+    }
+   ]
+  },
+  "mid": {
+   "panels": [
+    {
+     "img": "m3_mid",
+     "ph": "woods",
+     "lines": [
+      [
+       "UNKNOWN",
+       "Get your crew out of my yards, Birdie."
+      ],
+      [
+       "",
+       "Rook doesn’t answer. For a long moment, she doesn’t move."
+      ],
+      [
+       "JO",
+       "Rook? Who’s Birdie?"
+      ],
+      [
+       "ROOK",
+       "Nobody’s called me that in fifty years."
+      ]
+     ]
+    }
+   ],
+   "at": 2
+  },
+  "close": {
+   "panels": [
+    {
+     "img": "m3_close",
+     "ph": "woods",
+     "lines": [
+      [
+       "JO",
+       "Rook, about Birdie…"
+      ],
+      [
+       "ROOK",
+       "Look at these welds instead. Bright. Clean. This thing was built this year."
+      ],
+      [
+       "JO",
+       "FORGE is dead. So who’s building new ones?"
+      ],
+      [
+       "PIP",
+       "Did you get the big one? I’m calling it Biscuit!"
+      ],
+      [
+       "ROOK",
+       "We are not calling it Biscuit."
+      ],
+      [
+       "PIP",
+       "Too late."
+      ]
+     ]
+    }
+   ]
+  }
+ },
+ "m4": {
+  "brief": [
+   "Night fog on the creek road. Rook is driving Crew 7 and their cores out of the woods.",
+   "Escort her truck to the south road. If the truck is destroyed, the mission fails."
+  ],
+  "radio": {
+   "0": [
+    [
+     "ROOK",
+     "I only roll while you’re close, Wraith. Stay within 35 metres."
+    ],
+    [
+     "ROOK",
+     "Some of them go for my truck. Kill those first."
+    ],
+    [
+     "UNKNOWN",
+     "Leave the cores on the road and walk home."
+    ]
+   ]
+  },
+  "open": {
+   "panels": [
+    {
+     "img": "m4_open",
+     "ph": "woods_fog",
+     "lines": [
+      [
+       "CREW 7",
+       "Miss Rook? What’s the pilot’s real name?"
+      ],
+      [
+       "ROOK",
+       "Wraith."
+      ],
+      [
+       "JO",
+       "It’s Jo."
+      ],
+      [
+       "ROOK",
+       "Copy, Wraith."
+      ]
+     ]
+    }
+   ]
+  },
+  "mid": {
+   "panels": [
+    {
+     "img": "m4_mid",
+     "ph": "woods_fog",
+     "lines": [
+      [
+       "CREW 7",
+       "Who’s the man in the photo? His mech’s got wolves on it. Like yours."
+      ],
+      [
+       "ROOK",
+       "Howl. My pilot. He never came out of Foundry 4."
+      ],
+      [
+       "JO",
+       "My kid brother copied our wolves off an old poster of him."
+      ],
+      [
+       "ROOK",
+       "Pip got the ears wrong."
+      ]
+     ]
+    }
+   ],
+   "at": "half"
+  },
+  "close": {
+   "panels": [
+    {
+     "img": "m4_close",
+     "ph": "woods_fog",
+     "lines": [
+      [
+       "ROOK",
+       "You stayed close. Most don’t."
+      ],
+      [
+       "JO",
+       "That’s four fights now. Nobody’s been hurt. Not once."
+      ],
+      [
+       "ROOK",
+       "I noticed. They chase folks off, they take the cores, and they let everyone walk."
+      ],
+      [
+       "ROOK",
+       "FORGE never let anyone walk."
+      ]
+     ]
+    }
+   ]
+  }
+ },
+ "m5": {
+  "brief": [
+   "A storm over the farm fields. The voice reaches its machines through three relays.",
+   "Take all three relays: hold each ring until it’s full. Then Rook can trace the signal."
+  ],
+  "radio": {
+   "0": [
+    [
+     "ROOK",
+     "Stand in each ring till it fills. Never mind the lightning. It only hits them."
+    ],
+    [
+     "UNKNOWN",
+     "Copy, Wraith. Trace all you like. Then go home."
+    ]
+   ],
+   "1": [
+    [
+     "ROOK",
+     "Something huge on the east road. Bone white. Use cover between bursts."
+    ],
+    [
+     "UNKNOWN",
+     "Meet my newest."
+    ]
+   ]
+  },
+  "open": {
+   "panels": [
+    {
+     "img": "m5_open",
+     "ph": "field_storm",
+     "lines": [
+      [
+       "",
+       "A storm rolls over farm country. Three more crews have packed up and left this week."
+      ],
+      [
+       "BESS",
+       "Crew 2 sold their claim to Vane this morning. For next to nothing."
+      ],
+      [
+       "ROOK",
+       "Then we find the voice before anyone else sells. It talks through relays. Relays can be traced."
+      ],
+      [
+       "JO",
+       "So I stand in the lightning while you sit in the truck."
+      ],
+      [
+       "ROOK",
+       "I’m seventy-four, Wraith. Everything on me is out of warranty. I get the truck."
+      ]
+     ]
+    }
+   ]
+  },
+  "mid": {
+   "panels": [
+    {
+     "img": "m5_mid",
+     "ph": "field_storm",
+     "lines": [
+      [
+       "ROOK",
+       "Got it. The signal runs straight back to one place. Foundry 4."
+      ],
+      [
+       "JO",
+       "Where Howl broke FORGE? That place has been cold since the war."
+      ],
+      [
+       "ROOK",
+       "Not any more."
+      ]
+     ]
+    }
+   ],
+   "at": 1
+  },
+  "close": {
+   "panels": [
+    {
+     "img": "m5_close",
+     "ph": "field_storm",
+     "lines": [
+      [
+       "PIP",
+       "That’s three big ones down! I’m calling this one Marshmallow."
+      ],
+      [
+       "ROOK",
+       "We are still not doing names."
+      ],
+      [
+       "ROOK",
+       "Get some sleep, all of you. Tomorrow we drive to Foundry 4."
+      ],
+      [
+       "BESS",
+       "Rook. You don’t have to be the one who goes."
+      ],
+      [
+       "ROOK",
+       "Fifty years I’ve stayed away from that gate, Bess. That’s long enough."
+      ]
+     ]
+    }
+   ]
+  }
+ },
+ "m6": {
+  "brief": [
+   "The signal leads to Foundry 4: FORGE’s old heart, fenced off and cold since 2126.",
+   "Its furnaces are lit again. Hold the yard while Rook pulls the factory log."
+  ],
+  "radio": {
+   "0": [
+    [
+     "ROOK",
+     "Furnaces are hot. Somebody’s been building in here."
+    ]
+   ],
+   "1": [
+    [
+     "ROOK",
+     "Ninety seconds to pull the log. Hold the yard, Wraith."
+    ],
+    [
+     "UNKNOWN",
+     "Turn around. There’s nothing left in here for you."
+    ]
+   ],
+   "2": [
+    [
+     "ROOK",
+     "Two big ones at the gate. Fine, Pip. Biscuit and Marshmallow."
+    ]
+   ],
+   "3": [
+    [
+     "ROOK",
+     "Gate’s clear! Bring it home, Wraith. I’m right behind you."
+    ],
+    [
+     "ROOK",
+     "Don’t you dare stop for me."
+    ]
+   ]
+  },
+  "open": {
+   "panels": [
+    {
+     "img": "m6_open",
+     "ph": "foundry",
+     "lines": [
+      [
+       "",
+       "A plaque by the gate: UNITS 01–07 · 2126 · THEY HELD THE LINE."
+      ],
+      [
+       "ROOK",
+       "Seven pilots. I learned every one of their names."
+      ],
+      [
+       "JO",
+       "Is that why I’m Wraith?"
+      ],
+      [
+       "ROOK",
+       "Eyes front, Wraith. Let’s go knock."
+      ]
+     ]
+    }
+   ]
+  },
+  "mid": {
+   "panels": [
+    {
+     "img": "m6_mid",
+     "ph": "foundry",
+     "lines": [
+      [
+       "ROOK",
+       "Got the log. Wraith… look down. By your left foot."
+      ],
+      [
+       "",
+       "A hollow in the slag, the shape of a fallen mech. It’s empty. Drag marks lead off into the dark."
+      ],
+      [
+       "ROOK",
+       "Howl’s mech went down right here. I said go, and he went."
+      ],
+      [
+       "ROOK",
+       "We left him lying here. Somebody moved him."
+      ]
+     ]
+    }
+   ],
+   "at": 2
+  },
+  "close": {
+   "panels": [
+    {
+     "img": "m6_close",
+     "ph": "foundry",
+     "lines": [
+      [
+       "ROOK",
+       "The log names no one. Just orders. Hounds, Gunners, things I’ve never seen."
+      ],
+      [
+       "ROOK",
+       "Every order’s signed with the same mark. A seven, lying on its side."
+      ],
+      [
+       "JO",
+       "A cattle brand?"
+      ],
+      [
+       "ROOK",
+       "Not one I know."
+      ]
+     ]
+    },
+    {
+     "img": "m6_close2",
+     "ph": "foundry",
+     "lines": [
+      [
+       "JO",
+       "Look at the eye. The crack’s been stitched with new cable."
+      ],
+      [
+       "ROOK",
+       "I heard that eye break."
+      ],
+      [
+       "",
+       "It flickers red. One more line crawls across Rook’s screen, older than the rest. No mark."
+      ],
+      [
+       "",
+       "THE FIELDS BELONG TO THE FACTORY."
+      ]
+     ]
+    }
+   ]
+  }
+ }
+};
+/* the mission cards and radio lines come from here too, so all of the chapter's words live in one place */
+for(const m of MISSIONS){const t=STORY_TEXT['m'+m.id];if(!t)continue;if(t.brief)m.brief=t.brief;
+  if(t.radio)for(const k in t.radio)if(m.steps[k])m.steps[k].radio=t.radio[k];}
+
 /* ---- 07_fx.js ---- */
 /* ===================== particles: one system, smoke blends normally, glow adds light (premultiplied alpha) ===================== */
 const PFX={max:900,list:[],mesh:null};
@@ -2901,7 +3707,7 @@ function playerDown(){if(P.dead)return;P.dead=true;P.thrust=0;boom(P.x,P.y+2.5,P
   $('dscore').textContent='SCORE '+G.score.toLocaleString('en-US')+'  ·  WAVE '+G.wave+'  ·  BEST '+Math.max(best,G.score).toLocaleString('en-US')+'  ·  +'+PL.run.toLocaleString('en-US')+' XP · PILOT LV '+PL.lv;
   ARC.over(G.score,Math.min(60,Math.floor(G.score/400)+G.wave));}
 function fpsLabel(){$('mfps').textContent='FRAME RATE: '+(SET.fps?'ON':'OFF');$('fps').style.display=SET.fps?'block':'none';}
-function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();freeFull();pilotRunStart();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();if(MISSION)startMission();
+function startPlay(){$('attract').style.display='none';CAMX=null;audioInit();resetRun();freeFull();pilotRunStart();applyUpgrades();G.mode='play';G.paused=false;$('title').style.display='none';$('mlist').style.display='none';HUD.menu();ARC.begin();STY.seen.clear();if(MISSION){if(MISSION.endless||!storyPlay('m'+MISSION.id+'.open',startMission))startMission();}   /* IH4: the mission's opening scene, then the brief */
   else briefMaybe(WAVES[0],'WAVE 1');   /* IH4: the intel brief before the sandbox's first wave */
   if(!touchy){lockMouse();HUD.hint('WASD MOVE · MOUSE AIM · SPACE JET HOP, HOLD TO HOVER · V CAMERA · ESC PAUSE',9);}else HUD.hint('LEFT THUMB MOVES · RIGHT THUMB AIMS · JET TO HOP, HOLD TO HOVER',7);}
 function startDemo(){resetRun();G.mode='demo';G.paused=false;G.demoI=1;$('title').style.display='none';HUD.menu();Object.assign(DM,{spawnT:4,viewT:9,orbT:20,orbit:0,view:'far'});CAMX=null;$('attract').style.display='block';}
@@ -2965,6 +3771,7 @@ function autoQ(dt){if(SET.quality!=='auto'||G.mode!=='play'||G.paused)return;con
 let last=performance.now();
 function frame(now){
   const raw=(now-last)/1000,dt=Math.min(.05,raw);last=now;G.fdt+=(raw-G.fdt)*.1;
+  if(STY.open){storyFrame(dt);requestAnimationFrame(frame);return;}   /* IH4: a story scene covers the screen: the game waits */
   if(BAY.open){bayFrame(dt);requestAnimationFrame(frame);return;}
   if(!(DEV&&window.__freeze))tick(dt);autoQ(dt);renderFrame();if(SET.fps&&(G.fpsT=(G.fpsT||0)-raw)<=0){G.fpsT=.5;$('fps').textContent=Math.round(1/Math.max(.001,G.fdt))+' FPS · '+QL.toUpperCase();}HUD.dev();requestAnimationFrame(frame);
 }

@@ -83,7 +83,7 @@ function escortStep(s,dt){const E=MS.escort;
   const px=P.x-E.x,pz=P.z-E.z,pd=Math.hypot(px,pz);if(pd<4.2&&pd>.01&&P.y-hgt(P.x,P.z)<3){P.x=E.x+px/pd*4.2;P.z=E.z+pz/pd*4.2;}
   /* machines that reach the truck chew on it */
   let bite=0;for(const e of EN){if(e.dead||e.spawnT>0)continue;if(Math.hypot(e.x-E.x,e.z-E.z)<5){bite+=e.id==='hound'?14:e.id==='skitter'?6:10;if(Math.random()<dt*5)sparks(E.x+(Math.random()-.5)*2,hgt(E.x,E.z)+1.5+Math.random(),E.z+(Math.random()-.5)*3,4,[1,.6,.3]);}}
-  E.hp-=bite*dt;if(bite&&(E.hitT-=dt)<=0){E.hitT=4;radio([['ROOK',['They are on the truck!','Get them off me!','I am taking hits here!'][(Math.random()*3)|0]]]);}
+  E.hp-=bite*dt;if(bite&&(E.hitT-=dt)<=0){E.hitT=4;radio([['ROOK',['They’re on my truck!','Get them off me, Wraith!','I’m taking hits here!'][(Math.random()*3)|0]]]);}
   MS.waveT-=dt;if(MS.waveT<=0){MS.waveT=s.every;const w=s.waves[MS.wi%s.waves.length];MS.wi++;const n0=EN.length,ahead=Math.min(E.route.length-1,E.ri+1),A=E.route[ahead];
     spawnGroup(w,lerp(E.x,A[0],.7),lerp(E.z,A[1],.7),[34,52]);for(let i=n0;i<EN.length;i++)if(EN[i].id!=='gunner'&&Math.random()<.55)EN[i].tr=1;}
   if(E.hp<=0&&!MS.done){E.hp=0;boom(E.x,hgt(E.x,E.z)+2,E.z,2);boom(E.x,hgt(E.x,E.z)+3,E.z+1,1.4);HUD.msg('ROOK’S TRUCK IS DOWN',3);finishMission(false);}

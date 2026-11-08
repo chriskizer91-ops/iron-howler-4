@@ -45,7 +45,7 @@ window.IH4_MODELS='m4/';window.IH4_LIGHT=__LIGHT__;
 (function(){const IDX={},BLOB={};
   document.querySelectorAll('script[type="ih4/file"]').forEach(el=>{IDX[el.dataset.f]=el;});
   const key=u=>{u=String(u);try{u=decodeURI(u);}catch(e){}u=u.replace(/^[a-z]+:\/\/[^?#]*?\/(?=(models|m4|art)\/)/i,'').replace(/^\.\//,'').replace(/[?#].*$/,'');return IDX[u]?u:null;};
-  window.IH4_FILE=key;
+  window.IH4_FILE=key;window.IH4_URL=u=>{const k=key(u);return k?blobUrl(k):null;};   /* for pictures the page shows itself (story scenes) */
   /* base64 to bytes: the browser's own decoder where it has one, else one character at a time */
   const bytes=t=>{if(Uint8Array.fromBase64)return Uint8Array.fromBase64(t);const s=atob(t),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;};
   const gunzip=u=>new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();

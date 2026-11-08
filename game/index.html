@@ -82,7 +82,7 @@ button:active{background:#ffb34733}
 #wp i{display:block;width:16px;height:16px;margin:0 auto;border:3px solid #7cf0ff;transform:rotate(45deg);box-shadow:0 0 8px #7cf0ff}#wp.off i{border-color:#ffd76a;box-shadow:0 0 8px #ffd76a}
 #wp span{display:block;margin-top:4px;font-size:10px;color:#cfffff;text-shadow:0 1px 2px #000;white-space:nowrap;margin-left:-20px;width:68px}
 #tbrief{max-width:min(520px,86vw);color:#ffffffd0;font-size:12px;line-height:1.6;letter-spacing:.05em}#tbrief .objs{margin-top:8px;color:#ffd76a;font-size:11px}
-#bmis{padding:11px 22px;font-size:14px}#bmenu{padding:7px 14px;font-size:11px}
+#bmis{padding:11px 26px;font-size:15px;letter-spacing:.12em;background:#ffb34726;border-color:#ffb347aa}#bmenu{padding:7px 14px;font-size:11px}
 #mlist,#elist{background:#07090cf4;z-index:6}#elist .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;width:min(480px,90vw)}#attract{position:fixed;left:0;right:0;bottom:8%;text-align:center;font-size:15px;letter-spacing:.3em;color:#ffd76a;text-shadow:0 2px 6px #000;display:none;z-index:4;animation:blink 1.4s steps(2) infinite}@keyframes blink{50%{opacity:.25}}#fps{position:fixed;left:10px;bottom:10px;font:11px monospace;color:#9f9;text-shadow:0 1px 2px #000;display:none;z-index:4}
 #mlist .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;width:min(540px,90vw);max-height:68vh;overflow:auto}
 .mcard{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:12px 14px;text-align:left}.mcard b{color:#ffb347;font-size:14px}.mcard span{color:#ffffffa0;font-size:11px}.mcard.lock{opacity:.4}
@@ -94,6 +94,18 @@ button:active{background:#ffb34733}
 .hrow button{white-space:nowrap;padding:8px 10px;font-size:11px}.hrow button[disabled]{opacity:.35}.trow{display:flex;gap:8px}
 body.inbay>*:not(#bay):not(#gl):not(#hangar):not(script){visibility:hidden!important}
 #bay{display:none;position:fixed;inset:0;z-index:6;pointer-events:none}
+/* IH4 story scenes: one picture, a line of text at a time, SKIP; nothing else on screen */
+#story{position:fixed;inset:0;z-index:9;background:#000;opacity:0;pointer-events:none;transition:opacity .45s;user-select:none;-webkit-user-select:none;touch-action:none}
+#story.on{opacity:1;pointer-events:auto}
+#story .stp{position:absolute;inset:0;background:#000 center 42%/cover no-repeat;opacity:0;transition:opacity .7s}#story .stp.on{opacity:1}
+#story .stp.kb{animation:stkb 24s ease-out forwards}@keyframes stkb{from{transform:scale(1.0)}to{transform:scale(1.07)}}
+#stshade{position:absolute;left:0;right:0;bottom:0;height:46%;background:linear-gradient(#0000,#000000d9 62%)}
+#stbox{position:absolute;left:50%;transform:translateX(-50%);bottom:max(18px,env(safe-area-inset-bottom));width:min(880px,90vw);min-height:4.2em}
+#stwho{display:block;font-size:12px;letter-spacing:.22em;font-weight:700;margin-bottom:5px}
+#stline{display:inline;font-size:clamp(15px,2.3vw,21px);line-height:1.38;color:#eef1f4;text-shadow:0 2px 6px #000}#stline.nar{font-style:italic;color:#d8dde3}
+#stnext{display:inline-block;margin-left:8px;color:#ffb347;opacity:0;font-style:normal}#stnext.on{opacity:1;animation:stblink 1.1s infinite}@keyframes stblink{50%{opacity:.25}}
+#stcap{position:absolute;left:max(16px,env(safe-area-inset-left));top:max(12px,env(safe-area-inset-top));font-size:11px;letter-spacing:.24em;color:#ffffffc0;text-shadow:0 1px 4px #000;background:#0000004d;padding:4px 9px;border-radius:7px}
+#stskip{position:absolute;right:max(14px,env(safe-area-inset-right));top:max(10px,env(safe-area-inset-top));padding:6px 12px;font-size:11px;letter-spacing:.14em;opacity:.8}
 #bay>*{pointer-events:auto}
 #baytop{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;padding:max(12px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) 0 max(14px,env(safe-area-inset-left));pointer-events:none}
 #baytop>*{pointer-events:auto}#bayname b{display:block;font-size:15px;letter-spacing:.2em;color:#ffb347}#bayname small{display:block;font-size:10px;letter-spacing:.16em;color:#ffffff90;margin-top:3px}
@@ -136,11 +148,12 @@ body.inbay>*:not(#bay):not(#gl):not(#hangar):not(script){visibility:hidden!impor
 <div id="elist" class="ov"><div class="sub">ENDLESS</div><div class="cards"></div><button id="elback">BACK</button></div>
 <div id="attract">IRONHOWL 4 · PRESS START</div><div id="fps"></div>
 <div id="title" class="ov"><div class="logo">IRONHOWL 4</div><div class="sub" id="tsub">SANDBOX · PICK A PLACE</div><div id="tbrief"></div>
-  <div class="trow"><button id="bmis">MISSIONS</button><button id="bend">ENDLESS</button><button id="bhang">MOD BAY</button><button id="bbook">ARMORY</button></div><div id="tpilot"></div><div id="tdiff"></div><div id="maps"><button data-map="woods">WOODS</button><button data-map="field">FIELD</button><button data-map="docks">DOCKS</button><button data-map="foundry">FOUNDRY</button></div><button id="bmenu" style="display:none">MENU</button>
+  <div class="trow"><button id="bmis">STORY</button><button id="bend">ENDLESS</button><button id="bhang">MOD BAY</button><button id="bbook">ARMORY</button></div><div id="tpilot"></div><div id="tdiff"></div><div id="maps"><button data-map="woods">WOODS</button><button data-map="field">FIELD</button><button data-map="docks">DOCKS</button><button data-map="foundry">FOUNDRY</button></div><button id="bmenu" style="display:none">MENU</button>
   <div class="go" id="tgo">CLICK OR TAP TO START</div>
   <div class="keys desk">WASD MOVE · MOUSE AIM · CLICK FIRE · RIGHT CLICK MISSILES · Q SALVO · R VENT · SPACE JET HOP (HOLD TO HOVER) · V CAMERA</div>
   <div class="keys tch">LEFT THUMB MOVES · RIGHT THUMB AIMS · HOLD FIRE AND DRAG IT TO AIM · PLAY SIDEWAYS</div></div>
 <div id="load" class="ov"><div class="logo">IRONHOWL 4</div><div class="bar"><div id="ldbar"></div></div></div>
+<div id="story"><div id="sta" class="stp"></div><div id="stb" class="stp"></div><div id="stshade"></div><div id="stcap"></div><button id="stskip">SKIP</button><div id="stbox"><b id="stwho"></b><span id="stline"></span><i id="stnext">▸</i></div></div>
 <script src="js/three-ih3.min.js"></script>
 <script src="js/ironhowl4.js"></script>
 </body></html>

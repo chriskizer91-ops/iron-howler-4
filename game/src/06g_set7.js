@@ -127,7 +127,7 @@ function captureBegin(s,first){if(!first&&MS.caps)return;MS.caps=s.points.map(p=
   return {x:p[0],z:p[1],prog:0,done:false,ring,lm};});MS.waveT=6;MS.wi=0;}
 function captureStep(s,dt){let n=0,cur=null;for(const c of MS.caps){if(c.done){n++;continue;}
     if(Math.hypot(P.x-c.x,P.z-c.z)<s.r&&!P.dead){c.prog+=dt/s.time;cur=c;c.ring.material.opacity=.45+.4*Math.abs(Math.sin(G.t*6));
-      if(c.prog>=1){c.done=true;c.ring.material.color.setRGB(.3,.8,1);c.lm.color.setRGB(.3,.8,1).multiplyScalar(3);sPickup();HUD.msg('RELAY TAKEN',2);radio([['ROOK',['One relay is ours.','Two down. One to go!','That is all three!'][n]]]);n++;}}}
+      if(c.prog>=1){c.done=true;c.ring.material.color.setRGB(.3,.8,1);c.lm.color.setRGB(.3,.8,1).multiplyScalar(3);sPickup();HUD.msg('RELAY TAKEN',2);radio([['ROOK',['One relay’s ours.','Two down. One to go!','That’s all three. Tracing now.'][n]]]);n++;}}}
   MS.waveT-=dt;if(MS.waveT<=0){MS.waveT=s.every;const w=s.waves[MS.wi%s.waves.length];MS.wi++;const t=cur||MS.caps.find(c=>!c.done)||MS.caps[0];spawnGroup(w,t.x,t.z,[44,64]);}
   const next=cur||MS.caps.filter(c=>!c.done).sort((a,b)=>Math.hypot(P.x-a.x,P.z-a.z)-Math.hypot(P.x-b.x,P.z-b.z))[0];
   return {txt:s.label+' '+n+'/'+MS.caps.length+(cur?' · '+Math.floor(cur.prog*100)+'%':''),ok:n===MS.caps.length,pos:next||null};}
