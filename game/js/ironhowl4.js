@@ -735,6 +735,23 @@ MAPS.foundry.dress=function(){
   scatter(new THREE.ConeGeometry(.28,.8,10),haz,30,yard,{s0:1,s1:1,y:.4,seed:76});
 };
 
+/* ---- 04e_life.js ---- */
+/* ===================== living places (session 7, built with Fable 5.2) =====================
+   Each place adds its own life in its own file with
+     lifeOn('field',{build(L){...}, tick(dt,t){...}, noise(x,z,k,kind){...}})      ('*' = every map)
+   build(L) runs once, after the map, its plants and the weather are ready (L = the look in use: L.night, L.rain, L.storm, L.fogFar...)
+   tick(dt,t) runs every frame, on the title screen too (t = seconds since build)
+   noise(x,z,k,kind) is told about the fight so the place can react: kind 'shot' (the Wraith's gun), 'eshot' (a machine fires),
+     'boom' (an explosion, k = its size), 'step' (a footfall). k is roughly 0..2.
+   A part that throws an error is switched off on its own; the rest of the game keeps going. */
+const LIFE={on:{},act:[],t:0,ready:false,L:null};
+function lifeOn(map,o){(LIFE.on[map]=LIFE.on[map]||[]).push(o);}
+function lifeOff(o,e){console.warn('life part switched off:',e);LIFE.act=LIFE.act.filter(a=>a!==o);}
+function lifeBuild(L){LIFE.L=L;LIFE.act=(LIFE.on['*']||[]).concat(LIFE.on[MAPID]||[]);
+  for(const o of LIFE.act.slice())if(o.build)try{o.build(L);}catch(e){lifeOff(o,e);}LIFE.ready=true;}
+function lifeTick(dt){if(!LIFE.ready)return;LIFE.t+=dt;for(const o of LIFE.act)if(o.tick)try{o.tick(dt,LIFE.t);}catch(e){lifeOff(o,e);}}
+function lifeNoise(x,z,k,kind){if(!LIFE.ready)return;for(const o of LIFE.act)if(o.noise)try{o.noise(x,z,k,kind);}catch(e){lifeOff(o,e);}}
+
 /* ---- 05_mech_common.js ---- */
 /* ===================== shared mech pieces from Ironhowl 3 (materials, part merging, leg IK) used by the FORGE machines.
    Ironhowl 4's player mech is the Wraith: 05_wraith.js. Below, Ironhowl 3's notes on Howler 07 (models/mech/howler07.glb, built in Blender: v2/src/ironhowl3/blender) =====================
@@ -1085,7 +1102,7 @@ function updGun(c,dt){
     MFL.position.copy(_w);GUN.flash=1;
     GUN.heat+=HEAT.shot;GUN.cool=HEAT.delay;
     if(GUN.heat>=100){GUN.heat=100;GUN.over=true;sOver();HUD.msg('OVERHEAT · VENT IT',1.4);}
-    sGun(t);
+    sGun(t);lifeNoise(P.x,P.z,.3,'shot');
   }else if(!firing){GUN.cool-=dt;if(GUN.cool<=0)GUN.heat=Math.max(0,GUN.heat-HEAT.cool*dt);}
   if(GUN.over){GUN.cool-=dt;if(GUN.cool<=0)GUN.heat=Math.max(0,GUN.heat-HEAT.cool*.8*dt);if(GUN.heat<=HEAT.resume)GUN.over=false;
     if(M.ready&&AC.length&&Math.random()<dt*14){const A=AC[Math.random()*AC.length|0];A.muzzle.getWorldPosition(_w);part({x:_w.x,y:_w.y,z:_w.z,vx:(Math.random()-.5),vy:1.5+Math.random(),vz:(Math.random()-.5),life:1.2,s0:.4,s1:1.6,a:.35,col:[.85,.85,.88],drag:1});}}
@@ -1153,7 +1170,7 @@ function drawShots(){
 }
 function sparks(x,y,z,n,col){if(n>2)part({x,y,z,vx:0,vy:0,vz:0,life:.14,s0:.7,s1:1.6,a:1.3,col:[1,1,1],glow:true,img:3});for(let i=0;i<n;i++){const a=Math.random()*TAU,b=Math.random()*2-1,s=4+Math.random()*7;
   part({x,y,z,vx:Math.cos(a)*s*Math.sqrt(1-b*b),vy:b*s+2,vz:Math.sin(a)*s*Math.sqrt(1-b*b),life:.25+Math.random()*.25,s0:.22,s1:.06,a:2,col,glow:true,drag:2,grav:12});}}
-function boom(x,y,z,k){sBoom(k);CAMS.shake=Math.max(CAMS.shake,Math.min(.9,.7*k*12/Math.max(6,Math.hypot(x-P.x,z-P.z))));
+function boom(x,y,z,k){lifeNoise(x,z,k,'boom');sBoom(k);CAMS.shake=Math.max(CAMS.shake,Math.min(.9,.7*k*12/Math.max(6,Math.hypot(x-P.x,z-P.z))));
   part({x,y,z,vx:0,vy:0,vz:0,life:.35,s0:4*k,s1:7*k,a:1.6,col:[1,.62,.28],glow:true});
   for(let i=0;i<2;i++)part({x:x+(Math.random()-.5)*k,y:y+.3*i,z:z+(Math.random()-.5)*k,vx:0,vy:1.2,vz:0,life:.5+i*.15,s0:2.6*k,s1:(7.5+i*2)*k,a:1.5,col:[1,1,1],glow:true,img:i,vr:(Math.random()-.5)*2});
   if(y-hgt(x,z)<3.5)decal('scorch',x,z,(2.4+Math.random()*1.4)*Math.max(.8,k)*1.5,Math.random()*TAU);
@@ -1319,7 +1336,7 @@ function updEnemies(dt){
       if(seen&&dist<55&&e.cd<=0&&!P.dead){e.burst=e.d.burst||3;e.cd=2.4+Math.random();e.bt=0;}
       if(e.burst>0){e.bt-=dt;if(e.bt<=0){e.bt=.18;e.burst--;const mz=e.burst%2?e.mzR:e.mzL;mz.getWorldPosition(_w);
         const lead=dist/30*.6,tx=P.x+P.vx*lead,ty=P.y+3.2,tz=P.z+P.vz*lead;let ax=tx-_w.x,ay=ty-_w.y,az=tz-_w.z;const l=Math.hypot(ax,ay,az)||1;
-        EBOLTS.push({x:_w.x,y:_w.y,z:_w.z,vx:ax/l*30,vy:ay/l*30,vz:az/l*30,life:2.4,dmg:e.d.bolt||8});sEShot();part({x:_w.x,y:_w.y,z:_w.z,vx:0,vy:0,vz:0,life:.08,s0:1.2,s1:.5,a:2,col:[1,.3,.1],glow:true});}}
+        EBOLTS.push({x:_w.x,y:_w.y,z:_w.z,vx:ax/l*30,vy:ay/l*30,vz:az/l*30,life:2.4,dmg:e.d.bolt||8});sEShot();lifeNoise(_w.x,_w.z,.2,'eshot');part({x:_w.x,y:_w.y,z:_w.z,vx:0,vy:0,vz:0,life:.08,s0:1.2,s1:.5,a:2,col:[1,.3,.1],glow:true});}}
     }
     /* move with separation from other machines, trunk collisions and knockback */
     for(const o of EN){if(o===e||o.dead||o.spawnT>0)continue;const ox=e.x-o.x,oz=e.z-o.z,rr=e.d.r+o.d.r,d2=ox*ox+oz*oz;if(d2<rr*rr&&d2>1e-4){const d=Math.sqrt(d2);mvx+=ox/d*(rr-d)/rr*1.5;mvz+=oz/d*(rr-d)/rr*1.5;}}
@@ -1750,7 +1767,7 @@ function clearMarks(){for(const k of MARKS){S.remove(k.m);k.m.material.dispose()
 const fwdOf=yaw=>[-Math.sin(yaw),-Math.cos(yaw)];
 /* hits from the front of a shielded or armoured machine: x,z is where the shot landed (falls back to the player's position) */
 function frontDot(e,x,z){if(x==null){x=P.x;z=P.z;}const dx=x-e.x,dz=z-e.z,d=Math.hypot(dx,dz)||1,f=fwdOf(e.yaw);return (dx*f[0]+dz*f[1])/d;}
-function eBolt(from,tx,ty,tz,speed,dmg,o){let ax=tx-from.x,ay=ty-from.y,az=tz-from.z;const l=Math.hypot(ax,ay,az)||1;
+function eBolt(from,tx,ty,tz,speed,dmg,o){lifeNoise(from.x,from.z,.2,'eshot');let ax=tx-from.x,ay=ty-from.y,az=tz-from.z;const l=Math.hypot(ax,ay,az)||1;
   EBOLTS.push(Object.assign({x:from.x,y:from.y,z:from.z,vx:ax/l*speed,vy:ay/l*speed,vz:az/l*speed,life:3,dmg},o||{}));}
 function flashAt(p,s){part({x:p.x,y:p.y,z:p.z,vx:0,vy:0,vz:0,life:.09,s0:s||1.4,s1:.5,a:2,col:[1,.35,.1],glow:true});}
 /* ---------------- Hornet: flying drone. Circles you high up, dives, fires its stinger, climbs away ---------------- */
@@ -2719,7 +2736,7 @@ function storySrc(pn,cb){const a='art/story/'+pn.img+'.webp',b='art/story/ph_'+(
 function storyPreload(m){const s=(typeof STORY_TEXT!=='undefined')&&STORY_TEXT[m];if(!s)return;
   for(const part of ['open','mid','close'])for(const pn of (s[part]&&s[part].panels)||[])storySrc(pn,()=>{});}
 /* open a scene if this run hasn't shown it; returns true if it opened (then `then` runs when it closes) */
-function storyPlay(key,then){const sc=storyScene(key);if(!sc||!sc.panels||!sc.panels.length||STY.seen.has(key))return false;
+function storyPlay(key,then){const sc=storyScene(key);if(DEV&&Q.has('nostory')||!sc||!sc.panels||!sc.panels.length||STY.seen.has(key))return false;
   STY.seen.add(key);storyPreload(key.split('.')[0]);STY.sc=sc;STY.key=key;STY.pi=0;STY.li=0;STY.done=then||null;STY.open=true;jetLoop(0);
   if(document.pointerLockElement)document.exitPointerLock();
   $('stcap').textContent=sc.cap||(MISSION&&!MISSION.endless?(CHAPTER.split(' · ')[0]+' · '+MISSION.name):'');
@@ -3734,7 +3751,7 @@ function jetFX(dt){if(P.thrust<.05)return;for(const J of M.jets){J.n.getWorldPos
   const k=P.thrust;if(Math.random()<k*dt*60)part({x:_np.x,y:_np.y-.4,z:_np.z,vx:(Math.random()-.5)*2,vy:-6-Math.random()*4,vz:(Math.random()-.5)*2,life:.25+Math.random()*.15,s0:.9,s1:.35,a:1.4*k,col:[1,.55,.22],glow:true,drag:2});
   if(Math.random()<k*dt*30)part({x:_np.x,y:_np.y-.6,z:_np.z,vx:(Math.random()-.5)*1.5,vy:-3-Math.random()*2,vz:(Math.random()-.5)*1.5,life:1.2+Math.random()*.8,s0:.8,s1:3.4,a:.3,col:SMOKE,drag:1.6,grav:-.6});}}
 function tick(dt){
-  G.t+=dt;U.uTime.value=G.t;if(MAPDEF.tick)MAPDEF.tick(dt);updRain(dt);updWeather(dt);updShieldFx(dt);if(G.mode==='play')updMarks(dt);if(RING)RING.position.set(cam.position.x,cam.position.y+RING.userData.lift,cam.position.z);
+  G.t+=dt;U.uTime.value=G.t;if(MAPDEF.tick)MAPDEF.tick(dt);lifeTick(dt);updRain(dt);updWeather(dt);updShieldFx(dt);if(G.mode==='play')updMarks(dt);if(RING)RING.position.set(cam.position.x,cam.position.y+RING.userData.lift,cam.position.z);
   /* the clouds drift; their shadows slide over the ground with them */
   U.uCloudOff.value.x+=dt*.0016;U.uCloudOff.value.y+=dt*.0007;
   const live=(G.mode==='play'||G.mode==='demo')&&!G.paused;
@@ -3753,7 +3770,7 @@ function tick(dt){
   if(G.mode==='down'){G.downT-=dt;if(G.downT<=0&&$('down').style.display!=='flex'){$('down').style.display='flex';}
     if(Math.random()<dt*20)part({x:P.x+(Math.random()-.5)*2,y:P.y+1+Math.random()*2,z:P.z+(Math.random()-.5)*2,vx:0,vy:2.5,vz:0,life:2.4,s0:1.2,s1:5,a:.4,col:[.2,.2,.21],drag:.6,grav:-.5});}
   if(M){const ev=poseMech(M,{x:P.x,z:P.z,gy:P.y,legYaw:P.legYaw,aimYaw:P.yaw,spd:live?P.spd:0,air:P.air,vy:P.vy,land:P.land,thrust:P.thrust,pitch:P.pitch},live?dt:0);
-    for(const e of ev){const k=clamp(Math.abs(P.spd)/WALK,.35,1);sStep(k);if(e.x!==undefined){dustPuff(e.x,e.z,3,.55);if(SOFT_GROUND())decal('print',e.x,e.z,1.9,(P.legYaw!=null?P.legYaw:P.yaw)+Math.PI);}if(SET.view==='close')CAMS.shake=Math.max(CAMS.shake,.16*k);}}
+    for(const e of ev){const k=clamp(Math.abs(P.spd)/WALK,.35,1);sStep(k);if(e.x!==undefined){lifeNoise(e.x,e.z,.12*k,'step');dustPuff(e.x,e.z,3,.55);if(SOFT_GROUND())decal('print',e.x,e.z,1.9,(P.legYaw!=null?P.legYaw:P.yaw)+Math.PI);}if(SET.view==='close')CAMS.shake=Math.max(CAMS.shake,.16*k);}}
   const view=G.mode==='demo'?DM.view:G.mode==='title'||G.mode==='down'?'far':SET.view;
   updCam(live||G.mode!=='play'?dt:0,P,view);
   placeSun(P.x-Math.sin(P.yaw)*12,P.z-Math.cos(P.yaw)*12);
@@ -3785,7 +3802,7 @@ function boot(){
   const done=()=>{if(readySent)return;readySent=true;G.mode=G.mode==='load'?'title':G.mode;$('load').style.display='none';$('title').style.display=G.mode==='title'?'flex':'none';document.title='IRONHOWL 4';ARC.post('ready',{title:ARC.title});};
   let vegDone=false,texDone=false;LM.onLoad=()=>{texDone=true;if(vegDone)done();};
   if(LK.rain)buildRain();
-  Promise.all([loadVeg(MAPDEF.mix),loadEnemies().then(loadSet6)]).then(()=>{buildWeather(LK);envAll();navInit();navBuild();vegDone=true;if(texDone||LOADP>=1)done();});
+  Promise.all([loadVeg(MAPDEF.mix),loadEnemies().then(loadSet6)]).then(()=>{buildWeather(LK);lifeBuild(LK);envAll();navInit();navBuild();vegDone=true;if(texDone||LOADP>=1)done();});
   requestAnimationFrame(frame);
 }
 $('title').addEventListener('click',()=>{if(G.mode==='title')startPlay();});

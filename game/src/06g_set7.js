@@ -11,7 +11,7 @@ function clearMarks(){for(const k of MARKS){S.remove(k.m);k.m.material.dispose()
 const fwdOf=yaw=>[-Math.sin(yaw),-Math.cos(yaw)];
 /* hits from the front of a shielded or armoured machine: x,z is where the shot landed (falls back to the player's position) */
 function frontDot(e,x,z){if(x==null){x=P.x;z=P.z;}const dx=x-e.x,dz=z-e.z,d=Math.hypot(dx,dz)||1,f=fwdOf(e.yaw);return (dx*f[0]+dz*f[1])/d;}
-function eBolt(from,tx,ty,tz,speed,dmg,o){let ax=tx-from.x,ay=ty-from.y,az=tz-from.z;const l=Math.hypot(ax,ay,az)||1;
+function eBolt(from,tx,ty,tz,speed,dmg,o){lifeNoise(from.x,from.z,.2,'eshot');let ax=tx-from.x,ay=ty-from.y,az=tz-from.z;const l=Math.hypot(ax,ay,az)||1;
   EBOLTS.push(Object.assign({x:from.x,y:from.y,z:from.z,vx:ax/l*speed,vy:ay/l*speed,vz:az/l*speed,life:3,dmg},o||{}));}
 function flashAt(p,s){part({x:p.x,y:p.y,z:p.z,vx:0,vy:0,vz:0,life:.09,s0:s||1.4,s1:.5,a:2,col:[1,.35,.1],glow:true});}
 /* ---------------- Hornet: flying drone. Circles you high up, dives, fires its stinger, climbs away ---------------- */

@@ -16,7 +16,7 @@ function storySrc(pn,cb){const a='art/story/'+pn.img+'.webp',b='art/story/ph_'+(
 function storyPreload(m){const s=(typeof STORY_TEXT!=='undefined')&&STORY_TEXT[m];if(!s)return;
   for(const part of ['open','mid','close'])for(const pn of (s[part]&&s[part].panels)||[])storySrc(pn,()=>{});}
 /* open a scene if this run hasn't shown it; returns true if it opened (then `then` runs when it closes) */
-function storyPlay(key,then){const sc=storyScene(key);if(!sc||!sc.panels||!sc.panels.length||STY.seen.has(key))return false;
+function storyPlay(key,then){const sc=storyScene(key);if(DEV&&Q.has('nostory')||!sc||!sc.panels||!sc.panels.length||STY.seen.has(key))return false;
   STY.seen.add(key);storyPreload(key.split('.')[0]);STY.sc=sc;STY.key=key;STY.pi=0;STY.li=0;STY.done=then||null;STY.open=true;jetLoop(0);
   if(document.pointerLockElement)document.exitPointerLock();
   $('stcap').textContent=sc.cap||(MISSION&&!MISSION.endless?(CHAPTER.split(' · ')[0]+' · '+MISSION.name):'');
