@@ -11,6 +11,6 @@ a fresh critic reviewed (`CRITIC_NOTES.md`, all 19 edits applied). `BRIEF.md` is
 - Game side: `game/src/06o_story.js` (the scene player), `game/src/06p_story_text.js` (the words, generated).
 - Change the words: edit `ch1_scenes.json`, then `python3 game/tools/story_build.py docs/story/ch1_scenes.json > game/src/06p_story_text.js`
   and `python3 game/tools/story_script.py docs/story/ch1_scenes.json > docs/story/ch1_script.md`, then `python3 game/build.py`.
-- Pictures: `game/art/story/<id>.webp` (from Christopher's ChatGPT pictures, 1536 × 1024 → webp); until one exists the
-  scene shows `ph_<place>.webp`, a shot of its place taken in the game.
+- Pictures: all 20 arrived 8 Nov (originals and the 6 character sheets in `art/story-chapter1/`); the game uses webp copies
+  in `game/art/story/<id>.webp`. A scene whose picture is missing shows `ph_<place>.webp`, a shot of its place from the game.
 - The doc Christopher uses: https://claude.ai/artifact/JzPRqocp8MoTU2C2Cb4JWi (story, script, and the 26 prompts).
