@@ -80,6 +80,7 @@ field:{name:'FIELD',mix:'meadow',spawn:{x:0,z:115,yaw:0},
     for(let i=0;i<44;i++){const r=MAPS.field.crops[i%MAPS.field.crops.length],x=lerp(r[0],r[2],.1+rnd()*.8),z=lerp(r[1],r[3],.1+rnd()*.8);if(r[4]!=='c')continue;
       bales.push(new THREE.Matrix4().compose(V3(x,hgt(x,z)+1,z),new THREE.Quaternion().setFromAxisAngle(V3(0,1,0),rnd()*TAU),V3(1,1,1)));addCol(x,z,1.1,2);}
     const bim=new THREE.InstancedMesh(bg,[hay,hayEnd,hayEnd],bales.length);bales.forEach((m,k)=>bim.setMatrixAt(k,m));bim.castShadow=bim.receiveShadow=true;S.add(bim);
+    MAPS.field.baleIM=bim;MAPS.field.mats={red,wood};   /* session 7 (outdoor life): handles so 04g_life_field.js can scorch bales that catch fire and reuse the barn's materials */
     /* radio relay masts: lattice towers with a red light (mission 1 targets) */
     const truss=tmat('74-crane-truss',{alpha:true,ds:true,rep:[4,6],r:.6,m:.5});
     MAPS.field.mastObjs=[];
