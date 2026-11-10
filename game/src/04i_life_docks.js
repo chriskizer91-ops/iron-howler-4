@@ -78,7 +78,8 @@ build(L){const D=MAPS.docks,low=QL==='low',night=!!L.night,rnd=mulberry(907),Qz=
     for(let j=0;j<=nz;j++){const z=-99-321*Math.pow(j/nz,1.5);for(let i=0;i<=nx;i++){const x=-350+700*i/nx;pos.push(x,-2.6,z);uv.push(i/nx,(z+420)/320);}}
     for(let j=0;j<nz;j++)for(let i=0;i<nx;i++){const a=j*(nx+1)+i,b=a+1,c=a+nx+1,d=c+1;idx.push(a,b,c,b,d,c);}
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
-    const m=old.material;m.onBeforeCompile=sh=>{sh.uniforms.uWT=UT;sh.uniforms.uSheen={value:night?new THREE.Vector4(.07,.12,.26,2.2):new THREE.Vector4(.5,.3,.2,.5)};
+    const m=old.material;if(!night)m.color.set(0x5d6f8e);   /* lead: cooler water under the warm sunset light */
+    m.onBeforeCompile=sh=>{sh.uniforms.uWT=UT;sh.uniforms.uSheen={value:night?new THREE.Vector4(.07,.12,.26,2.2):new THREE.Vector4(.36,.2,.44,.5)};   /* lead: a violet sheen like the sunset sky (the orange one read as sand) */
       sh.vertexShader=sh.vertexShader.replace('#include <common>',`#include <common>
         uniform float uWT;varying vec3 vWP;
         vec3 dkWave(vec2 p){vec2 k1=vec2(.05,.155),k2=vec2(-.14,.2),k3=vec2(.12,.3);float a1=dot(p,k1)-uWT*.8,a2=dot(p,k2)-uWT*1.2,a3=dot(p,k3)-uWT*1.7;
