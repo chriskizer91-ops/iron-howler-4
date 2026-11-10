@@ -25,7 +25,7 @@ MAPS.foundry={name:'FOUNDRY 4',mix:'woods',spawn:{x:0,z:100,yaw:0},bounds:{x0:-1
     /* the main hall behind FORGE with the FOUNDRY 4 neon */
     put(sbox(70,26,14,[[12,10],[12,10],[0,0],[0,0],[12,10],[12,10]]),[facM,facM,roofM,roofM,facM,facM],FORGE_AT.x,13,Z0-8,0,false);
     const neon=new THREE.Mesh(new THREE.PlaneGeometry(16,8),new THREE.MeshBasicMaterial({map:tex('45-neon-sign-foundry-4'),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:new THREE.Color(2.2,2.2,2.2)}));
-    neon.position.set(FORGE_AT.x,21,Z0-.9);S.add(neon);
+    neon.position.set(FORGE_AT.x,21,Z0-.9);S.add(neon);MAPS.foundry.neon=neon;   /* session 7: handles for the living foundry (04j_life_foundry.js) */
     /* FORGE's platform: steel deck with hazard edge, and its collider */
     const fx=FORGE_AT.x,fz=FORGE_AT.z;put(new THREE.BoxGeometry(34,.5,28),plate,fx,.25,fz,0,false);
     for(const [w,d,x,z] of [[34,.6,fx,fz+14],[34,.6,fx,fz-14],[.6,28,fx+17,fz],[.6,28,fx-17,fz]])put(new THREE.BoxGeometry(w,.55,d),hazard,x,.3,z,0,false);
@@ -52,7 +52,7 @@ MAPS.foundry={name:'FOUNDRY 4',mix:'woods',spawn:{x:0,z:100,yaw:0},bounds:{x0:-1
     for(const x of [-80,-40,40,80])for(const z of [-40,10,60,96]){put(new THREE.CylinderGeometry(.2,.28,12,8),gm,x,6,z);put(new THREE.BoxGeometry(1.6,.3,.7),lampM,x,12,z);addCol(x,z,.4,12);
       const g=new THREE.PlaneGeometry(24,24);g.rotateX(-Math.PI/2);g.translate(x,.07,z);pools.push(g);}
     const p=new THREE.Mesh(THREE.mergeGeometries(pools),new THREE.MeshBasicMaterial({map:poolTex(),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:new THREE.Color(1,.65,.35).multiplyScalar(.6)}));
-    p.renderOrder=2;p.userData.keep=1;p.frustumCulled=false;S.add(p);
+    p.renderOrder=2;p.userData.keep=1;p.frustumCulled=false;S.add(p);MAPS.foundry.lampM=lampM;MAPS.foundry.poolMesh=p;   /* session 7: lamps that stutter */
     const glow=[];for(const z of [-18,34])for(const sx of [-1,1]){const g=new THREE.PlaneGeometry(82,14);g.rotateX(-Math.PI/2);g.translate(sx*56,.08,z);glow.push(g);}
     const gp=new THREE.Mesh(THREE.mergeGeometries(glow),new THREE.MeshBasicMaterial({map:poolTex(),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:new THREE.Color(1,.35,.08).multiplyScalar(.5)}));
     gp.renderOrder=2;gp.userData.keep=1;gp.frustumCulled=false;S.add(gp);
