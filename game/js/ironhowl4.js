@@ -568,11 +568,13 @@ docks:{name:'DOCKS',mix:'woods',spawn:{x:9,z:88,yaw:0},bounds:{x0:-128,x1:128,z0
     /* water and the quay wall */
     const wt=tex('75-harbour-water',{rep:60});const water=new THREE.Mesh(new THREE.PlaneGeometry(700,320),new THREE.MeshStandardMaterial({map:wt,color:0xa8bcc0,roughness:.16,metalness:.3}));
     water.rotation.x=-Math.PI/2;water.position.set(0,-2.6,Qz-160);S.add(water);MAPS.docks.wt=wt;
+    water.userData.keep=1;MAPS.docks.water=water;   /* session 7: kept out of the merge so 04i_life_docks.js can give it waves */
     put(sbox(470,3.4,1,[0,0,0,0,0,[7,0]]),[tmat('09-blast-wall'),tmat('09-blast-wall'),tmat('07-harbor-paving'),tmat('09-blast-wall'),tmat('09-blast-wall'),tmat('76-quay-edge-with-fenders')],0,-1.7,Qz-.5,0,false);
     /* a moored ship */
     const hull=tmat('77-ship-hull-side',{r:.6,m:.3}),deck=tmat('12-rusted-steel-plate',{rep:[10,2]}),hdark=tmat('24-gunmetal',{col:0x3a2a28});
-    put(sbox(190,18,22,[[0,0],[0,0],0,0,[28,0],[28,0]]),[hdark,hdark,deck,hdark,hull,hull],15,0,Qz-24,0,false);
-    put(sbox(22,15,18,[[6,6],[6,6],0,0,[6,6],[6,6]]),tmat('14-docks-building-facade'),-66,16.5,Qz-24,0,true);
+    /* session 7: the hull and the deckhouse stay whole (not merged) so 04i_life_docks.js can let the ship ride the swell */
+    MAPS.docks.shipParts=[put(sbox(190,18,22,[[0,0],[0,0],0,0,[28,0],[28,0]]),[hdark,hdark,deck,hdark,hull,hull],15,0,Qz-24,0,false),
+      put(sbox(22,15,18,[[6,6],[6,6],0,0,[6,6],[6,6]]),tmat('14-docks-building-facade'),-66,16.5,Qz-24,0,true)];MAPS.docks.shipParts.forEach(m=>m.userData.keep=1);
     /* two ship-to-shore cranes over the quay */
     const truss=tmat('74-crane-truss',{alpha:true,ds:true,r:.55,m:.5});const tb=(w,h,d,x,y,z)=>{const g=sbox(w,h,d,[[2.5,2.5],[2.5,2.5],[2.5,2.5],[2.5,2.5],[2.5,2.5],[2.5,2.5]]);return put(g,truss,x,y,z);};
     for(const cx of [-59,9,77]){const z1=Qz+10,z2=Qz+1,zm=(z1+z2)/2;for(const lx of [-7,7])for(const lz of [z1,z2]){tb(1.6,32,1.6,cx+lx,16,lz);addBox(cx+lx-1,lz-1,cx+lx+1,lz+1,32);}
@@ -593,16 +595,16 @@ docks:{name:'DOCKS',mix:'woods',spawn:{x:9,z:88,yaw:0},bounds:{x0:-128,x1:128,z0
     const clad=tmat('10-corrugated-metal',{col:0x8a9096,rep:[1,1]}),door=tmat('78-warehouse-roller-door',{r:.7,m:.3}),gravel=tmat('15-roof-gravel');
     for(const wx of [-104,-52,0,52,104]){put(sbox(34,12,18,[[4,4],[4,4],[6,6],0,[4,4],[34/3,0]]),[clad,clad,gravel,gravel,clad,door],wx,6,108);addBox(wx-17,99,wx+17,117,12,0);}
     const neon=new THREE.Mesh(new THREE.PlaneGeometry(11,5.5),new THREE.MeshBasicMaterial({map:tex('44-neon-sign-harbor-9'),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:new THREE.Color(2,2,2)}));
-    neon.position.set(0,13.6,98.9);neon.rotation.y=Math.PI;S.add(neon);
+    neon.position.set(0,13.6,98.9);neon.rotation.y=Math.PI;S.add(neon);MAPS.docks.neon=neon;   /* session 7: handles for the living docks (neon flicker, lamps that stutter) */
     const bb=new THREE.Mesh(new THREE.PlaneGeometry(9,9),tmat('46-hyperdot-arcade-billboard',{r:.5}));bb.position.set(121.1,7,108);bb.rotation.y=Math.PI/2;S.add(bb);
     /* lamp posts and bollards */
     const pole=tmat('24-gunmetal'),lampM=new THREE.MeshBasicMaterial({color:new THREE.Color(1,.85,.55).multiplyScalar(3)});
-    const night=MISSION&&MISSION.look&&MISSION.look.night;if(night)lampM.color.multiplyScalar(2.2);
+    const night=MISSION&&MISSION.look&&MISSION.look.night;if(night)lampM.color.multiplyScalar(2.2);MAPS.docks.lampM=lampM;
     const pool=night?poolTex():null;
     for(const x of MAPS.docks.lanesX)for(const z of [-88,-20,52,84]){put(new THREE.CylinderGeometry(.18,.25,13,8),pole,x+3.6,6.5,z);put(new THREE.BoxGeometry(1.6,.3,.7),lampM,x+3.6,13,z);addCol(x+3.6,z,.4,13);
       if(night){const g=new THREE.PlaneGeometry(22,22);g.rotateX(-Math.PI/2);g.translate(x+3.6,.06,z);(MAPS.docks._pools=MAPS.docks._pools||[]).push(g);}}
     if(night&&MAPS.docks._pools){const p=new THREE.Mesh(THREE.mergeGeometries(MAPS.docks._pools),new THREE.MeshBasicMaterial({map:pool,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:new THREE.Color(1,.78,.45).multiplyScalar(.55)}));
-      p.renderOrder=2;p.userData.keep=1;p.frustumCulled=false;S.add(p);}
+      p.renderOrder=2;p.userData.keep=1;p.frustumCulled=false;S.add(p);MAPS.docks.poolMesh=p;}
     for(let x=-124;x<=124;x+=9.5)put(new THREE.CylinderGeometry(.35,.42,.8,10),pole,x,.4,Qz+1.2);
   },
   tick(dt){if(MAPS.docks.wt){MAPS.docks.wt.offset.x+=dt*.004;MAPS.docks.wt.offset.y+=dt*.0025;}}},
@@ -664,7 +666,7 @@ MAPS.foundry={name:'FOUNDRY 4',mix:'woods',spawn:{x:0,z:100,yaw:0},bounds:{x0:-1
     /* the main hall behind FORGE with the FOUNDRY 4 neon */
     put(sbox(70,26,14,[[12,10],[12,10],[0,0],[0,0],[12,10],[12,10]]),[facM,facM,roofM,roofM,facM,facM],FORGE_AT.x,13,Z0-8,0,false);
     const neon=new THREE.Mesh(new THREE.PlaneGeometry(16,8),new THREE.MeshBasicMaterial({map:tex('45-neon-sign-foundry-4'),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:new THREE.Color(2.2,2.2,2.2)}));
-    neon.position.set(FORGE_AT.x,21,Z0-.9);S.add(neon);
+    neon.position.set(FORGE_AT.x,21,Z0-.9);S.add(neon);MAPS.foundry.neon=neon;   /* session 7: handles for the living foundry (04j_life_foundry.js) */
     /* FORGE's platform: steel deck with hazard edge, and its collider */
     const fx=FORGE_AT.x,fz=FORGE_AT.z;put(new THREE.BoxGeometry(34,.5,28),plate,fx,.25,fz,0,false);
     for(const [w,d,x,z] of [[34,.6,fx,fz+14],[34,.6,fx,fz-14],[.6,28,fx+17,fz],[.6,28,fx-17,fz]])put(new THREE.BoxGeometry(w,.55,d),hazard,x,.3,z,0,false);
@@ -691,7 +693,7 @@ MAPS.foundry={name:'FOUNDRY 4',mix:'woods',spawn:{x:0,z:100,yaw:0},bounds:{x0:-1
     for(const x of [-80,-40,40,80])for(const z of [-40,10,60,96]){put(new THREE.CylinderGeometry(.2,.28,12,8),gm,x,6,z);put(new THREE.BoxGeometry(1.6,.3,.7),lampM,x,12,z);addCol(x,z,.4,12);
       const g=new THREE.PlaneGeometry(24,24);g.rotateX(-Math.PI/2);g.translate(x,.07,z);pools.push(g);}
     const p=new THREE.Mesh(THREE.mergeGeometries(pools),new THREE.MeshBasicMaterial({map:poolTex(),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:new THREE.Color(1,.65,.35).multiplyScalar(.6)}));
-    p.renderOrder=2;p.userData.keep=1;p.frustumCulled=false;S.add(p);
+    p.renderOrder=2;p.userData.keep=1;p.frustumCulled=false;S.add(p);MAPS.foundry.lampM=lampM;MAPS.foundry.poolMesh=p;   /* session 7: lamps that stutter */
     const glow=[];for(const z of [-18,34])for(const sx of [-1,1]){const g=new THREE.PlaneGeometry(82,14);g.rotateX(-Math.PI/2);g.translate(sx*56,.08,z);glow.push(g);}
     const gp=new THREE.Mesh(THREE.mergeGeometries(glow),new THREE.MeshBasicMaterial({map:poolTex(),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:new THREE.Color(1,.35,.08).multiplyScalar(.5)}));
     gp.renderOrder=2;gp.userData.keep=1;gp.frustumCulled=false;S.add(gp);
@@ -1367,6 +1369,383 @@ lifeOn('woods',{
       const d=Math.hypot(x-hx,z-hz),r=kind==='boom'?55+25*k:kind==='shot'?75:45;if(d<r)deerBolt(x,z);}
     if(kind==='boom'&&k>=.5)leafBurst(x,z,Math.min(k,2));
   }});
+
+/* ---- 04i_life_docks.js ---- */
+/* ===================== living places: the docks (Harbor 9) =====================  session 7, built with Fable 5.2
+   What moves here (all of it outside the play area or well above head height, nothing has a collider):
+     WATER    the harbour heaves in slow swells (the surface really moves) and small ripples slide the sunset / moonlight across it;
+              a pale line of foam works along the quay wall and the ship's side
+     SHIP     the moored ship rises, falls and rolls a little; it carries containers on deck, a funnel that smokes, mast and deck lights
+     CRANES   each crane's trolley runs out along the boom, lowers its spreader on cables, lifts a container off the ship, carries it
+              ashore and sets it on the crane's own landing platform (15 m up, between its legs); later it carries it back.
+              A work light rides on every trolley, a slow warning light blinks on every crane top
+     BUOYS    green and yellow buoys bob out on the water, each with a flashing light
+     PENNANTS a pennant on every lamp post streams and snaps in the wind
+     NEON     the HARBOR 9 sign stutters now and then
+   What reacts to the fight:
+     an explosion makes the lamps near it stutter (lamp head and, at night, its pool of light), jolts the neon if it is close,
+     and sets the crane loads swinging on their cables.
+   The small helpers at the top (lifeGlow, lifeLampRig, lifeNeon) are shared with the foundry (04j_life_foundry.js). */
+
+/* ---- lifeGlow: a handful of soft round lights (one draw). set() once, then bright()/pos() as often as you like, flush() each frame ---- */
+function lifeGlow(n){
+  const base=new THREE.PlaneGeometry(1,1),g=new THREE.InstancedBufferGeometry();g.index=base.index;g.setAttribute('position',base.attributes.position);g.setAttribute('uv',base.attributes.uv);
+  const iP=new THREE.InstancedBufferAttribute(new Float32Array(n*3),3),iS=new THREE.InstancedBufferAttribute(new Float32Array(n*2),2),iC=new THREE.InstancedBufferAttribute(new Float32Array(n*3),3);
+  iP.setUsage(THREE.DynamicDrawUsage);iS.setUsage(THREE.DynamicDrawUsage);g.setAttribute('iP',iP);g.setAttribute('iS',iS);g.setAttribute('iC',iC);g.instanceCount=0;
+  const m=new THREE.ShaderMaterial({uniforms:{uFog:{value:new THREE.Vector2(S.fog.near,S.fog.far)}},transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+    vertexShader:`attribute vec3 iP;attribute vec2 iS;attribute vec3 iC;uniform vec2 uFog;varying vec2 vUv;varying vec3 vC;
+      void main(){vUv=uv;vec4 mv=viewMatrix*vec4(iP,1.);float d=-mv.z,s=max(iS.x,d*.011);   /* far lights never shrink below a few pixels */
+        vC=iC*iS.y*(1.-.5*smoothstep(uFog.x,uFog.y,d));mv.z+=min(1.2,d*.4);mv.xy+=position.xy*s*2.;gl_Position=iS.y>0.?projectionMatrix*mv:vec4(2.,2.,2.,1.);}`,
+    fragmentShader:`varying vec2 vUv;varying vec3 vC;
+      void main(){float r=length(vUv-.5)*2.;float gl=pow(max(0.,1.-r),2.6)*.55+pow(max(0.,1.-r*2.6),2.)*1.6;gl_FragColor=vec4(vC*gl,1.);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`});
+  const mesh=new THREE.Mesh(g,m);mesh.frustumCulled=false;mesh.renderOrder=4;S.add(mesh);
+  const G_={mesh,n:0,dP:false,
+    add(x,y,z,size,col,b){const i=G_.n++;if(i>=n)return n-1;iP.array.set([x,y,z],i*3);iC.array.set(col,i*3);iS.array[i*2]=size;iS.array[i*2+1]=b==null?1:b;g.instanceCount=G_.n;iP.needsUpdate=iC.needsUpdate=true;return i;},
+    pos(i,x,y,z){const a=iP.array;a[i*3]=x;a[i*3+1]=y;a[i*3+2]=z;G_.dP=true;},
+    bright(i,b){iS.array[i*2+1]=b;},size(i,s){iS.array[i*2]=s;},
+    flush(){iS.needsUpdate=true;if(G_.dP){iP.needsUpdate=true;G_.dP=false;}}};
+  return G_;}
+
+/* ---- lifeLampRig: lets single lamps of a map flicker. The lamp heads are one merged mesh (and the light pools another), so each lamp
+   gets its own brightness through a vertex colour; only the flickering lamp's few vertices are sent again. ---- */
+function lifeLampRig(lampM,poolMesh,lamps){
+  const head=S.children.find(o=>o.isMesh&&o.material===lampM);if(!head)return null;
+  const mk=mesh=>{const g=mesh.geometry,p=g.attributes.position,n=p.count,col=new Float32Array(n*3).fill(1),own=new Int16Array(n),span=lamps.map(()=>[n,0]);
+    for(let i=0;i<n;i++){let b=0,bd=1e9;const x=p.getX(i),z=p.getZ(i);for(let j=0;j<lamps.length;j++){const d=(x-lamps[j].x)**2+(z-lamps[j].z)**2;if(d<bd){bd=d;b=j;}}
+      own[i]=b;span[b][0]=Math.min(span[b][0],i);span[b][1]=Math.max(span[b][1],i+1);}
+    const a=new THREE.BufferAttribute(col,3);a.setUsage(THREE.DynamicDrawUsage);g.setAttribute('color',a);mesh.material.vertexColors=true;mesh.material.needsUpdate=true;return {a,col,own,span};};
+  const parts=[mk(head)];if(poolMesh)parts.push(mk(poolMesh));
+  for(const l of lamps){l.f=0;l.q=0;l.v=1;l.pv=1;}
+  const put_=(j,v)=>{for(const q of parts){const s=q.span[j];if(s[1]<=s[0])continue;for(let i=s[0];i<s[1];i++)if(q.own[i]===j){q.col[i*3]=q.col[i*3+1]=q.col[i*3+2]=v;}
+    q.a.addUpdateRange(s[0]*3,(s[1]-s[0])*3);q.a.needsUpdate=true;}};
+  const R_={lamps,faulty:-1,next:4,
+    kick(x,z,k){const r=24+30*k;for(const l of lamps){const d=Math.hypot(l.x-x,l.z-z);if(d<r)l.f=Math.max(l.f,.3+(.4+.9*k)*(1-d/r));}},
+    tick(dt){for(const q of parts)q.a.clearUpdateRanges();
+      if(R_.faulty>=0&&(R_.next-=dt)<=0){R_.next=5+Math.random()*7;lamps[R_.faulty].f=.5+Math.random()*.9;}   /* one tired lamp buzzes on its own */
+      for(let j=0;j<lamps.length;j++){const l=lamps[j];if(l.f>0){l.f-=dt;if((l.q-=dt)<=0){l.q=.04+Math.random()*.1;l.v=Math.random()<.65?.04+Math.random()*.16:.65+Math.random()*.35;}if(l.f<=0)l.v=1;}
+        if(l.v!==l.pv){put_(j,l.v);l.pv=l.v;}}}};
+  return R_;}
+
+/* ---- lifeNeon: a neon sign that hums, stutters by itself now and then, and can be jolted ---- */
+function lifeNeon(mesh,base){if(!mesh)return {tick(){},kick(){}};
+  const N={f:0,q:0,v:1,next:5+Math.random()*6,kick(k){N.f=Math.max(N.f,.25+k*.5);},
+    tick(dt,t){if((N.next-=dt)<=0){N.next=6+Math.random()*9;N.f=.3+Math.random()*.5;}
+      if(N.f>0){N.f-=dt;if((N.q-=dt)<=0){N.q=.03+Math.random()*.09;N.v=Math.random()<.45?.12:1;}if(N.f<=0)N.v=1;}
+      mesh.material.color.setScalar(base*N.v*(1+.05*Math.sin(t*23)));}};return N;}
+
+/* the wind the shared builder sets (direction x,z, steady, gust); a light breeze toward +x if it is not there */
+function lifeWind(){const w=U.uWind&&U.uWind.value;return w?{x:w.x,z:w.y,k:w.z+w.w*.5}:{x:.94,z:.34,k:.3};}
+
+const DKL={};   /* the docks' moving parts (also handy for tests) */
+lifeOn('docks',{
+build(L){const D=MAPS.docks,low=QL==='low',night=!!L.night,rnd=mulberry(907),Qz=-100,UT=U.uTime;DKL.night=night;
+  const corr=tmat('10-corrugated-metal',{rep:[3,1],r:.65,m:.35});   /* one painted-steel material for every container and crane part added here */
+  const selfLit=(m,k,key)=>{const ob=m.onBeforeCompile;m.onBeforeCompile=sh=>{if(ob)ob(sh);   /* a little of its own colour as light: reads as floodlit at night */
+    sh.fragmentShader=sh.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=diffuseColor.rgb*'+k.toFixed(3)+';');};m.customProgramCacheKey=()=>key;return m;};
+  if(night)selfLit(corr,.2,'dkcorr');
+  /* ---------- WATER: a finer sheet (dense at the quay, coarse far out) that heaves in the vertex shader ---------- */
+  if(D.water){const old=D.water,nx=low?44:88,nz=low?28:48,pos=[],uv=[],idx=[];
+    for(let j=0;j<=nz;j++){const z=-99-321*Math.pow(j/nz,1.5);for(let i=0;i<=nx;i++){const x=-350+700*i/nx;pos.push(x,-2.6,z);uv.push(i/nx,(z+420)/320);}}
+    for(let j=0;j<nz;j++)for(let i=0;i<nx;i++){const a=j*(nx+1)+i,b=a+1,c=a+nx+1,d=c+1;idx.push(a,b,c,b,d,c);}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
+    const m=old.material;m.onBeforeCompile=sh=>{sh.uniforms.uWT=UT;sh.uniforms.uSheen={value:night?new THREE.Vector4(.07,.12,.26,2.2):new THREE.Vector4(.5,.3,.2,.5)};
+      sh.vertexShader=sh.vertexShader.replace('#include <common>',`#include <common>
+        uniform float uWT;varying vec3 vWP;
+        vec3 dkWave(vec2 p){vec2 k1=vec2(.05,.155),k2=vec2(-.14,.2),k3=vec2(.12,.3);float a1=dot(p,k1)-uWT*.8,a2=dot(p,k2)-uWT*1.2,a3=dot(p,k3)-uWT*1.7;
+          return vec3(.3*sin(a1)+.15*sin(a2)+.07*sin(a3),.3*cos(a1)*k1+.15*cos(a2)*k2+.07*cos(a3)*k3);}`)
+        .replace('#include <beginnormal_vertex>','#include <beginnormal_vertex>\nvec3 dkw=dkWave(position.xz);objectNormal=normalize(vec3(-dkw.y,1.,-dkw.z));')
+        .replace('#include <begin_vertex>','#include <begin_vertex>\ntransformed.y+=dkw.x;vWP=transformed;');
+      sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nuniform float uWT;uniform vec4 uSheen;varying vec3 vWP;vec3 dkGl=vec3(0.);')
+        .replace('#include <map_fragment>',`#include <map_fragment>
+        {float e=max(1.-smoothstep(.2,2.8,abs(vWP.z+101.4)),(1.-smoothstep(.2,2.6,abs(vWP.z+112.8)))*step(-80.,vWP.x)*step(vWP.x,110.));   /* foam along the quay wall and the hull */
+         float fn=sin(vWP.x*.9+uWT*1.3)*sin(vWP.x*.37-uWT*.8+vWP.z*2.)*.5+.5;diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.8,.86,.88),e*(.2+.6*fn));}`)
+        .replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+        {vec2 p=vWP.xz,g=vec2(0.);float k=1./(1.+length(vViewPosition)*.02);   /* ripples: they carry the moving highlights */
+         vec2 r1=vec2(1.1,.6),r2=vec2(-.7,1.6),r3=vec2(2.3,-1.1),r4=vec2(.35,.9);
+         g+=cos(dot(p,r1)+uWT*2.1)*r1*.05+cos(dot(p,r2)-uWT*2.6)*r2*.04+cos(dot(p,r3)+uWT*3.3)*r3*.02+cos(dot(p,r4)-uWT*1.2)*r4*.14;
+         vec3 wn=(vec4(normal,0.)*viewMatrix).xyz;wn=normalize(wn+vec3(-g.x,0.,-g.y)*k);normal=normalize((viewMatrix*vec4(wn,0.)).xyz);
+         vec3 V=normalize(vViewPosition);dkGl=uSheen.rgb*pow(1.-max(dot(normal,V),0.),3.);   /* sky sheen at grazing angles, and a wide glitter path under the sun or moon */
+         #if NUM_DIR_LIGHTS > 0
+           dkGl+=directionalLights[0].color*pow(max(dot(reflect(-V,normal),directionalLights[0].direction),0.),60.)*uSheen.w;
+         #endif
+        }`).replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=dkGl;');};
+    m.customProgramCacheKey=()=>'dkwater';m.needsUpdate=true;
+    const w=new THREE.Mesh(g,m);w.receiveShadow=true;w.frustumCulled=false;S.add(w);S.remove(old);old.geometry.dispose();DKL.water=w;}
+  /* ---------- SHIP: hull and deckhouse hang in one group that rides the swell; containers on deck, a funnel, masts ---------- */
+  const ship=new THREE.Group();ship.position.set(15,-2.6,Qz-24);S.add(ship);DKL.ship=ship;
+  if(D.shipParts){const [hullM,houseM]=D.shipParts,hg=hullM.geometry;S.remove(hullM);S.remove(houseM);
+    hg.clearGroups();hg.addGroup(0,12,0);hg.addGroup(12,6,2);hg.addGroup(18,6,3);hg.addGroup(24,12,4);   /* same faces, fewer draws */
+    hullM.position.set(0,2.6,0);ship.add(hullM);
+    houseM.scale.x=.75;houseM.position.set(-86,19.1,0);ship.add(houseM);   /* the deckhouse moves aft a little so the first crane has a clear hold to work */
+    const bits=[],bx=(w,h,d,x,y,z)=>{const g=new THREE.BoxGeometry(w,h,d);g.translate(x,y,z);bits.push(g);};
+    const fun=new THREE.CylinderGeometry(2.3,2.8,9,14);fun.translate(-89,31.1,0);bits.push(fun);
+    bx(4,1.2,25,-79,27.2,0);bx(.5,10,.5,-80,31.6,0);bx(5,.4,.4,-80,34.6,0);bx(.5,12,.5,92,17.6,0);bx(.4,.4,6,92,21.6,0);
+    const top=new THREE.Mesh(THREE.mergeGeometries(bits),hullM.material[0]);top.castShadow=false;ship.add(top);}
+  /* deck cargo: bays every 13.6 m (so each crane stands over one), 7 rows across, up to 4 high */
+  const PAL=[[.82,.2,.14],[.16,.34,.72],[.2,.55,.45],[.85,.62,.16],[.75,.76,.78],[.5,.24,.16],[.9,.45,.12]];
+  const cg=new THREE.BoxGeometry(12.2,2.6,2.44),cargo=[],CR=[-59,9,77],slotZ=7.8;
+  for(let k=0;k<12;k++)for(let r=0;r<7;r++){const work=k%5===0&&r===6,n=work?2:r===6?1+(rnd()*2|0):1+(rnd()*4|0);
+    for(let j=0;j<n;j++)cargo.push([-74+k*13.6,12.9+j*2.6,(r-3)*2.6,PAL[rnd()*PAL.length|0]]);}
+  const cim=new THREE.InstancedMesh(cg,corr,cargo.length),M4=new THREE.Matrix4(),col=new THREE.Color();
+  cargo.forEach((c,i)=>{M4.makeTranslation(c[0],c[1],c[2]);cim.setMatrixAt(i,M4);cim.setColorAt(i,col.setRGB(c[3][0],c[3][1],c[3][2]));});cim.receiveShadow=true;ship.add(cim);
+  /* ---------- CRANES: trolley, spreader, four cables and one container each, plus the landing platform (one instanced draw) ---------- */
+  const NI=8*CR.length,dyn=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),corr,NI);dyn.instanceMatrix.setUsage(THREE.DynamicDrawUsage);dyn.frustumCulled=false;S.add(dyn);DKL.dyn=dyn;
+  DKL.cr=CR.map((cx,i)=>{const c={cx,i,z:-94.5,vz:0,h:28.5,sw:0,swv:0,has:false,loc:'ship',ph:0,t:2+i*5.5,col:PAL[(i*2+1)%PAL.length],slot:new THREE.Vector3(cx-15,12.9+5.2,slotZ)};
+    const cc=[[.16,.17,.2],[.95,.72,.1],[.05,.05,.06],[.05,.05,.06],[.05,.05,.06],[.05,.05,.06],c.col,[.3,.31,.34]];
+    cc.forEach((q,j)=>dyn.setColorAt(i*8+j,col.setRGB(q[0],q[1],q[2])));
+    M4.compose(V3(cx,15,-94.5),new THREE.Quaternion(),V3(13.2,.5,7.2));dyn.setMatrixAt(i*8+7,M4);return c;});
+  /* ---------- LIGHTS: crane tops, trolley work lights, ship lights, buoy lights ---------- */
+  const GL=lifeGlow(40),k=night?1:.75;DKL.glow=GL;
+  for(const c of DKL.cr){c.gTop=GL.add(c.cx,41,-94.5,2.4,[3,.5,.2]);c.gEnd=GL.add(c.cx,37,-74.5,1.5,[2.4,1.5,.4],.8*k);
+    c.gTr=GL.add(c.cx,31.4,c.z,2.2,[2.6,2.3,1.7],k);c.gSp=GL.add(c.cx,c.h,c.z,1.3,[2.6,1.6,.3],k);}
+  DKL.shipLights=[[-80,37,0,1.8,[2.4,2.4,2.2]],[-79,27.4,11,1.6,[2.6,2.1,1.3]],[-79,27.4,-11,1.6,[2.6,2.1,1.3]],[92,24,0,1.5,[2.4,2.4,2.2]],[-89,36,0,1.2,[2.6,1.5,.4]]]
+    .map(q=>({p:new THREE.Vector3(q[0],q[1],q[2]),i:GL.add(0,0,0,q[3],q[4],k)}));
+  /* ---------- BUOYS ---------- */
+  if(!low){const bg=THREE.mergeGeometries([new THREE.CylinderGeometry(1.25,1.25,1,12).translate(0,.25,0),new THREE.CylinderGeometry(.2,.8,3.4,6).translate(0,2.4,0),new THREE.SphereGeometry(.36,8,6).translate(0,4.2,0)]);
+    const spots=[[-150,-124],[-116,-150],[-186,-116],[-136,-112],[150,-121],[128,-150],[186,-138]];
+    const bm=new THREE.InstancedMesh(bg,hookWorld(new THREE.MeshStandardMaterial({roughness:.6,metalness:.1})),spots.length);bm.instanceMatrix.setUsage(THREE.DynamicDrawUsage);bm.frustumCulled=false;S.add(bm);
+    DKL.buoyMesh=bm;DKL.buoys=spots.map((q,i)=>{const green=i%2===0;bm.setColorAt(i,col.setRGB(...(green?[.1,.5,.28]:[.9,.68,.1])));
+      return {x:q[0],z:q[1],ph:rnd()*TAU,g:GL.add(q[0],2,q[1],1.5,green?[.4,3,1.1]:[3,2.2,.4]),per:green?3:4.2};});}
+  /* ---------- PENNANTS: one on every lamp post, streaming downwind ---------- */
+  const lamps=[];for(const x of D.lanesX)for(const z of [-88,-20,52,84])lamps.push({x:x+3.6,z});
+  {const pg=new THREE.PlaneGeometry(2.8,1.15,9,1);pg.translate(1.4,0,0);const w=lifeWind(),ang=Math.atan2(-w.z,w.x),list=low?lamps.filter((l,i)=>i%2===0):lamps;
+    const pm=new THREE.MeshLambertMaterial({side:THREE.DoubleSide});DKL.flap={value:0};
+    pm.onBeforeCompile=sh=>{sh.uniforms.uFlap=DKL.flap;
+      sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uFlap;')
+        .replace('#include <begin_vertex>',`#include <begin_vertex>
+        {float u=position.x/2.8,ph=instanceMatrix[3].x*.7+instanceMatrix[3].z*.4;transformed.y*=1.-.6*u;   /* tapers to the tip */
+         transformed.z+=(sin(u*7.-uFlap*8.+ph)*.3+sin(u*3.2-uFlap*3.1+ph*2.)*.26)*u;transformed.y+=sin(u*5.-uFlap*6.3+ph)*.1*u-u*u*.45;}`)
+        ;sh.fragmentShader=sh.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=diffuseColor.rgb*'+(night?'.5':'.12')+';');};
+    const pim=new THREE.InstancedMesh(pg,pm,list.length),q=new THREE.Quaternion().setFromAxisAngle(V3(0,1,0),ang),PC=night?[[.9,.4,.07],[.07,.5,.58],[.85,.68,.1]]:[[.5,.17,.02],[.02,.2,.26],[.42,.3,.03]]   /* the low sun is strong: darker cloth keeps its colour */;
+    list.forEach((l,i)=>{M4.compose(V3(l.x+w.x*.25,10.4,l.z+w.z*.25),q,V3(1,1,1));pim.setMatrixAt(i,M4);pim.setColorAt(i,col.setRGB(...PC[i%3]));});
+    pim.frustumCulled=false;S.add(pim);DKL.pennants=pim;}
+  /* ---------- lamps that stutter, the neon ---------- */
+  DKL.rig=D.lampM?lifeLampRig(D.lampM,D.poolMesh,lamps):null;if(DKL.rig)DKL.rig.faulty=14;
+  DKL.neon=lifeNeon(D.neon,2);DKL.smoke=0;DKL.o=new THREE.Object3D();DKL.v=new THREE.Vector3();
+},
+tick(dt,t){const ship=DKL.ship;if(!ship)return;const o=DKL.o,v=DKL.v,dyn=DKL.dyn,GL=DKL.glow,w=lifeWind();
+  /* the ship rides the swell */
+  ship.position.y=-2.6+.24*Math.sin(t*.52)+.09*Math.sin(t*.87+1);ship.rotation.x=.016*Math.sin(t*.43+.6)+.004*Math.sin(t*1.1);ship.rotation.z=.0013*Math.sin(t*.33);ship.updateMatrixWorld(true);
+  for(const l of DKL.shipLights){v.copy(l.p).applyMatrix4(ship.matrixWorld);GL.pos(l.i,v.x,v.y,v.z);}
+  /* funnel smoke, drifting downwind */
+  if((DKL.smoke-=dt)<=0){DKL.smoke=QL==='low'?.3:.16;v.set(-89,36,0).applyMatrix4(ship.matrixWorld);const s=1.6+w.k*3;
+    part({x:v.x+(Math.random()-.5),y:v.y,z:v.z+(Math.random()-.5),vx:w.x*s,vy:2.6,vz:w.z*s,life:5.5,s0:2.6,s1:11,a:DKL.night?.3:.42,col:DKL.night?[.2,.2,.24]:[.3,.24,.26],drag:.12,grav:-.12});}
+  /* cranes */
+  for(const c of DKL.cr){const b=c.i*8;v.copy(c.slot).applyMatrix4(ship.matrixWorld);const sy=v.y+1.525,sz=v.z,sx=v.x;
+    const HI=28.5,zP=-94.5,yP=18.075,toShip=c.loc==='ship'?!c.has:c.has;   /* which end this half of the trip heads for */
+    let zt=c.z,ht=HI;
+    switch(c.ph){
+      case 0:if((c.t-=dt)<=0)c.ph=1;zt=-104;break;                                                    /* waiting, hook up */
+      case 1:zt=toShip?sz:zP;if(Math.abs(c.z-zt)<.05&&Math.abs(c.vz)<.1&&Math.abs(c.sw)<.02)c.ph=2;break;   /* run to the pick-up */
+      case 2:zt=toShip?sz:zP;ht=toShip?sy:yP;if(Math.abs(c.h-ht)<.06){c.ph=3;c.t=.9;}break;              /* lower the spreader */
+      case 3:zt=toShip?sz:zP;ht=toShip?sy:yP;if((c.t-=dt)<=0){c.has=true;c.ph=4;}break;                    /* lock on */
+      case 4:zt=c.z;if(Math.abs(c.h-HI)<.06)c.ph=5;break;                                              /* hoist */
+      case 5:zt=toShip?sz:zP;if(Math.abs(c.z-zt)<.05&&Math.abs(c.vz)<.1&&Math.abs(c.sw)<.02)c.ph=6;break;   /* carry it across */
+      case 6:zt=toShip?sz:zP;ht=toShip?sy:yP;if(Math.abs(c.h-ht)<.06){c.ph=7;c.t=.9;}break;              /* set it down */
+      case 7:zt=toShip?sz:zP;ht=toShip?sy:yP;if((c.t-=dt)<=0){c.loc=toShip?'ship':'plat';c.has=false;c.ph=8;}break;
+      case 8:zt=c.z;if(Math.abs(c.h-HI)<.06){c.ph=0;c.t=3+Math.random()*7;}break;}
+    /* trolley: gentle starts and stops (they set the load swinging a little) */
+    const dz=zt-c.z,want=clamp(dz*1.2,-3.6,3.6),pv=c.vz;c.vz+=clamp(want-c.vz,-1.6*dt,1.6*dt);c.z+=c.vz*dt;
+    c.h+=clamp(ht-c.h,-2.6*dt,2.6*dt);
+    const Lc=Math.max(3,31.8-c.h),acc=dt>0?(c.vz-pv)/dt:0;c.swv+=(-9.8/Lc*Math.sin(c.sw)-acc/Lc*.8-c.swv*1.1)*dt;c.sw=clamp(c.sw+c.swv*dt,-.3,.3);
+    const near=c.ph===2||c.ph===3||c.ph===6||c.ph===7?clamp((c.h-ht)/5,0,1):1,sw=c.sw*near,oz=Math.sin(sw)*Lc,oy=(1-Math.cos(sw))*Lc;
+    const put=(j,x,y,z,sx_,sy_,sz_,rx)=>{o.position.set(x,y,z);o.scale.set(sx_,sy_,sz_);o.rotation.set(rx||0,0,0);o.updateMatrix();dyn.setMatrixAt(b+j,o.matrix);};
+    put(0,c.cx,32.6,c.z,4.6,1.6,5.2);put(1,c.cx,c.h+oy,c.z+oz,12.5,.45,2.6,-sw);
+    for(let j=0;j<4;j++){const ex=j<2?-5:5,ez=j%2?-.95:.95,ty=31.8,by=c.h+oy+.2,len=Math.hypot(ty-by,oz);put(2+j,c.cx+ex,(ty+by)/2,c.z+ez+oz/2,.2,len,.2,-Math.atan2(oz,ty-by));}
+    if(c.has)put(6,c.cx,c.h+oy-1.525*Math.cos(sw),c.z+oz+1.525*Math.sin(sw),12.2,2.6,2.44,-sw);
+    else if(c.loc==='ship'){o.position.set(sx,sy-1.525,sz);o.scale.set(12.2,2.6,2.44);o.quaternion.copy(ship.quaternion);o.updateMatrix();dyn.setMatrixAt(b+6,o.matrix);}
+    else put(6,c.cx,16.55,zP,12.2,2.6,2.44);
+    GL.pos(c.gTr,c.cx,31.3,c.z);GL.pos(c.gSp,c.cx,c.h+oy+.6,c.z+oz);
+    GL.bright(c.gTop,.15+.85*Math.pow(Math.max(0,Math.sin(t*1.3+c.i*2.1)),6));}
+  dyn.instanceMatrix.needsUpdate=true;
+  /* buoys */
+  if(DKL.buoys){const bm=DKL.buoyMesh;DKL.buoys.forEach((q,i)=>{const y=-2.75+.3*Math.sin(t*.8+q.ph)+.12*Math.sin(t*1.9+q.ph*2),rx=.16*Math.sin(t*1.1+q.ph),rz=.14*Math.sin(t*.9+q.ph*1.7);
+      o.position.set(q.x,y,q.z);o.scale.set(1,1,1);o.rotation.set(rx,0,rz);o.updateMatrix();bm.setMatrixAt(i,o.matrix);v.set(0,4.5,0).applyMatrix4(o.matrix);GL.pos(q.g,v.x,v.y,v.z);
+      GL.bright(q.g,((t+q.ph)%q.per)<.7?1.2:.06);});bm.instanceMatrix.needsUpdate=true;}
+  GL.flush();
+  DKL.flap.value+=dt*(.55+w.k*1.1);
+  if(DKL.rig)DKL.rig.tick(dt);DKL.neon.tick(dt,t);
+},
+noise(x,z,k,kind){if(kind!=='boom'||!DKL.cr)return;
+  if(DKL.rig)DKL.rig.kick(x,z,k);if(Math.hypot(x,z-98)<70)DKL.neon.kick(k);
+  for(const c of DKL.cr){const d=Math.hypot(x-c.cx,z-c.z);if(d<90)c.swv+=(z>c.z?-1:1)*k*.2*(1-d/90);}}
+});
+
+/* ---- 04j_life_foundry.js ---- */
+/* ===================== living places: the foundry (Foundry 4) =====================  session 7, built with Fable 5.2
+   What moves here (everything new is on or beyond the blast walls, or flat on the ground; nothing has a collider):
+     MOLTEN CHANNELS  the two channels flow toward the middle of the yard: bright metal with dark crust plates riding on it.
+                      The furnace mouths burn with the same fire. The channels now run all the way to spouts in the side walls.
+     LADLES           four ladles ride overhead rails just outside the walls (east, west, two at the back). Each carries a glowing
+                      load to a pouring point on the wall top, tips, and pours a bright stream with a shower of sparks.
+                      A pour at a side wall sends a bright surge down that channel.
+     EMBERS           sparks of ember drift up across the whole yard (around the camera, drawn in one go)
+     STEAM            pipes high on the walls burst with steam every few seconds
+     WELDING          blue-white welding flicker and falling sparks high on the hall roof and a rail tower
+     HEAT             glow on the ground in front of every furnace mouth and on the walls behind the furnaces and the pours
+     NEON             the FOUNDRY 4 sign stutters now and then
+   What reacts to the fight:
+     the first shot or explosion switches on the ALARM: amber beacons turn on the wall tops (a short horn sounds); they go
+     quiet again after 18 seconds without firing. Explosions make the lamps near them stutter, and jolt the neon. */
+const FNL={alarm:0,hold:0},PY_=17.5;   /* PY_ = height of the ladles' trunnions */
+lifeOn('foundry',{
+build(L){const F=MAPS.foundry,low=QL==='low',B=F.bounds,X=B.x1+3,Z0=B.z0-3,rnd=mulberry(4104),M4=new THREE.Matrix4();
+  FNL.alarm=0;FNL.hold=0;FNL.uT={value:0};FNL.o=new THREE.Object3D();FNL.o2=new THREE.Object3D();
+  /* ---------- MOLTEN: the flat pulsing colour becomes flowing metal (channels) and fire (anything above the ground) ---------- */
+  FNL.surge=new THREE.Vector4(-100,-100,-100,-100);
+  if(F.melt){const m=F.melt;m.onBeforeCompile=sh=>{sh.uniforms.uLT=FNL.uT;sh.uniforms.uSurge={value:FNL.surge};
+      sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vWP;').replace('#include <project_vertex>','#include <project_vertex>\nvWP=(modelMatrix*vec4(transformed,1.)).xyz;');
+      sh.fragmentShader=sh.fragmentShader.replace('#include <common>',`#include <common>
+        varying vec3 vWP;uniform float uLT;uniform vec4 uSurge;
+        float lvH(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+        float lvN(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(lvH(i),lvH(i+vec2(1.,0.)),f.x),mix(lvH(i+vec2(0.,1.)),lvH(i+vec2(1.,1.)),f.x),f.y);}`)
+        .replace('#include <map_fragment>',`#include <map_fragment>
+        {float pulse=diffuse.r/1.3;vec3 c;
+         if(vWP.y<1.){float al=abs(vWP.x);vec2 p=vec2((al+uLT*2.6)*.2,vWP.z*.8);   /* the pattern slides toward the middle of the yard */
+           float n=lvN(p)*.62+lvN(p*2.7+vec2(uLT*.2,7.))*.38,crust=smoothstep(.5,.64,n),vein=1.-smoothstep(0.,.15,abs(n-.47));
+           c=mix(vec3(.95,.25,.03),vec3(.09,.014,.004),crust)+vec3(.9,.55,.18)*vein*(1.-crust*.7);
+           float fr=vWP.z<8.?(vWP.x>0.?uSurge.x:uSurge.y):(vWP.x>0.?uSurge.z:uSurge.w);   /* a fresh pour runs down the channel */
+           float sg=(al>fr?exp(-(al-fr)*.045):exp(-(fr-al)*.5))*step(0.,fr);c=mix(c,vec3(2.6,1.4,.4),sg*.85);}
+         else{float n=lvN(vec2(vWP.x*1.3+vWP.z*1.3,vWP.y*1.6-uLT*3.))*.6+lvN(vec2(vWP.x*3.+vWP.z*3.,vWP.y*3.-uLT*5.))*.4;c=mix(vec3(1.5,.36,.05),vec3(3.,1.7,.5),smoothstep(.3,.8,n));}
+         diffuseColor.rgb=c*pulse;}`);};
+    m.customProgramCacheKey=()=>'fnlava';m.needsUpdate=true;}
+  /* ---------- the ladle rigs: where they run, which way they pour ---------- */
+  const RIGS=[{ax:'z',f:X+1.6,a:-18,b:34,ry:0,ch:[0,2]},{ax:'z',f:-X-1.6,a:34,b:-18,ry:Math.PI,ch:[3,1]},
+    {ax:'x',f:Z0-1.6,a:50,b:95,ry:Math.PI/2,ch:[-1,-1]},{ax:'x',f:Z0-1.6,a:-95,b:-50,ry:Math.PI/2,ch:[-1,-1]}];
+  const dark=[],hot=[],bx=(list,w,h,d,x,y,z)=>{const g=new THREE.BoxGeometry(w,h,d);g.translate(x,y,z);list.push(g);};
+  const quads=[],quad=(vertical,along,cx,cy,cz,w,h,col)=>{   /* a soft glow patch: flat on the ground, or standing on a wall face ('x' = the wall runs along x) */
+    const g=new THREE.PlaneGeometry(w,h);if(!vertical)g.rotateX(-Math.PI/2);else if(along==='z')g.rotateY(Math.PI/2);g.translate(cx,cy,cz);quads.push({g,col,k:1});return quads[quads.length-1];};
+  FNL.rigs=RIGS.map((r,i)=>{const inx=-Math.cos(r.ry),inz=Math.sin(r.ry),at=u=>r.ax==='z'?[r.f,u]:[u,r.f],len=Math.abs(r.b-r.a)+12,mid=(r.a+r.b)/2,out=1.2;
+    /* rail, its towers, and a catch box (tundish) on the wall top under each pouring point */
+    if(r.ax==='z'){bx(dark,1.2,1.4,len,r.f,23.7,mid);for(const u of [mid-len/2+1,mid,mid+len/2-1])bx(dark,1.6,24.4,1.6,r.f-inx*out,12.2,u);}
+    else{bx(dark,len,1.4,1.2,mid,23.7,r.f);for(const u of [mid-len/2+1,mid,mid+len/2-1])bx(dark,1.6,24.4,1.6,u,12.2,r.f-inz*out);}
+    r.pts=[r.a,r.b].map((u,j)=>{const [px,pz]=at(u),tx=px+inx*2.3,tz=pz+inz*2.3;
+      bx(dark,3.4,1.7,3.4,tx,9.8,tz);bx(hot,2.7,.2,2.7,tx,10.66,tz);
+      const wx=px+inx*2.95,wz=pz+inz*2.95;   /* just inside the wall face */
+      return {x:tx,z:tz,q:quad(true,r.ax==='z'?'z':'x',wx,4.6,wz,20,9.2,[1,.42,.1]),pour:0};});
+    r.inx=inx;r.inz=inz;r.at=at;r.u=lerp(r.a,r.b,rnd());r.v=0;r.e=i%2;r.ph=0;r.t=i*1.7;r.tip=0;r.pt=0;return r;});
+  /* the channels reach the side walls now: trough, metal and a spout in the wall (flat, like the old channel: nothing to bump into) */
+  for(const z of [-18,34])for(const sx of [-1,1]){bx(dark,13.9,.35,3.2,sx*102.9,.12,z);bx(hot,13.9,.1,2.2,sx*102.9,.3,z);bx(dark,1.4,3.2,3.4,sx*109.15,1.6,z);bx(hot,.3,1.5,1.9,sx*108.4,1.25,z);}
+  /* steam pipes on the walls */
+  FNL.vents=[[X-1.9,7.2,-45,-1,0],[-X+1.9,7.2,-45,1,0],[X-1.9,7.2,64,-1,0],[-X+1.9,7.2,64,1,0],[76,7.2,Z0+1.9,0,1],[-76,7.2,Z0+1.9,0,1]].map(v=>{
+    bx(dark,v[3]?1.6:1,1,v[3]?1:1.6,v[0]-v[3]*.3,v[1],v[2]-v[4]*.3);return {x:v[0]+v[3]*.6,y:v[1],z:v[2]+v[4]*.6,dx:v[3],dz:v[4],t:0};});
+  FNL.ventNext=2;
+  const gm=tmat('24-gunmetal');
+  const st=new THREE.Mesh(THREE.mergeGeometries(dark),gm);st.receiveShadow=true;S.add(st);
+  if(F.melt){const hm=new THREE.Mesh(THREE.mergeGeometries(hot),F.melt);S.add(hm);}
+  /* carriages and buckets (two instanced draws), their glowing loads and the pouring streams (two more) */
+  const cgs=[new THREE.BoxGeometry(2.6,1.2,5.2),new THREE.BoxGeometry(.3,4.7,.3).translate(0,-2.9,2.3),new THREE.BoxGeometry(.3,4.7,.3).translate(0,-2.9,-2.3),new THREE.BoxGeometry(.5,.5,5).translate(0,-.8,0)];
+  const n=RIGS.length,mk=(g,m)=>{const im=new THREE.InstancedMesh(g,m,n);im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);im.frustumCulled=false;S.add(im);return im;};
+  FNL.car=mk(THREE.mergeGeometries(cgs),gm);
+  FNL.buck=mk(THREE.mergeGeometries([new THREE.CylinderGeometry(1.9,1.45,3.4,14,1,true),new THREE.CircleGeometry(1.45,14).rotateX(Math.PI/2).translate(0,-1.7,0),new THREE.TorusGeometry(1.9,.16,6,14).rotateX(Math.PI/2).translate(0,1.7,0)]),gm);
+  const molten=new THREE.MeshBasicMaterial({color:new THREE.Color(2.7,1.1,.24),side:THREE.DoubleSide});
+  FNL.disc=mk(new THREE.CircleGeometry(1.8,14).rotateX(-Math.PI/2),molten);FNL.stream=mk(new THREE.CylinderGeometry(.36,.5,1,8,1,true).translate(0,-.5,0),molten);
+  /* ---------- lights: ladle loads, pours, welding, stack tops, alarm beacons ---------- */
+  const GL=lifeGlow(48);FNL.glow=GL;
+  for(const r of FNL.rigs){r.gL=GL.add(0,0,0,2.4,[3,1.2,.25],.9);r.gP=GL.add(0,0,0,7.5,[3,1.3,.3],0);}
+  FNL.welds=[[27,26.5,Z0-.8],[-27,26.5,Z0-.8],[X+2.8,24.6,40]].map((p,i)=>({x:p[0],y:p[1],z:p[2],on:0,t:1+i*2.3,g:GL.add(p[0],p[1],p[2],2.2,[1.7,2.3,3.4],0),acc:0}));
+  FNL.tops=(F.stacks||[]).map(s=>GL.add(s[0],23.4,s[1],3.6,[3,1,.2],.6));
+  const bpos=[];for(const z of [-62,6,72])for(const sx of [-1,1])bpos.push([sx*X,9.9,z]);for(const x of [-100,-62,62,100])bpos.push([x,9.9,Z0]);for(const x of [-80,-42,42,80])bpos.push([x,9.9,B.z1+3]);
+  for(const sx of [-1,1])bpos.push([sx*15.5,13.1,B.z1+3]);
+  FNL.beacons=bpos.map((p,i)=>({x:p[0],y:p[1]+.5,z:p[2],ph:i*2.4,g:GL.add(p[0],p[1]+.5,p[2],1.5,[3,1.7,.25],0)}));
+  /* the beacons' turning beams: two upright sheets of light per beacon, spun in the vertex shader (one draw) */
+  {const base=new THREE.PlaneGeometry(1,1),g=new THREE.InstancedBufferGeometry();g.index=base.index;g.setAttribute('position',base.attributes.position);g.setAttribute('uv',base.attributes.uv);
+    const a=new Float32Array(bpos.length*8);FNL.beacons.forEach((b,i)=>{a.set([b.x,b.y,b.z,b.ph],i*8);a.set([b.x,b.y,b.z,b.ph+Math.PI],i*8+4);});
+    g.setAttribute('iB',new THREE.InstancedBufferAttribute(a,4));g.instanceCount=bpos.length*2;FNL.uAlarm={value:0};
+    const m=new THREE.ShaderMaterial({uniforms:{uT:FNL.uT,uA:FNL.uAlarm},transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,
+      vertexShader:`attribute vec4 iB;uniform float uT,uA;varying vec2 vUv;
+        void main(){vUv=uv;float a=uT*4.6+iB.w,x=uv.x*9.;vec3 p=iB.xyz+vec3(cos(a)*x,position.y*(1.+x*.3),sin(a)*x);gl_Position=uA>.01?projectionMatrix*viewMatrix*vec4(p,1.):vec4(2.,2.,2.,1.);}`,
+      fragmentShader:`uniform float uA;varying vec2 vUv;
+        void main(){float v=1.-abs(vUv.y*2.-1.);gl_FragColor=vec4(vec3(2.4,1.25,.2)*pow(1.-vUv.x,1.6)*v*v*uA*.6,1.);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`});
+    const bm=new THREE.Mesh(g,m);bm.frustumCulled=false;bm.renderOrder=4;S.add(bm);}
+  /* ---------- heat glow: ground in front of the furnace mouths, walls behind the furnaces (the pours' patches are in `quads` already) ---------- */
+  FNL.mouths=(F.stacks||[]).map(s=>quad(false,'',s[0],.09,s[1]+9,15,15,[1,.4,.1]));
+  FNL.wallHeat=[quad(true,'z',X-1.35,4.6,10,34,9.2,[1,.3,.06]),quad(true,'z',-X+1.35,4.6,10,34,9.2,[1,.3,.06]),quad(true,'x',70,4.6,Z0+1.35,34,9.2,[1,.3,.06]),quad(true,'x',-70,4.6,Z0+1.35,34,9.2,[1,.3,.06])];
+  {const g=THREE.mergeGeometries(quads.map(q=>q.g)),col=new THREE.BufferAttribute(new Float32Array(quads.length*12),3);col.setUsage(THREE.DynamicDrawUsage);g.setAttribute('color',col);
+    const qm=new THREE.Mesh(g,new THREE.MeshBasicMaterial({map:poolTex(),vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));
+    qm.renderOrder=2;qm.frustumCulled=false;S.add(qm);FNL.quads=quads;FNL.qcol=col;}
+  /* ---------- EMBERS: a box of drifting sparks that follows the camera; all the motion is in the shader ---------- */
+  {const N=low?130:320,base=new THREE.PlaneGeometry(1,1),g=new THREE.InstancedBufferGeometry();g.index=base.index;g.setAttribute('position',base.attributes.position);g.setAttribute('uv',base.attributes.uv);
+    const a=new Float32Array(N*4);for(let i=0;i<a.length;i++)a[i]=rnd();g.setAttribute('aS',new THREE.InstancedBufferAttribute(a,4));g.instanceCount=N;FNL.uCam={value:new THREE.Vector3()};
+    const m=new THREE.ShaderMaterial({uniforms:{uT:FNL.uT,uCam:FNL.uCam},transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+      vertexShader:`attribute vec4 aS;uniform float uT;uniform vec3 uCam;varying vec2 vUv;varying vec3 vC;
+        void main(){vUv=uv;vec3 B=vec3(110.,36.,110.),p=aS.xyz*B;float r=aS.w;
+          p.y=mod(p.y+uT*(1.1+r*1.7),B.y);float life=p.y/B.y;p.y+=.5;
+          p.x+=uT*1.2+sin(uT*.7+r*40.)*1.6;p.z+=uT*.45+cos(uT*.53+r*23.)*1.6;p.xz=mod(p.xz-uCam.xz+B.xz*.5,B.xz)-B.xz*.5+uCam.xz;
+          float fl=.55+.45*sin(uT*(4.+r*9.)+r*60.),a=smoothstep(0.,.05,life)*pow(1.-life,1.4)*(1.-smoothstep(38.,55.,length(p.xz-uCam.xz)));
+          vC=mix(vec3(3.2,1.5,.35),vec3(2.2,.45,.06),life)*a*fl;
+          vec4 mv=viewMatrix*vec4(p,1.);vC*=smoothstep(2.5,7.,-mv.z);float s=max(.13+.2*r,-mv.z*.004);mv.xy+=position.xy*s*2.;gl_Position=projectionMatrix*mv;}`,
+      fragmentShader:`varying vec2 vUv;varying vec3 vC;
+        void main(){float r=length(vUv-.5)*2.;gl_FragColor=vec4(vC*pow(max(0.,1.-r),1.8),1.);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`});
+    const em=new THREE.Mesh(g,m);em.frustumCulled=false;em.renderOrder=4;S.add(em);}
+  /* ---------- lamps that stutter, the neon ---------- */
+  const lamps=[];for(const x of [-80,-40,40,80])for(const z of [-40,10,60,96])lamps.push({x,z});
+  FNL.rig=F.lampM?lifeLampRig(F.lampM,F.poolMesh,lamps):null;if(FNL.rig)FNL.rig.faulty=6;
+  FNL.neon=lifeNeon(F.neon,2.2);FNL.ready=true;
+},
+tick(dt,t){if(!FNL.ready)return;const GL=FNL.glow,o=FNL.o,o2=FNL.o2;FNL.uT.value=t;FNL.uCam.value.copy(cam.position);
+  /* the alarm: on while there is shooting, off after a quiet spell */
+  if(FNL.hold>0)FNL.hold-=dt;FNL.alarm+=((FNL.hold>0?1:0)-FNL.alarm)*damp(3,dt);FNL.uAlarm.value=FNL.alarm;
+  for(const b of FNL.beacons){const a=t*4.6+b.ph,dx=cam.position.x-b.x,dz=cam.position.z-b.z,l=Math.hypot(dx,dz)||1,d=(Math.cos(a)*dx+Math.sin(a)*dz)/l;
+    GL.bright(b.g,FNL.alarm*(.3+2.4*Math.pow(Math.max(0,d),8)));}
+  /* ladles */
+  const S4=FNL.surge,sv=[S4.x,S4.y,S4.z,S4.w];
+  FNL.rigs.forEach((r,i)=>{const tgt=r.e?r.b:r.a,pt=r.pts[r.e];let pour=0;
+    switch(r.ph){
+      case 0:{const d=tgt-r.u,want=clamp(d*1.1,-4.6,4.6);r.v+=clamp(want-r.v,-2.2*dt,2.2*dt);r.u+=r.v*dt;if(Math.abs(d)<.05&&Math.abs(r.v)<.1){r.u=tgt;r.v=0;r.ph=1;r.t=.8;}break;}
+      case 1:if((r.t-=dt)<=0)r.ph=2;break;
+      case 2:r.tip=Math.min(1.12,r.tip+dt*.8);if(r.tip>=1.12){r.ph=3;r.t=3.4;r.pt=0;const c=r.ch[r.e];if(c>=0)sv[c]=110;
+          const d=Math.hypot(pt.x-P.x,pt.z-P.z);if(d<80&&G.mode==='play')nz('bandpass',700,260,2.6,.14*(1-d/80),.8);}break;
+      case 3:pour=1;r.pt+=dt;if((r.t-=dt)<=0){r.ph=4;r.t=.35;}break;
+      case 4:pour=Math.max(0,r.t/.35);r.t-=dt;r.tip=Math.max(0,r.tip-dt*.7);if(r.tip<=0){r.ph=5;r.t=1.2+Math.random()*2;}break;
+      case 5:if((r.t-=dt)<=0){r.e=1-r.e;r.ph=0;}break;}
+    const [px,pz]=r.at(r.u);
+    o.position.set(px,22.4,pz);o.rotation.set(0,r.ry,0);o.scale.set(1,1,1);o.updateMatrix();FNL.car.setMatrixAt(i,o.matrix);
+    o.position.y=PY_;o.rotation.set(0,r.ry,r.tip,'YXZ');o.updateMatrix();FNL.buck.setMatrixAt(i,o.matrix);
+    o2.position.set(0,1.42,0);o2.updateMatrix();o2.matrix.premultiply(o.matrix);FNL.disc.setMatrixAt(i,o2.matrix);
+    const ca=Math.cos(r.tip),sa=Math.sin(r.tip),li=1.9*ca+1.7*sa,ly=PY_-1.9*sa+1.7*ca,lx=px+r.inx*li,lz=pz+r.inz*li;
+    GL.pos(r.gL,px+r.inx*li*.5,PY_+1.9-r.tip*1.2,pz+r.inz*li*.5);
+    /* the stream: grows down from the lip, thins out when the ladle rights itself */
+    const len=pour>0?Math.min(ly-10.7,(r.ph===3?r.pt:1)*16):0,wd=pour*(1+.12*Math.sin(t*31+i));
+    o.position.set(lx+r.inx*.1,ly,lz+r.inz*.1);o.rotation.set(0,0,0);o.scale.set(Math.max(wd,.001),Math.max(len,.001),Math.max(wd,.001));o.updateMatrix();FNL.stream.setMatrixAt(i,o.matrix);
+    const hit=pour>0&&len>=ly-10.75?pour:0;pt.pour+=(hit-pt.pour)*damp(hit?9:2.2,dt);r.pts[1-r.e].pour*=Math.exp(-dt*2.2);
+    GL.pos(r.gP,pt.x,11.2,pt.z);GL.bright(r.gP,pt.pour*(.75+.35*Math.sin(t*27+i*3)));
+    if(hit>0){r.acc=(r.acc||0)+dt*(QL==='low'?10:22);while(r.acc>1){r.acc--;const a=Math.random()*TAU,s=1.5+Math.random()*3.5;
+        part({x:pt.x,y:10.9,z:pt.z,vx:Math.cos(a)*s+r.inx*2,vy:5+Math.random()*7,vz:Math.sin(a)*s+r.inz*2,life:.9+Math.random()*.7,s0:.7,s1:.16,a:2,col:[1,.62,.22],glow:true,drag:.4,grav:13});
+        if(Math.random()<.16)part({x:pt.x,y:11,z:pt.z,vx:1.2,vy:3,vz:.4,life:3,s0:3,s1:9,a:.32,col:[.5,.3,.22]});}}
+    for(const q of r.pts)q.q.k=q.pour*(.8+.2*Math.sin(t*19+i));});
+  for(let c=0;c<4;c++)if(sv[c]>=0){sv[c]-=dt*9;if(sv[c]<0)sv[c]=-100;}S4.set(sv[0],sv[1],sv[2],sv[3]);
+  for(const im of [FNL.car,FNL.buck,FNL.disc,FNL.stream])im.instanceMatrix.needsUpdate=true;
+  /* heat glow patches */
+  FNL.mouths.forEach((q,i)=>{q.k=.5+.14*Math.sin(t*6.3+i*2)+.1*Math.sin(t*14.1+i*5);});FNL.wallHeat.forEach((q,i)=>{q.k=.34+.07*Math.sin(t*3.1+i*1.9)+.04*Math.sin(t*9.7+i);});
+  {const a=FNL.qcol.array;FNL.quads.forEach((q,i)=>{for(let j=0;j<4;j++){const b=(i*4+j)*3;a[b]=q.col[0]*q.k;a[b+1]=q.col[1]*q.k;a[b+2]=q.col[2]*q.k;}});FNL.qcol.needsUpdate=true;}
+  FNL.tops.forEach((g,i)=>GL.bright(g,.5+.2*Math.sin(t*5.1+i*1.7)+.15*Math.sin(t*12.3+i*4.1)));
+  /* steam bursts */
+  if((FNL.ventNext-=dt)<=0){FNL.ventNext=2.5+Math.random()*3.5;const v=FNL.vents[Math.random()*FNL.vents.length|0];v.t=1;
+    const d=Math.hypot(v.x-P.x,v.z-P.z);if(d<70&&G.mode==='play')nz('highpass',2500,900,1,.24*(1-d/70),.7);}   /* the vent hiss, quieter with distance */
+  for(const v of FNL.vents)if(v.t>0){v.t-=dt;v.acc=(v.acc||0)+dt*(QL==='low'?8:15);while(v.acc>1){v.acc--;const s=6+Math.random()*4;
+      part({x:v.x,y:v.y,z:v.z,vx:v.dx*s+(Math.random()-.5)*1.5,vy:1.5+Math.random()*2,vz:v.dz*s+(Math.random()-.5)*1.5,life:1.9,s0:1.3,s1:7,a:.75,col:[1,.93,.86],img:4,drag:1.5,grav:-.9});}}
+  /* welding */
+  for(const w of FNL.welds){w.t-=dt;if(w.t<=0){w.on=w.on?0:1;w.t=w.on?1.2+Math.random()*2.2:2.5+Math.random()*5;}
+    GL.bright(w.g,w.on?(Math.random()<.2?.2:.8+Math.random()*1.6):0);
+    if(w.on){w.acc+=dt*(QL==='low'?8:16);while(w.acc>1){w.acc--;const a=Math.random()*TAU,s=1+Math.random()*2.6;
+        part({x:w.x,y:w.y,z:w.z,vx:Math.cos(a)*s,vy:Math.random()*3.5,vz:Math.sin(a)*s+.8,life:.8+Math.random()*.6,s0:.42,s1:.1,a:2,col:[1,.78,.4],glow:true,drag:.5,grav:11});}}}
+  GL.flush();if(FNL.rig)FNL.rig.tick(dt);FNL.neon.tick(dt,t);
+},
+noise(x,z,k,kind){if(!FNL.ready||kind==='step')return;
+  if(FNL.hold<=0&&FNL.alarm<.05&&G.mode==='play')for(let i=0;i<3;i++)setTimeout(()=>tone('sawtooth',185,176,.42,.05),i*620);   /* the yard horn */
+  FNL.hold=18;
+  if(kind==='boom'){if(FNL.rig)FNL.rig.kick(x,z,k);if(Math.hypot(x-FORGE_AT.x,z+99)<75)FNL.neon.kick(k);}}
+});
 
 /* ---- 05_mech_common.js ---- */
 /* ===================== shared mech pieces from Ironhowl 3 (materials, part merging, leg IK) used by the FORGE machines.

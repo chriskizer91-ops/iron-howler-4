@@ -103,11 +103,13 @@ docks:{name:'DOCKS',mix:'woods',spawn:{x:9,z:88,yaw:0},bounds:{x0:-128,x1:128,z0
     /* water and the quay wall */
     const wt=tex('75-harbour-water',{rep:60});const water=new THREE.Mesh(new THREE.PlaneGeometry(700,320),new THREE.MeshStandardMaterial({map:wt,color:0xa8bcc0,roughness:.16,metalness:.3}));
     water.rotation.x=-Math.PI/2;water.position.set(0,-2.6,Qz-160);S.add(water);MAPS.docks.wt=wt;
+    water.userData.keep=1;MAPS.docks.water=water;   /* session 7: kept out of the merge so 04i_life_docks.js can give it waves */
     put(sbox(470,3.4,1,[0,0,0,0,0,[7,0]]),[tmat('09-blast-wall'),tmat('09-blast-wall'),tmat('07-harbor-paving'),tmat('09-blast-wall'),tmat('09-blast-wall'),tmat('76-quay-edge-with-fenders')],0,-1.7,Qz-.5,0,false);
     /* a moored ship */
     const hull=tmat('77-ship-hull-side',{r:.6,m:.3}),deck=tmat('12-rusted-steel-plate',{rep:[10,2]}),hdark=tmat('24-gunmetal',{col:0x3a2a28});
-    put(sbox(190,18,22,[[0,0],[0,0],0,0,[28,0],[28,0]]),[hdark,hdark,deck,hdark,hull,hull],15,0,Qz-24,0,false);
-    put(sbox(22,15,18,[[6,6],[6,6],0,0,[6,6],[6,6]]),tmat('14-docks-building-facade'),-66,16.5,Qz-24,0,true);
+    /* session 7: the hull and the deckhouse stay whole (not merged) so 04i_life_docks.js can let the ship ride the swell */
+    MAPS.docks.shipParts=[put(sbox(190,18,22,[[0,0],[0,0],0,0,[28,0],[28,0]]),[hdark,hdark,deck,hdark,hull,hull],15,0,Qz-24,0,false),
+      put(sbox(22,15,18,[[6,6],[6,6],0,0,[6,6],[6,6]]),tmat('14-docks-building-facade'),-66,16.5,Qz-24,0,true)];MAPS.docks.shipParts.forEach(m=>m.userData.keep=1);
     /* two ship-to-shore cranes over the quay */
     const truss=tmat('74-crane-truss',{alpha:true,ds:true,r:.55,m:.5});const tb=(w,h,d,x,y,z)=>{const g=sbox(w,h,d,[[2.5,2.5],[2.5,2.5],[2.5,2.5],[2.5,2.5],[2.5,2.5],[2.5,2.5]]);return put(g,truss,x,y,z);};
     for(const cx of [-59,9,77]){const z1=Qz+10,z2=Qz+1,zm=(z1+z2)/2;for(const lx of [-7,7])for(const lz of [z1,z2]){tb(1.6,32,1.6,cx+lx,16,lz);addBox(cx+lx-1,lz-1,cx+lx+1,lz+1,32);}
@@ -128,16 +130,16 @@ docks:{name:'DOCKS',mix:'woods',spawn:{x:9,z:88,yaw:0},bounds:{x0:-128,x1:128,z0
     const clad=tmat('10-corrugated-metal',{col:0x8a9096,rep:[1,1]}),door=tmat('78-warehouse-roller-door',{r:.7,m:.3}),gravel=tmat('15-roof-gravel');
     for(const wx of [-104,-52,0,52,104]){put(sbox(34,12,18,[[4,4],[4,4],[6,6],0,[4,4],[34/3,0]]),[clad,clad,gravel,gravel,clad,door],wx,6,108);addBox(wx-17,99,wx+17,117,12,0);}
     const neon=new THREE.Mesh(new THREE.PlaneGeometry(11,5.5),new THREE.MeshBasicMaterial({map:tex('44-neon-sign-harbor-9'),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:new THREE.Color(2,2,2)}));
-    neon.position.set(0,13.6,98.9);neon.rotation.y=Math.PI;S.add(neon);
+    neon.position.set(0,13.6,98.9);neon.rotation.y=Math.PI;S.add(neon);MAPS.docks.neon=neon;   /* session 7: handles for the living docks (neon flicker, lamps that stutter) */
     const bb=new THREE.Mesh(new THREE.PlaneGeometry(9,9),tmat('46-hyperdot-arcade-billboard',{r:.5}));bb.position.set(121.1,7,108);bb.rotation.y=Math.PI/2;S.add(bb);
     /* lamp posts and bollards */
     const pole=tmat('24-gunmetal'),lampM=new THREE.MeshBasicMaterial({color:new THREE.Color(1,.85,.55).multiplyScalar(3)});
-    const night=MISSION&&MISSION.look&&MISSION.look.night;if(night)lampM.color.multiplyScalar(2.2);
+    const night=MISSION&&MISSION.look&&MISSION.look.night;if(night)lampM.color.multiplyScalar(2.2);MAPS.docks.lampM=lampM;
     const pool=night?poolTex():null;
     for(const x of MAPS.docks.lanesX)for(const z of [-88,-20,52,84]){put(new THREE.CylinderGeometry(.18,.25,13,8),pole,x+3.6,6.5,z);put(new THREE.BoxGeometry(1.6,.3,.7),lampM,x+3.6,13,z);addCol(x+3.6,z,.4,13);
       if(night){const g=new THREE.PlaneGeometry(22,22);g.rotateX(-Math.PI/2);g.translate(x+3.6,.06,z);(MAPS.docks._pools=MAPS.docks._pools||[]).push(g);}}
     if(night&&MAPS.docks._pools){const p=new THREE.Mesh(THREE.mergeGeometries(MAPS.docks._pools),new THREE.MeshBasicMaterial({map:pool,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,color:new THREE.Color(1,.78,.45).multiplyScalar(.55)}));
-      p.renderOrder=2;p.userData.keep=1;p.frustumCulled=false;S.add(p);}
+      p.renderOrder=2;p.userData.keep=1;p.frustumCulled=false;S.add(p);MAPS.docks.poolMesh=p;}
     for(let x=-124;x<=124;x+=9.5)put(new THREE.CylinderGeometry(.35,.42,.8,10),pole,x,.4,Qz+1.2);
   },
   tick(dt){if(MAPS.docks.wt){MAPS.docks.wt.offset.x+=dt*.004;MAPS.docks.wt.offset.y+=dt*.0025;}}},
