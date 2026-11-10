@@ -1018,8 +1018,9 @@ lifeOn('*',{
    Cost: 7 draw calls by day, 8 in the storm, under 2k triangles, about 0.1 KB uploaded per frame (the glow points).
    Everything is animated in shaders or by turning a few whole objects. */
 
-/* the wind outdoors blows the way the cloud shadows travel (see uCloudOff in 10_main.js): toward -x and a little -z */
-const OUTWIND={x:-.916,z:-.4};
+/* one wind for everything outdoors: the grass and trees (U.uWind, 04f_life_shared.js), the rain's slant, the cloud shadows (10_main.js),
+   and the fluff, smoke and windpump here all go the same way: toward +x and a little +z */
+const OUTWIND={x:.94,z:.341};
 
 /* ---- motes: a cloud of points that stays around the camera and is moved entirely in its shader (nothing uploaded per frame).
    Each point keeps its place in the world and wraps round when the camera leaves it behind, like the rain.
@@ -1096,7 +1097,7 @@ lifeOn('field',{
     {const px=F.x-17.4,pz=F.z+12.5,py=hgt(px,pz),H=13;
       const truss=MAPS.field.mastObjs&&MAPS.field.mastObjs[0]?MAPS.field.mastObjs[0].tower.children[0].material:lifePaint({m:.4});
       const tg=new THREE.CylinderGeometry(.3,1.5,H,4,1,true),uv=tg.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*.5,uv.getY(i)*.6);
-      const tw=new THREE.Mesh(tg,truss);tw.position.set(px,py+H/2,pz);tw.rotation.y=Math.PI/4;tw.castShadow=true;tw.userData.keep=1;S.add(tw);
+      const tw=new THREE.Mesh(tg,truss);tw.position.set(px,py+H/2,pz);tw.rotation.y=Math.PI/4;tw.castShadow=true;tw.userData.keep=1;S.add(tw);addCol(px,pz,1.6,H);   /* lead: solid, so the Wraith can't walk through it (built before the path-finding grid, so machines walk round it) */
       const metal=lifePaint({m:.55,r:.45,ds:true}),parts=[];
       /* the wheel: 18 slots, 15 blades (3 missing in a row), two rims; it lies in the local XY plane and spins about Z */
       for(let i=0;i<18;i++){if(i>=7&&i<=9)continue;const a=i/18*TAU,b=new THREE.PlaneGeometry(.78,2.5,1,1);b.translate(0,2.05,0);
@@ -1518,9 +1519,9 @@ build(L){const D=MAPS.docks,low=QL==='low',night=!!L.night,rnd=mulberry(907),Qz=
         .replace('#include <begin_vertex>',`#include <begin_vertex>
         {float u=position.x/2.8,ph=instanceMatrix[3].x*.7+instanceMatrix[3].z*.4;transformed.y*=1.-.6*u;   /* tapers to the tip */
          transformed.z+=(sin(u*7.-uFlap*8.+ph)*.3+sin(u*3.2-uFlap*3.1+ph*2.)*.26)*u;transformed.y+=sin(u*5.-uFlap*6.3+ph)*.1*u-u*u*.45;}`)
-        ;sh.fragmentShader=sh.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=diffuseColor.rgb*'+(night?'.5':'.12')+';');};
+        ;sh.fragmentShader=sh.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=diffuseColor.rgb*'+(night?'.25':'.12')+';');};
     const pim=new THREE.InstancedMesh(pg,pm,list.length),q=new THREE.Quaternion().setFromAxisAngle(V3(0,1,0),ang),PC=night?[[.9,.4,.07],[.07,.5,.58],[.85,.68,.1]]:[[.5,.17,.02],[.02,.2,.26],[.42,.3,.03]]   /* the low sun is strong: darker cloth keeps its colour */;
-    list.forEach((l,i)=>{M4.compose(V3(l.x+w.x*.25,10.4,l.z+w.z*.25),q,V3(1,1,1));pim.setMatrixAt(i,M4);pim.setColorAt(i,col.setRGB(...PC[i%3]));});
+    list.forEach((l,i)=>{M4.compose(V3(l.x+w.x*.25,10.9,l.z+w.z*.25),q,V3(.62,.62,.62))   /* lead: 62% size, they crowded the chase camera beside a lamp */;pim.setMatrixAt(i,M4);pim.setColorAt(i,col.setRGB(...PC[i%3]));});
     pim.frustumCulled=false;S.add(pim);DKL.pennants=pim;}
   /* ---------- lamps that stutter, the neon ---------- */
   DKL.rig=D.lampM?lifeLampRig(D.lampM,D.poolMesh,lamps):null;if(DKL.rig)DKL.rig.faulty=14;
@@ -4748,7 +4749,7 @@ function jetFX(dt){if(P.thrust<.05)return;for(const J of M.jets){J.n.getWorldPos
 function tick(dt){
   G.t+=dt;U.uTime.value=G.t;if(MAPDEF.tick)MAPDEF.tick(dt);lifeTick(dt);updRain(dt);updWeather(dt);updShieldFx(dt);if(G.mode==='play')updMarks(dt);if(RING)RING.position.set(cam.position.x,cam.position.y+RING.userData.lift,cam.position.z);
   /* the clouds drift; their shadows slide over the ground with them */
-  U.uCloudOff.value.x+=dt*.0016;U.uCloudOff.value.y+=dt*.0007;
+  U.uCloudOff.value.x-=dt*.00165;U.uCloudOff.value.y-=dt*.0006;   /* minus: the shadows then travel toward +x, with the wind */
   const live=(G.mode==='play'||G.mode==='demo')&&!G.paused;
   if(live){
     let c=G.mode==='demo'?demoCtl(dt):readCtl(dt);
@@ -4786,6 +4787,7 @@ function autoQ(dt){if(SET.quality!=='auto'||G.mode!=='play'||G.paused)return;con
 let last=performance.now();
 function frame(now){
   const raw=(now-last)/1000,dt=Math.min(.05,raw);last=now;G.fdt+=(raw-G.fdt)*.1;
+  if(DEV&&window.__hold){requestAnimationFrame(frame);return;}   /* tests: the clip recorder steps and draws the game itself (look.py clip:) */
   if(STY.open){storyFrame(dt);requestAnimationFrame(frame);return;}   /* IH4: a story scene covers the screen: the game waits */
   if(BAY.open){bayFrame(dt);requestAnimationFrame(frame);return;}
   if(!(DEV&&window.__freeze))tick(dt);autoQ(dt);renderFrame();if(SET.fps&&(G.fpsT=(G.fpsT||0)-raw)<=0){G.fpsT=.5;$('fps').textContent=Math.round(1/Math.max(.001,G.fdt))+' FPS · '+QL.toUpperCase();}HUD.dev();requestAnimationFrame(frame);

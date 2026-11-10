@@ -145,9 +145,9 @@ build(L){const D=MAPS.docks,low=QL==='low',night=!!L.night,rnd=mulberry(907),Qz=
         .replace('#include <begin_vertex>',`#include <begin_vertex>
         {float u=position.x/2.8,ph=instanceMatrix[3].x*.7+instanceMatrix[3].z*.4;transformed.y*=1.-.6*u;   /* tapers to the tip */
          transformed.z+=(sin(u*7.-uFlap*8.+ph)*.3+sin(u*3.2-uFlap*3.1+ph*2.)*.26)*u;transformed.y+=sin(u*5.-uFlap*6.3+ph)*.1*u-u*u*.45;}`)
-        ;sh.fragmentShader=sh.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=diffuseColor.rgb*'+(night?'.5':'.12')+';');};
+        ;sh.fragmentShader=sh.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=diffuseColor.rgb*'+(night?'.25':'.12')+';');};
     const pim=new THREE.InstancedMesh(pg,pm,list.length),q=new THREE.Quaternion().setFromAxisAngle(V3(0,1,0),ang),PC=night?[[.9,.4,.07],[.07,.5,.58],[.85,.68,.1]]:[[.5,.17,.02],[.02,.2,.26],[.42,.3,.03]]   /* the low sun is strong: darker cloth keeps its colour */;
-    list.forEach((l,i)=>{M4.compose(V3(l.x+w.x*.25,10.4,l.z+w.z*.25),q,V3(1,1,1));pim.setMatrixAt(i,M4);pim.setColorAt(i,col.setRGB(...PC[i%3]));});
+    list.forEach((l,i)=>{M4.compose(V3(l.x+w.x*.25,10.9,l.z+w.z*.25),q,V3(.62,.62,.62))   /* lead: 62% size, they crowded the chase camera beside a lamp */;pim.setMatrixAt(i,M4);pim.setColorAt(i,col.setRGB(...PC[i%3]));});
     pim.frustumCulled=false;S.add(pim);DKL.pennants=pim;}
   /* ---------- lamps that stutter, the neon ---------- */
   DKL.rig=D.lampM?lifeLampRig(D.lampM,D.poolMesh,lamps):null;if(DKL.rig)DKL.rig.faulty=14;

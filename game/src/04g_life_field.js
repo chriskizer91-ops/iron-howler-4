@@ -9,8 +9,9 @@
    Cost: 7 draw calls by day, 8 in the storm, under 2k triangles, about 0.1 KB uploaded per frame (the glow points).
    Everything is animated in shaders or by turning a few whole objects. */
 
-/* the wind outdoors blows the way the cloud shadows travel (see uCloudOff in 10_main.js): toward -x and a little -z */
-const OUTWIND={x:-.916,z:-.4};
+/* one wind for everything outdoors: the grass and trees (U.uWind, 04f_life_shared.js), the rain's slant, the cloud shadows (10_main.js),
+   and the fluff, smoke and windpump here all go the same way: toward +x and a little +z */
+const OUTWIND={x:.94,z:.341};
 
 /* ---- motes: a cloud of points that stays around the camera and is moved entirely in its shader (nothing uploaded per frame).
    Each point keeps its place in the world and wraps round when the camera leaves it behind, like the rain.
@@ -87,7 +88,7 @@ lifeOn('field',{
     {const px=F.x-17.4,pz=F.z+12.5,py=hgt(px,pz),H=13;
       const truss=MAPS.field.mastObjs&&MAPS.field.mastObjs[0]?MAPS.field.mastObjs[0].tower.children[0].material:lifePaint({m:.4});
       const tg=new THREE.CylinderGeometry(.3,1.5,H,4,1,true),uv=tg.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*.5,uv.getY(i)*.6);
-      const tw=new THREE.Mesh(tg,truss);tw.position.set(px,py+H/2,pz);tw.rotation.y=Math.PI/4;tw.castShadow=true;tw.userData.keep=1;S.add(tw);
+      const tw=new THREE.Mesh(tg,truss);tw.position.set(px,py+H/2,pz);tw.rotation.y=Math.PI/4;tw.castShadow=true;tw.userData.keep=1;S.add(tw);addCol(px,pz,1.6,H);   /* lead: solid, so the Wraith can't walk through it (built before the path-finding grid, so machines walk round it) */
       const metal=lifePaint({m:.55,r:.45,ds:true}),parts=[];
       /* the wheel: 18 slots, 15 blades (3 missing in a row), two rims; it lies in the local XY plane and spins about Z */
       for(let i=0;i<18;i++){if(i>=7&&i<=9)continue;const a=i/18*TAU,b=new THREE.PlaneGeometry(.78,2.5,1,1);b.translate(0,2.05,0);

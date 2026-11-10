@@ -8,6 +8,8 @@ Settings (environment variables):
      shot:/path.png        take a screenshot
      wait:2.5              let the game run that many seconds
      perf:                 print draw calls, triangles, KB uploaded per frame, ms per frame (10 frames)
+     clip:6:/path.mp4      record 6 s of game time as a smooth 30 fps video (the game steps 1/30 s per picture, so it plays at true speed)
+     every:<js expression> run inside the game before each clip picture (e.g. every:(__ih3.ctl({my:1,mx:0,turn:.004}),0) walks and turns)
      ev:<js expression>    run inside the game, where every game name is reachable (P, MAPDEF, LIFE, boom, part, cam, ...)
      <js>                  run in the page
 Example step file:
@@ -54,6 +56,7 @@ with sync_playwright() as p:
         pg.evaluate("__ih4.ev('(window.__calm=setInterval(()=>{for(const e of EN)if(!e.dead)hurtEnemy(e,1e9,e.x,e.y,e.z);},300),0)')")
     if os.environ.get('HUD') == '0':
         pg.add_style_tag(content="body>*:not(canvas){visibility:hidden!important}")
+    EVERY = None
     for st in steps:
         st = st.strip()
         if not st:
@@ -62,6 +65,22 @@ with sync_playwright() as p:
             pg.screenshot(path=st[5:].strip()); print('shot', st[5:].strip()); continue
         if st.startswith('wait:'):
             time.sleep(float(st[5:])); continue
+        if st.startswith('every:'):
+            EVERY = st[6:].strip(); continue
+        if st.startswith('clip:'):
+            import subprocess, tempfile, glob
+            secs, out = st[5:].split(':', 1); out = out.strip(); fps = 30; n = int(float(secs) * fps)
+            d = tempfile.mkdtemp(prefix='clip_')
+            pg.evaluate("window.__hold=true")   # the game's own loop stops drawing; each picture below is one step and one drawing
+            for i in range(n):
+                if EVERY: pg.evaluate("s=>__ih4.ev(s)", EVERY)
+                pg.evaluate("__ih4.ev('(window.__ih3.ff(1/30),renderFrame(),0)')")
+                pg.screenshot(path='%s/f%04d.jpg' % (d, i), type='jpeg', quality=90)
+            pg.evaluate("window.__hold=false")
+            subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-framerate', str(fps), '-i', d + '/f%04d.jpg', '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+                            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out], check=True)
+            for f in glob.glob(d + '/*.jpg'): os.remove(f)
+            os.rmdir(d); print('clip', out, n, 'frames'); continue
         if st.startswith('perf:'):
             r = pg.evaluate("""async()=>{const f=()=>new Promise(r=>requestAnimationFrame(()=>r()));for(let i=0;i<3;i++)await f();
               const b0=__bytes.n,d0=__dc.n,t0=performance.now();for(let i=0;i<10;i++)await f();

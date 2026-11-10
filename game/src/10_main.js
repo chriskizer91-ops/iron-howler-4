@@ -41,7 +41,7 @@ function jetFX(dt){if(P.thrust<.05)return;for(const J of M.jets){J.n.getWorldPos
 function tick(dt){
   G.t+=dt;U.uTime.value=G.t;if(MAPDEF.tick)MAPDEF.tick(dt);lifeTick(dt);updRain(dt);updWeather(dt);updShieldFx(dt);if(G.mode==='play')updMarks(dt);if(RING)RING.position.set(cam.position.x,cam.position.y+RING.userData.lift,cam.position.z);
   /* the clouds drift; their shadows slide over the ground with them */
-  U.uCloudOff.value.x+=dt*.0016;U.uCloudOff.value.y+=dt*.0007;
+  U.uCloudOff.value.x-=dt*.00165;U.uCloudOff.value.y-=dt*.0006;   /* minus: the shadows then travel toward +x, with the wind */
   const live=(G.mode==='play'||G.mode==='demo')&&!G.paused;
   if(live){
     let c=G.mode==='demo'?demoCtl(dt):readCtl(dt);
@@ -79,6 +79,7 @@ function autoQ(dt){if(SET.quality!=='auto'||G.mode!=='play'||G.paused)return;con
 let last=performance.now();
 function frame(now){
   const raw=(now-last)/1000,dt=Math.min(.05,raw);last=now;G.fdt+=(raw-G.fdt)*.1;
+  if(DEV&&window.__hold){requestAnimationFrame(frame);return;}   /* tests: the clip recorder steps and draws the game itself (look.py clip:) */
   if(STY.open){storyFrame(dt);requestAnimationFrame(frame);return;}   /* IH4: a story scene covers the screen: the game waits */
   if(BAY.open){bayFrame(dt);requestAnimationFrame(frame);return;}
   if(!(DEV&&window.__freeze))tick(dt);autoQ(dt);renderFrame();if(SET.fps&&(G.fpsT=(G.fpsT||0)-raw)<=0){G.fpsT=.5;$('fps').textContent=Math.round(1/Math.max(.001,G.fdt))+' FPS · '+QL.toUpperCase();}HUD.dev();requestAnimationFrame(frame);
