@@ -59,11 +59,13 @@ function plant(id,kind,x,z,s,rnd){
   a.inst.push({x,y,z,s,m,cr,h:c.size_m[1]*s,f:0});
   if(c.collider&&kind==='tree')addCol(x,z,c.collider.r*s+.1,c.size_m[1]*s);
 }
-function partsOf(scene,kind,lod){
+function partsOf(scene,kind,lod,H){
   const out=[];scene.updateMatrixWorld(true);
   scene.traverse(o=>{if(!o.isMesh)return;
     const leaf=/foliage|grass/i.test(o.material.name||'')||(o.material.userData&&o.material.userData.gameMat==='LEAF');
-    if(!o.material.userData.ih3){o.material.userData.ih3=1;hookWorld(o.material,{fade:kind==='tree',leaf});
+    /* what the wind moves: all of a grass tuft or a bush, only the leaves of a tree (trunks stay still), never a cactus or a prop */
+    const wind=/cactus/i.test(o.material.name||'')?0:kind==='grass'||kind==='bush'?kind:kind==='tree'&&leaf?'tree':0;
+    if(!o.material.userData.ih3){o.material.userData.ih3=1;hookWorld(o.material,{fade:kind==='tree',leaf,wind});
       /* the pack's far versions are painted darker than the near ones; lift them so the swap does not show */
       if(leaf){o.material.side=THREE.DoubleSide;o.material.color.multiplyScalar(lod==='far'?(kind==='grass'?1.25:1.8):1.2);}}
     if(leaf&&!o.geometry.userData.bent){o.geometry.userData.bent=1;const g=o.geometry,p=g.attributes.position,nn=g.attributes.normal;g.computeBoundingBox();
@@ -71,11 +73,14 @@ function partsOf(scene,kind,lod){
       for(let i=0;i<p.count;i++){v.set(p.getX(i),p.getY(i),p.getZ(i));w.set(nn.getX(i),nn.getY(i),nn.getZ(i));
         if(kind==='grass')w.multiplyScalar(.25).add(V3(0,1,0));else w.multiplyScalar(.35).add(v.sub(c).normalize().multiplyScalar(.65));
         w.normalize();nn.setXYZ(i,w.x,w.y,w.z);}nn.needsUpdate=true;}
+    /* aSway: how high up the plant each point is (0 ground .. 1 top), so the tips move most. H is the plant's catalogue height, the same for its near and far version. */
+    if(wind&&!o.geometry.attributes.aSway){const p=o.geometry.attributes.position,sw=new Float32Array(p.count),v=new THREE.Vector3();
+      for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i).applyMatrix4(o.matrixWorld);sw[i]=clamp(v.y/(H||1),0,1);}o.geometry.setAttribute('aSway',new THREE.BufferAttribute(sw,1));}
     out.push({geo:o.geometry,mat:o.material,local:o.matrixWorld.clone(),leaf});});
   return out;
 }
 function buildInstances(a,lod,scene){
-  const n=a.inst.length,parts=partsOf(scene,a.kind,lod);
+  const n=a.inst.length,parts=partsOf(scene,a.kind,lod,VEG.cat[a.id].size_m[1]);
   for(const p of parts){
     const im=new THREE.InstancedMesh(p.geo,p.mat,n);im.count=0;im.frustumCulled=false;im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     im.castShadow=lod==='near'&&a.kind!=='grass';im.receiveShadow=!p.leaf||a.kind==='grass';

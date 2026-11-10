@@ -66,7 +66,7 @@ function tick(dt){
   if(live)jetFX(dt);updFX(live?dt:0);
   updVeg(dt,P.x,3,P.z);
   jetLoop(live?P.thrust:0);
-  if(live){G.birdT-=dt;if(G.birdT<0){sBird();G.birdT=4+Math.random()*8;}}
+  if(live){G.birdT-=dt;if(G.birdT<0){birdSong();G.birdT=4+Math.random()*8;}}   /* birdsong only when calm birds are near (04f_life_shared.js) */
   HUD.fuel(P);HUD.frame(dt);
 }
 /* auto quality: if frames are slow, lower the render scale, then the quality level */
