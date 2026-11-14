@@ -48,3 +48,8 @@ All six missions still play through to the end (Low quality, no errors). Mission
 - **Rain rings** on storm puddles are hard to see.
 - **Plant shadows** don't sway.
 - **Field horizon (older than this session).** It is a pale white wall where the rising rim meets bright fog. It is worth fixing with the places work.
+
+## Pictures and clips (repo `game/previews/session7/`)
+- `fable_unedited/`: each builder's own test pictures, exactly as it took them, sent to Christopher before any review.
+- `clips/`: true-speed phone-size video of the merged game (recorded with `look.py clip:`): foundry pour and alarm, docks crane, docks water, docks night, field walk with crows scattering, field storm, woods deer bolting, woods fog.
+- The three builders' untouched work is on the branches `life-shared`, `life-outdoor` and `life-industrial`; `life-merge` is the merged result before it went into main.
