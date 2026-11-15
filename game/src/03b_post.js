@@ -16,9 +16,10 @@ const POST={on:false,comp:null,bloom:null,out:null};
    sharpen: each pixel is pushed a little away from the average of its four neighbours, so paint, plates and ground read crisper on a phone,
             where the picture is drawn smaller than the screen and stretched (the push is capped, so bright lights get no halo);
    corners: shaded a little, which draws the eye to the middle;
-   grain:   a pixel of noise that breaks up the stripes (banding) that haze and sky gradients show on 8-bit screens. */
+   grain:   a pixel of noise that breaks up the stripes (banding) that haze and sky gradients show on 8-bit screens;
+   grade:   (round two) slightly deeper contrast, cool shadows and warm highlights, fuller colour. ?nograde turns it off. */
 const FINAL_FRAG=`precision highp float;
-  uniform sampler2D tDiffuse;uniform vec2 uPx;uniform vec3 uFin;uniform float uT;varying vec2 vUv;
+  uniform sampler2D tDiffuse;uniform vec2 uPx;uniform vec3 uFin,uGr;uniform float uT;varying vec2 vUv;
   #include <tonemapping_pars_fragment>
   #include <colorspace_pars_fragment>
   void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;
@@ -33,13 +34,16 @@ const FINAL_FRAG=`precision highp float;
     #ifdef SRGB_TRANSFER
       gl_FragColor=sRGBTransferOETF(gl_FragColor);
     #endif
+    /* grade: a little more contrast, shadows a touch cooler and highlights a touch warmer, colours a little fuller */
+    {vec3 g=clamp(gl_FragColor.rgb,0.,1.);g=mix(g,g*g*(3.-2.*g),uGr.x);float l=dot(g,vec3(.299,.587,.114));
+     g+=(vec3(-.014,.0,.022)*(1.-l)+vec3(.02,.008,-.022)*l)*uGr.y;gl_FragColor.rgb=mix(vec3(l),g,1.+uGr.z);}
     vec2 q=vUv-.5;gl_FragColor.rgb*=1.-uFin.y*smoothstep(.1,.62,dot(q,q)*1.6);
     float n=fract(52.9829189*fract(dot(gl_FragCoord.xy+uT*vec2(47.,17.),vec2(.06711056,.00583715))));
     gl_FragColor.rgb+=(n-.5)*uFin.z;}`;
-function finalPass(){const p=new THREE.OutputPass();Object.assign(p.uniforms,{uPx:{value:new THREE.Vector2()},uFin:{value:new THREE.Vector3(.5,.2,.012)},uT:{value:0}});
+function finalPass(){const p=new THREE.OutputPass();Object.assign(p.uniforms,{uPx:{value:new THREE.Vector2()},uFin:{value:new THREE.Vector3(.5,.2,.012)},uGr:{value:new THREE.Vector3(.12,1,.07)},uT:{value:0}});
   p.material.fragmentShader=FINAL_FRAG;
   /* the stock pass sets its switches the first time it draws; they are set here instead (with ours), so the shader is built once */
-  p._outputColorSpace=R.outputColorSpace;p._toneMapping=R.toneMapping;p.material.defines={SRGB_TRANSFER:'',ACES_FILMIC_TONE_MAPPING:''};if(!Q.has('nosharp'))p.material.defines.IH_SHARP='';
+  p._outputColorSpace=R.outputColorSpace;p._toneMapping=R.toneMapping;p.material.defines={SRGB_TRANSFER:'',ACES_FILMIC_TONE_MAPPING:''};if(!Q.has('nosharp'))p.material.defines.IH_SHARP='';if(Q.has('nograde'))p.uniforms.uGr.value.set(0,0,0);
   return p;}
 const HP_FRAG=`uniform sampler2D tDiffuse;uniform vec3 defaultColor;uniform float defaultOpacity,luminosityThreshold,smoothWidth;varying vec2 vUv;
   void main(){vec4 t=texture2D(tDiffuse,vUv);float v=max(t.r,max(t.g,t.b));float a=smoothstep(luminosityThreshold,luminosityThreshold+smoothWidth,v);
@@ -80,6 +84,18 @@ function decalSet(id,texName,max,dark){if(DEC[id])return DEC[id];const g=new THR
 function decal(id,x,z,size,rot){const D=id==='scorch'?decalSet('scorch','40-scorch-mark',48):decalSet('print','86-mech-footprint',72,0xb0a89c);
   _m4.compose(_w.set(x,hgt(x,z)+.05,z),_q.setFromAxisAngle(_v.set(0,1,0),rot||0),_v.set(size,1,size));D.im.setMatrixAt(D.i,_m4);D.i=(D.i+1)%D.max;D.im.count=Math.max(D.im.count,D.i===0?D.max:D.i);D.im.instanceMatrix.needsUpdate=true;}
 const SOFT_GROUND=()=>MAPID==='woods'||MAPID==='field';
+/* ---- contact shading (docks): the ground darkens softly for 1.8 m around the foot of every container stack, warehouse and crane leg, the way
+   real corners gather shade. One draw for all of them; it fades out with the haze. On Low, where nothing casts a shadow, it is what seats them. ---- */
+function contactShade(){const seen=new Set();for(const a of VEG.cols.values())for(const c of a)if(c.b&&Math.abs(c.y0-hgt(c.x,c.z))<.4)seen.add(c);const n=seen.size;if(!n)return;
+  const base=new THREE.PlaneGeometry(2,2);base.rotateX(-Math.PI/2);const g=new THREE.InstancedBufferGeometry();g.index=base.index;g.setAttribute('position',base.attributes.position);
+  const iB=new Float32Array(n*4),iY=new Float32Array(n);let i=0;for(const c of seen){iB.set([c.x,c.z,(c.x1-c.x0)/2,(c.z1-c.z0)/2],i*4);iY[i++]=c.y0;}
+  g.setAttribute('iB',new THREE.InstancedBufferAttribute(iB,4));g.setAttribute('iY',new THREE.InstancedBufferAttribute(iY,1));g.instanceCount=n;
+  const m=new THREE.ShaderMaterial({transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3,uniforms:{uFog:{value:new THREE.Vector2(30,160)}},
+    vertexShader:`attribute vec4 iB;attribute float iY;varying vec2 vL,vH;varying float vD;
+      void main(){vH=iB.zw;vL=position.xz*(iB.zw+1.8);vec4 mv=viewMatrix*vec4(iB.x+vL.x,iY+.05,iB.y+vL.y,1.);vD=-mv.z;gl_Position=projectionMatrix*mv;}`,
+    fragmentShader:`uniform vec2 uFog;varying vec2 vL,vH;varying float vD;
+      void main(){float d=length(max(abs(vL)-vH,0.)),a=1.-smoothstep(0.,1.8,d);gl_FragColor=vec4(0.,0.,0.,a*a*.5*(1.-smoothstep(uFog.x,uFog.y,vD)));}`});
+  const mesh=new THREE.Mesh(g,m);mesh.frustumCulled=false;mesh.renderOrder=1;mesh.onBeforeRender=()=>m.uniforms.uFog.value.set(S.fog.near,S.fog.far);S.add(mesh);}
 /* ---- Low draws no cast shadows, so the Wraith and the machines looked as if they floated. On Low each gets a soft dark patch on the ground
    under it, laid along the slope: one small draw for all of them. It shrinks as the Wraith rises on its jets. ---- */
 const BLOB={im:null,max:40,up:new THREE.Vector3(0,1,0)};

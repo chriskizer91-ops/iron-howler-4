@@ -101,7 +101,7 @@ function bayInput(){const pts=new Map();let pd=0,down=null;
     if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)<10&&performance.now()-down.t<400)bayTap(e.clientX,e.clientY);down=null;};
   addEventListener('pointerup',up);addEventListener('pointercancel',up);
   cv.addEventListener('wheel',e=>{if(BAY.open)BAY.want.d=clamp(BAY.want.d*(1+e.deltaY*.001),3,24);},{passive:true});
-  $('baydone').onclick=e=>{e.stopPropagation();if(BAY.mode==='brief')briefDone();else{if(BAY.mode==='book')viewClose();closeBay();}};$('bayup').onclick=e=>{e.stopPropagation();hangar();};
+  $('baydone').onclick=e=>{e.stopPropagation();if(BAY.mode==='book')viewClose();closeBay();};$('bayup').onclick=e=>{e.stopPropagation();hangar();};
   $('hback').addEventListener('click',()=>{if(BAY.open)bayUI();});}
 function bayTap(x,y){const v=new THREE.Vector3(),r=cv.getBoundingClientRect();let best=null,bd=46;
   for(const s in BAY.marks){const m=BAY.marks[s];if(!m.visible)continue;v.copy(m.position).project(BAY.cam);

@@ -13,7 +13,8 @@ function buildFX(){
         vec4 mv=viewMatrix*vec4(iP,1.);mv.xy+=q;gl_Position=projectionMatrix*mv;}`,
     fragmentShader:`uniform sampler2D tSmoke,tFx;varying vec2 vUv;varying vec4 vS;varying vec3 vC;
       void main(){if(vS.w<.5){float t=texture2D(tSmoke,vUv).r;float a=smoothstep(.04,.6,t)*vS.z;gl_FragColor=vec4(vC*(.6+.5*t)*a,a);}
-        else if(vS.w<1.5){float r=length(vUv-.5)*2.;float gl=pow(max(0.,1.-r),2.2);gl_FragColor=vec4(vC*gl*vS.z,0.);}
+        else if(vS.w<1.2){float r=length(vUv-.5)*2.;float gl=pow(max(0.,1.-r),2.2);gl_FragColor=vec4(vC*gl*vS.z,0.);}
+        else if(vS.w<1.5){float r=length(vUv-.5)*2.;float gl=smoothstep(.55,.84,r)*(1.-smoothstep(.86,1.,r));gl_FragColor=vec4(vC*gl*vS.z,0.);}   /* a thin bright ring: the blast wave */
         else{float t=vS.w-2.;vec2 tu=vec2((mod(t,4.)+vUv.x)*.25,1.-(floor(t/4.)+1.-vUv.y)*.5);vec3 c=texture2D(tFx,tu).rgb;
           float edge=smoothstep(.5,.42,max(abs(vUv.x-.5),abs(vUv.y-.5)));c*=edge;   /* art tiles: 0-1 explosions, 2 muzzle flash, 3 sparks add light; 4 steam blends */
           if(t>3.5){float a=smoothstep(.04,.6,dot(c,vec3(.33)))*vS.z;gl_FragColor=vec4(vC*c*a,a);}else gl_FragColor=vec4(c*vC*vS.z,0.);}
@@ -22,7 +23,7 @@ function buildFX(){
       }`});
   PFX.mesh=new THREE.Mesh(g,m);PFX.mesh.frustumCulled=false;PFX.mesh.renderOrder=5;S.add(PFX.mesh);
 }
-/* o: {x,y,z, vx,vy,vz, life, s0,s1 (size start/end), a (alpha), col [r,g,b], glow (bool), drag, grav, vr} */
+/* o: {x,y,z, vx,vy,vz, life, s0,s1 (size start/end), a (alpha), col [r,g,b], glow (bool), ring (bool, with glow: a thin bright ring), drag, grav, vr} */
 function part(o){o.t=0;o.rot=Math.random()*TAU;o.vr=o.vr==null?(Math.random()-.5)*1.2:o.vr;const L=PFX.list;
   if(L.length>=PFX.max)L[(PFX.ri=((PFX.ri|0)+1)%PFX.max)]=o;else L.push(o);}   /* full: this one takes an old one's place (no shifting the whole list) */
 const DUST=[.5,.43,.33],SMOKE=[.55,.55,.57];
@@ -33,7 +34,7 @@ function updFX(dt){
   let w=0;for(let i=0;i<L.length;i++){const p=L[i];p.t+=dt;if(p.t>=p.life)continue;L[w++]=p;   /* one pass: finished ones drop out as the list closes up */
     const dr=Math.exp(-(p.drag||0)*dt);p.vx*=dr;p.vy*=dr;p.vz*=dr;p.vy-=(p.grav||0)*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.rot+=p.vr*dt;
     const f=p.t/p.life,s=lerp(p.s0,p.s1,Math.sqrt(f)),a=p.a*(p.glow?(1-f):Math.min(1,f*6)*(1-f)*(1-f));
-    P_[n*3]=p.x;P_[n*3+1]=p.y;P_[n*3+2]=p.z;S_[n*4]=s;S_[n*4+1]=p.rot;S_[n*4+2]=a;S_[n*4+3]=p.img!=null?2+p.img:p.glow?1:0;C_[n*3]=p.col[0];C_[n*3+1]=p.col[1];C_[n*3+2]=p.col[2];n++;}
+    P_[n*3]=p.x;P_[n*3+1]=p.y;P_[n*3+2]=p.z;S_[n*4]=s;S_[n*4+1]=p.rot;S_[n*4+2]=a;S_[n*4+3]=p.img!=null?2+p.img:p.ring?1.3:p.glow?1:0;C_[n*3]=p.col[0];C_[n*3+1]=p.col[1];C_[n*3+2]=p.col[2];n++;}
   L.length=w;PFX.mesh.geometry.instanceCount=n;
   if(n)for(const A of [PFX.iP,PFX.iS,PFX.iC]){A.clearUpdateRanges();A.addUpdateRange(0,n*A.itemSize);A.needsUpdate=true;}   /* send only the part in use */
 }

@@ -150,6 +150,10 @@ function sparks(x,y,z,n,col){if(n>2)part({x,y,z,vx:0,vy:0,vz:0,life:.14,s0:.7,s1
   part({x,y,z,vx:Math.cos(a)*s*Math.sqrt(1-b*b),vy:b*s+2,vz:Math.sin(a)*s*Math.sqrt(1-b*b),life:.25+Math.random()*.25,s0:.22,s1:.06,a:2,col,glow:true,drag:2,grav:12});}}
 function boom(x,y,z,k){lifeNoise(x,z,k,'boom');sBoom(k);CAMS.shake=Math.max(CAMS.shake,Math.min(.9,.7*k*12/Math.max(6,Math.hypot(x-P.x,z-P.z))));
   part({x,y,z,vx:0,vy:0,vz:0,life:.35,s0:4*k,s1:7*k,a:1.6,col:[1,.62,.28],glow:true});
+  /* round two of the look: a blast wave that races outward, and burning bits thrown up that arc back down */
+  part({x,y,z,vx:0,vy:0,vz:0,life:.3,s0:3*k,s1:14*k,a:.75,col:[1,.82,.6],glow:true,ring:true,vr:0});
+  for(let i=0,n=(QL==='low'?4:8)*k;i<n;i++){const a=Math.random()*TAU,s=(4+Math.random()*9)*Math.sqrt(k);
+    part({x,y,z,vx:Math.cos(a)*s,vy:6+Math.random()*9*Math.sqrt(k),vz:Math.sin(a)*s,life:.8+Math.random()*.8,s0:.34,s1:.1,a:2.2,col:[1,.5,.16],glow:true,drag:.5,grav:17});}
   for(let i=0;i<2;i++)part({x:x+(Math.random()-.5)*k,y:y+.3*i,z:z+(Math.random()-.5)*k,vx:0,vy:1.2,vz:0,life:.5+i*.15,s0:2.6*k,s1:(7.5+i*2)*k,a:1.5,col:[1,1,1],glow:true,img:i,vr:(Math.random()-.5)*2});
   if(y-hgt(x,z)<3.5)decal('scorch',x,z,(2.4+Math.random()*1.4)*Math.max(.8,k)*1.5,Math.random()*TAU);
   for(let i=0;i<10*k;i++){const a=Math.random()*TAU,s=2+Math.random()*5*k;part({x,y,z,vx:Math.cos(a)*s,vy:1+Math.random()*4,vz:Math.sin(a)*s,life:1.4+Math.random(),s0:1.2*k,s1:4.4*k,a:.45,col:[.32,.3,.29],drag:1.8,grav:-.6});}

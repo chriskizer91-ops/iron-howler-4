@@ -28,7 +28,7 @@ const HUD={_c:{},
      this.set('gtier','text',(ac?'GUN '+ROMAN[GUN.tier]:'')+(ln?(ac?' · ':'')+'LANCE':'')+(ar?(ac||ln?' · ':'')+'ARC':''));}
     this.set('hov','cls',P.hovering?'on act':P.hov<.999?'on':'');this.set('hovb','width',(P.hov*100).toFixed(0)+'%');
     kitHud(dt||1/60);this.set('mslc','text','MSL '+MSL.ammo);this.set('bmsl','text','MSL '+MSL.ammo);
-    this.set('score','text',G.score.toLocaleString('en-US'));if(!MISSION)this.set('obj','text','');const cm=G.t-G.lastKill<3&&G.combo>1;this.set('combo','text',cm?'x'+Math.min(3,1+.25*(G.combo-1)).toFixed(2).replace(/\.?0+$/,''):'');
+    this.set('score','text',G.score.toLocaleString('en-US'));if(!MISSION)this.set('obj','text',G.mode==='play'&&G.wave>0&&waveLeft()>0?'WAVE '+G.wave+' · '+waveLeft()+' LEFT':'');const cm=G.t-G.lastKill<3&&G.combo>1;this.set('combo','text',cm?'x'+Math.min(3,1+.25*(G.combo-1)).toFixed(2).replace(/\.?0+$/,''):'');
     this.set('heatb','width',GUN.heat.toFixed(0)+'%');this.set('heat','cls',GUN.over?'over':GUN.heat>70?'warm':'');
     this.set('cross','cls',GUN.hitT>0?'hit':AIM.e?'on':'');
     this.set('bvent','cls','tb'+(GUN.ventCd>0?' cool':GUN.over?' hot':''));

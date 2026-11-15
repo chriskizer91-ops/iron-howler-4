@@ -31,10 +31,10 @@ const TEXC={};
 function k4tex(url,lin){const key=url+(lin?'|lin':'');if(TEXC[key])return TEXC[key];const t=new THREE.TextureLoader(LM).load(url);t.flipY=false;t.colorSpace=lin?THREE.NoColorSpace:THREE.SRGBColorSpace;t.anisotropy=4;return TEXC[key]=t;}
 function k4lin(url){return k4tex(url,true);}
 /* one material per model: the print (full) or the baked maps (combat) */
-function kitMat(f,world){const key=f.map+(world?'w':'');if(KMAT[key])return KMAT[key];
+function kitMat(f,world,eyes){const key=f.map+(world?'w':'')+(eyes?'e':'');if(KMAT[key])return KMAT[key];
   const m=f.nrm?new THREE.MeshStandardMaterial({map:k4tex(f.map),normalMap:k4lin(f.nrm),roughnessMap:k4lin(f.orm),metalnessMap:k4lin(f.orm),roughness:1,metalness:1})
                :new THREE.MeshStandardMaterial({map:k4tex(f.map),roughness:.62,metalness:.18});
-  return KMAT[key]=world?hookWorld(m):m;}
+  return KMAT[key]=world?hookWorld(m,{rim:1,eyes:eyes?1:0}):m;}
 function dressModel(sc,mat){sc.traverse(o=>{if(o.isMesh){o.material=mat;o.castShadow=o.receiveShadow=true;}});return sc;}
 /* put a kit piece on a mount: the piece's own `mount` empty lands exactly on the host's mount */
 function onMount(host,sc){sc.updateMatrixWorld(true);const mt=sc.getObjectByName('mount');

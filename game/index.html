@@ -126,6 +126,19 @@ body.inbay>*:not(#bay):not(#gl):not(#hangar):not(script){visibility:hidden!impor
 #baycard .cls{font-style:normal;color:#ffb347cc;letter-spacing:.12em;font-size:9.5px;margin-right:4px}
 #bayload{display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#ffffffa0;font-size:11px;letter-spacing:.2em;pointer-events:none}
 #bayload .t{width:min(240px,60vw);height:3px;background:#ffffff1a;border-radius:2px;overflow:hidden}#baylb{height:100%;width:0;background:#ffb347;transition:width .15s}
+/* intel card: the machine's field model turns in the square window (drawn by the game straight into the picture), the text sits beside it */
+#foe{position:fixed;left:max(12px,env(safe-area-inset-left));top:calc(max(10px,env(safe-area-inset-top)) + 132px);display:flex;align-items:stretch;pointer-events:none;opacity:0;transition:opacity .18s;z-index:2}
+#foe.on{opacity:1}
+#foewin{position:relative;flex:0 0 auto;width:108px;height:108px;box-sizing:border-box;border:1px solid #ff4a3a70;border-right:none}
+#foewin:before,#foewin:after{content:"";position:absolute;width:12px;height:12px;border:2px solid #ff6a4a}
+#foewin:before{left:-1px;top:-1px;border-right:none;border-bottom:none}#foewin:after{left:-1px;bottom:-1px;border-right:none;border-top:none}
+#foetx{width:min(226px,46vw);box-sizing:border-box;padding:8px 11px;background:#0a0c0fd9;border:1px solid #ff4a3a70;border-left:1px solid #ff4a3a2a;display:flex;flex-direction:column;justify-content:center;gap:3px;text-align:left}
+#foen{color:#ff6a4a;font-size:13px;letter-spacing:.16em}#foec{font-style:normal;color:#ffffff8c;font-size:9px;letter-spacing:.14em}
+#foes{color:#ffd76a;font-size:10px;letter-spacing:.1em}#foet{font-style:normal;color:#e6eaee;font-size:10.5px;line-height:1.35;letter-spacing:.03em;font-weight:500}
+#foe.boss #foen{color:#ffd76a}#foe.boss #foewin,#foe.boss #foetx{border-color:#ffd76a90}#foe.boss #foewin:before,#foe.boss #foewin:after{border-color:#ffd76a}
+#foe.old #foet{display:none}
+@media (min-width:1000px) and (min-height:560px){#foewin{width:148px;height:148px}#foetx{width:270px;padding:10px 13px}#foen{font-size:15px}#foec{font-size:10px}#foes{font-size:11px}#foet{font-size:12px}}
+body.paused #gl{filter:blur(5px) brightness(.85)}
 #dev{position:fixed;left:12px;top:40px;font:11px monospace;color:#7f7;pointer-events:none;text-shadow:0 0 3px #000}
 </style></head><body>
 <canvas id="gl"></canvas>
@@ -136,6 +149,7 @@ body.inbay>*:not(#bay):not(#gl):not(#hangar):not(script){visibility:hidden!impor
 <button id="bfire" class="tb">FIRE</button><button id="bjet" class="tb">JET</button><button id="bmsl" class="tb">MSL</button><button id="bvent" class="tb">VENT</button><button id="bsalvo" class="tb">SALVO</button>
 <div id="stick"><div id="knob"></div></div>
 <div id="hint"></div>
+<div id="foe"><div id="foewin"></div><div id="foetx"><b id="foen"></b><i id="foec"></i><span id="foes"></span><em id="foet"></em></div></div>
 <div id="dev"></div>
 <div id="menu" class="ov"><div class="sub">PAUSED</div><button id="mresume">RESUME</button><button id="mview"></button><button id="mqual"></button><button id="msound"></button><button id="msens"></button><button id="mfps"></button><button id="mexit">EXIT</button></div>
 <div id="down" class="ov"><div class="logo">WRAITH DOWN</div><div class="sub" id="dscore"></div><div class="go" id="dgo">TAP TO GO AGAIN</div></div>

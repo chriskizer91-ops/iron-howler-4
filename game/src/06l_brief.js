@@ -1,9 +1,8 @@
 /* ===================== Ironhowl 4: the intel brief and the armory book (session 4) =====================
    Both use the modification bay's room (06i_bay.js): the same lights, floor, camera and touch controls (drag to turn,
    pinch or wheel to zoom), with a model on the stage instead of the Wraith.
-   INTEL BRIEF: before a run, and later in a run when a wave brings a machine you haven't been briefed on (every boss),
-     the game stops and shows the machines headed your way: a chip for each kind with how many are coming, the full-detail
-     model turning, and its card. No timer: DEPLOY starts the fight.
+   INTEL CARD (was the intel brief): before a run, and later in a run when a wave brings a machine you haven't met (every boss),
+     a small card comes up on the HUD with the machine's field model turning, how many are coming and a tip. The game keeps going.
    ARMORY BOOK (title screen): a card for every kit piece (locked ones say the pilot level that opens them) and for every
      machine; a machine's card is filled in the first time you destroy one, until then it stands as a dark shape.
    Full-detail models load in the background: the combat model shows at once, the full one replaces it when it arrives
@@ -85,28 +84,63 @@ function viewClose(){STG.seq++;stageClear();STG.id=null;STG.dark=undefined;   /*
   if(STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayup').style.display='';$('baydone').textContent='DONE';BAY.mode='bay';}
 
 /* ---------- intel brief ---------- */
-const BRF={list:[],sel:0,sub:'',done:null};
-/* comp: {machine id: how many}. Returns true if a brief opened. */
-function briefMaybe(comp,label,force){if(G.mode!=='play'||BAY.open)return false;const ids=Object.keys(comp).filter(id=>comp[id]>0&&FOE_INFO[id]);
+/* INTEL CARD (15 Nov; Christopher: "its field model, not the heavy version, so it can pop up as a heads-up display and not a new window").
+   The brief no longer stops the game or opens the bay's room. A small card slides onto the HUD, under the health bars: the machine's own
+   field (combat) model turning in a little window, its name, how many are coming, its hit points and one tip. New machines stay 5 s
+   (a boss 6.5 s), ones already met 2.6 s; several queue up one after another. Nothing is downloaded: the field model is already loaded.
+   The model is the same one that walks the map, lit by the same sun. It lives in the game's own scene on its own layer and is drawn into
+   the card's window after the picture is finished, so it costs one small extra draw of one machine, only while a card is showing. */
+const FC={q:[],cur:null,t:0,piv:null,obj:null,mat:null,cam:null,rect:null,ready:false,seq:0,col:new THREE.Color()};
+function foeClear(){FC.q.length=0;foeHide();}
+function foeHide(){FC.seq++;FC.cur=null;FC.ready=false;const el=$('foe');if(el)el.classList.remove('on');
+  if(FC.obj){FC.piv.remove(FC.obj);if(FC.mat)FC.mat.dispose();FC.obj=FC.mat=null;}}   /* the shapes are the field machines' own: only this copy's material goes */
+function foeLayers(){if(FC.piv)FC.piv.traverse(o=>o.layers.set(1));}
+/* a copy of the field model, dressed like the one that walks the map (bosses included, without their banner) */
+function foeModel(id){if(id==='spod')return spodModel().then(p=>({o:p,mat:null}));
+  const tp=ETPL[id],d=EDEF[id];if(!tp||!d)return Promise.reject(new Error('no field model for '+id));
+  const o=tp.clone(true),base=d.amat;let mat=null;
+  if(base){mat=base.clone();mat.onBeforeCompile=base.onBeforeCompile;mat.customProgramCacheKey=base.customProgramCacheKey;o.traverse(m=>{if(m.isMesh&&m.material===base)m.material=mat;});stageDress(id,o,mat,false);}
+  return Promise.resolve({o,mat});}
+function foeShow(it){const seq=++FC.seq,I=FOE_INFO[it.id],d=EDEF[it.id]||{},boss=!!(d.boss);FC.cur=it;FC.t=it.fresh?(boss?6.5:5):2.6;FC.ready=false;
+  if(!FC.cam){FC.cam=new THREE.PerspectiveCamera(30,1,.5,60);FC.cam.layers.set(1);FC.piv=new THREE.Group();FC.piv.position.set(0,-600,0);S.add(FC.piv);
+    FC.cam.position.set(0,-598.6,9.6);FC.cam.lookAt(0,-600,0);FC.cam.updateMatrixWorld();}
+  S.traverse(o=>{if(o.isLight)o.layers.enable(1);});   /* the same lights as the field, so the model needs no new kind of shader */
+  const hp=I.hp||d.hp;$('foen').textContent=I.name;$('foec').textContent=I.cls;$('foes').textContent=(it.n>1?it.n+' COMING':it.n===1?'1 COMING':'')+(hp?(it.n?' · ':'')+hp.toLocaleString('en-US')+' HP':'');$('foet').textContent=I.tip;
+  const el=$('foe');el.className=(boss?'boss ':'')+(it.fresh?'':'old ');
+  foeModel(it.id).then(({o,mat})=>{if(seq!==FC.seq){if(mat)mat.dispose();return;}
+    if(FC.obj){FC.piv.remove(FC.obj);if(FC.mat)FC.mat.dispose();}
+    o.position.set(0,0,0);o.rotation.set(0,0,0);o.scale.setScalar(1);o.visible=true;o.updateMatrixWorld(true);
+    const b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3()),k=Math.min(4.5/Math.max(sz.y,.01),5.1/Math.max(Math.hypot(sz.x,sz.z),.01));   /* fits the window at every angle as it turns */
+    o.scale.setScalar(k);o.position.set(-c.x*k,-c.y*k,-c.z*k);FC.obj=o;FC.mat=mat;FC.piv.add(o);FC.piv.rotation.y=.7;foeLayers();
+    const go=()=>{if(seq!==FC.seq)return;FC.ready=true;foeRect();el.classList.add('on');if(boss)sBriefBoss();else if(it.fresh)sClick();};
+    /* its shader for the window is built in the background where the browser can, so the card does not make the game hitch */
+    let done=false;const once=()=>{if(!done){done=true;go();}};setTimeout(once,700);
+    try{R.setRenderTarget(null);const p=R.compileAsync&&R.extensions.has('KHR_parallel_shader_compile')&&R.compileAsync(FC.piv,FC.cam,S);if(p&&p.then)p.then(once,once);else once();}catch(e){once();}
+  }).catch(err=>{console.warn('intel card',it.id,err);if(seq===FC.seq){FC.cur=null;}});}
+function foeRect(){const r=$('foewin').getBoundingClientRect();FC.rect=[r.left,innerHeight-r.bottom,r.width,r.height];}
+addEventListener('resize',()=>{if(FC.cur)setTimeout(foeRect,60);});
+/* every frame of play: turn the model, time the card, bring on the next */
+function foeTick(dt){if(G.mode!=='play'){if(FC.cur||FC.q.length)foeClear();return;}if(G.paused)return;
+  if(FC.cur){if(FC.ready){FC.t-=dt;FC.piv.rotation.y+=dt*.75;if(FC.t>5.5||FC.t<.2&&FC.t>0)foeLayers();}   /* a Brood's pod joins a moment later: keep it on the window's layer */
+    if(FC.t<=0)foeHide();}
+  else if(FC.q.length)foeShow(FC.q.shift());}
+/* drawn after the finished picture, straight into the card's window */
+function foeDraw(){if(!FC.cur||!FC.ready||!FC.obj||!FC.rect||BAY.open)return;const [x,y,w,h]=FC.rect;if(w<8||h<8)return;
+  const au=R.shadowMap.autoUpdate,ac=R.autoClear,a=R.getClearAlpha();R.getClearColor(FC.col);
+  R.setRenderTarget(null);R.setViewport(x,y,w,h);R.setScissor(x,y,w,h);R.setScissorTest(true);R.setClearColor(0x0a0c0f,1);R.clear(true,true,false);
+  R.shadowMap.autoUpdate=false;R.autoClear=false;R.render(S,FC.cam);
+  R.shadowMap.autoUpdate=au;R.autoClear=ac;R.setClearColor(FC.col,a);R.setScissorTest(false);R.setViewport(0,0,innerWidth,innerHeight);}
+/* comp: {machine id: how many}. Queues an intel card for each machine not yet met in this run (force: for every machine). Returns true if any were queued. */
+function briefMaybe(comp,label,force){if(G.mode!=='play')return false;const ids=Object.keys(comp).filter(id=>comp[id]>0&&FOE_INFO[id]);
   const fresh=ids.filter(id=>!RUNSEEN.has(id));if(!fresh.length&&!force)return false;ids.forEach(id=>RUNSEEN.add(id));
-  const list=ids.map(id=>({id,n:comp[id],fresh:fresh.includes(id)})).sort((a,b)=>FOE_ORDER.indexOf(a.id)-FOE_ORDER.indexOf(b.id));
-  const tot=list.reduce((a,q)=>a+q.n,0);BRF.list=list;BRF.sel=Math.max(0,list.findIndex(q=>q.fresh));
-  const fn=list.filter(q=>q.fresh&&EDEF[q.id]&&EDEF[q.id].boss).map(q=>FOE_INFO[q.id].name);BRF.after=fn[0]||label||'';
-  BRF.sub=(label?label+' · ':'')+(fn.length?fn.join(', ')+' INBOUND':tot+(tot===1?' MACHINE':' MACHINES')+' HEADED YOUR WAY');
-  viewOpen('brief');$('bayname').querySelector('b').textContent='INTEL BRIEF';$('baydone').textContent='DEPLOY';
-  if(fn.length)sBriefBoss();else sClick();briefUI();return true;}
-function briefSub(){if(!BAY.open)return;if(BAY.mode==='brief')$('baysub').textContent=BRF.sub+(STG.pct>=0?' · FULL DETAIL '+STG.pct+'%':'');
-  else if(BAY.mode==='book')$('baysub').textContent=BOOK.sub+(STG.pct>=0?' · FULL DETAIL '+STG.pct+'%':'');}
-function briefUI(){const L=BRF.list,q=L[BRF.sel];
-  $('bayslots').innerHTML=L.map((it,i)=>'<button data-i="'+i+'"'+(i===BRF.sel?' class="on"':'')+'>'+it.n+' × '+FOE_INFO[it.id].name+(it.fresh&&EDEF[it.id]&&EDEF[it.id].boss?' ★':'')+'</button>').join('');
-  $('bayslots').querySelectorAll('button').forEach(b=>b.onclick=e=>{e.stopPropagation();BRF.sel=+b.dataset.i;briefUI();});
-  const on=$('bayslots').querySelector('.on');if(on)on.scrollIntoView({inline:'center',block:'nearest'});
-  $('baycard').innerHTML=foeCard(q.id,q.n);if(STG.id!==q.id)stageShow(q.id,false);briefSub();}
+  const list=(force?ids:fresh).map(id=>({id,n:comp[id],fresh:fresh.includes(id)})).sort((a,b)=>FOE_ORDER.indexOf(a.id)-FOE_ORDER.indexOf(b.id));
+  for(const it of list)if(FC.q.length<8&&!(FC.cur&&FC.cur.id===it.id)&&!FC.q.some(q=>q.id===it.id))FC.q.push(it);
+  return list.length>0;}
+function briefSub(){if(BAY.open&&BAY.mode==='book')$('baysub').textContent=BOOK.sub+(STG.pct>=0?' · FULL DETAIL '+STG.pct+'%':'');}
 function foeCard(id,n){const I=FOE_INFO[id],d=EDEF[id]||{},hp=I.hp||d.hp,sp=I.speed!=null?I.speed:d.speed,scr=I.scrap!=null?I.scrap:d.scrap;
   return '<b>'+I.name+'</b><span class="role"><i class="cls">'+I.cls+'</i> '+I.fight+'</span>'+
     statRows([['HIT POINTS',(hp||0).toLocaleString('en-US')],['TOP SPEED',sp?sp+' m/s':'does not move'],['ATTACK',I.atk],['SIZE',I.size],['SCRAP',scr?scr+' a wreck':'—']].concat(n?[['COMING',n]]:[]))+
     '<span class="live">'+I.tip+'</span>';}
-function briefDone(){viewClose();closeBay();freeFull();if(!touchy&&G.mode==='play')lockMouse();if(BRF.after)HUD.banner(BRF.after);   /* the banner it covered */if(BRF.done){const f=BRF.done;BRF.done=null;f();}}
 function sBriefBoss(){thump(70,30,.6,.35,0,0);tone('sawtooth',220,110,.5,.05);}
 
 /* ---------- armory book ---------- */

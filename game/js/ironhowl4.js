@@ -252,6 +252,16 @@ function hookWorld(mat,o={}){
       .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,.9,wr);');
     if(o.leaf)f=f.replace('#include <normal_fragment_begin>',LEAF_NORMAL)
       .replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=diffuseColor.rgb*uLeafGlow*vec3(.9,1.,.7);');
+    /* edge light (o.rim: the Wraith, its kit and every machine): surfaces turning away from the camera pick up the sky's colour, most on their
+       upper sides, so a machine stands out from the ground and the haze behind it. A few sums per pixel, no texture.
+       o.eyes (the FORGE machines): the red lamps and seams painted on them give off their own light, so they show in haze and at night and glow a little. */
+    if(o.rim){const L=LOOKNOW||{},c=new THREE.Color(L.sky||0xd6e4ff).multiplyScalar((L.hemiK||1.5)*.26),f3=x=>x.toFixed(3);
+      f=f.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+      {float rm=1.-max(dot(normal,normalize(vViewPosition)),0.);rm*=rm*rm;
+       totalEmissiveRadiance+=vec3(${f3(c.r)},${f3(c.g)},${f3(c.b)})*rm*(.6+.4*(vec4(normal,0.)*viewMatrix).y);}`+(o.eyes?`
+      #ifdef USE_MAP
+      {vec4 ce=texture2D(map,vMapUv);totalEmissiveRadiance+=vec3(1.,.05,.02)*1.1*smoothstep(.14,.36,ce.r-max(ce.g,ce.b));}
+      #endif`:''));}
     /* a gust lightens the plants it bends, the way a meadow flashes pale when the wind lays it over */
     if(o.wind)f=f.replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.rgb*=1.+vGust;');
     if(o.ground)f=f.replace('#include <map_fragment>',`#include <map_fragment>
@@ -268,7 +278,7 @@ function hookWorld(mat,o={}){
        vec3 wn=(vec4(normal,0.)*viewMatrix).xyz;wn=normalize(wn+vec3(nn.x,0.,-nn.y)*uNStr);normal=normalize((viewMatrix*vec4(wn,0.)).xyz);}`);
     sh.fragmentShader=f;
   };
-  mat.customProgramCacheKey=()=>'w'+(o.fade?1:0)+(o.leaf?1:0)+(o.ground?1:0)+(o.wear?1:0)+(o.wind||'');
+  mat.customProgramCacheKey=()=>'w'+(o.fade?1:0)+(o.leaf?1:0)+(o.ground?1:0)+(o.wear?1:0)+(o.rim?1:0)+(o.eyes?1:0)+(o.wind||'');
   return mat;
 }
 
@@ -328,9 +338,10 @@ const POST={on:false,comp:null,bloom:null,out:null};
    sharpen: each pixel is pushed a little away from the average of its four neighbours, so paint, plates and ground read crisper on a phone,
             where the picture is drawn smaller than the screen and stretched (the push is capped, so bright lights get no halo);
    corners: shaded a little, which draws the eye to the middle;
-   grain:   a pixel of noise that breaks up the stripes (banding) that haze and sky gradients show on 8-bit screens. */
+   grain:   a pixel of noise that breaks up the stripes (banding) that haze and sky gradients show on 8-bit screens;
+   grade:   (round two) slightly deeper contrast, cool shadows and warm highlights, fuller colour. ?nograde turns it off. */
 const FINAL_FRAG=`precision highp float;
-  uniform sampler2D tDiffuse;uniform vec2 uPx;uniform vec3 uFin;uniform float uT;varying vec2 vUv;
+  uniform sampler2D tDiffuse;uniform vec2 uPx;uniform vec3 uFin,uGr;uniform float uT;varying vec2 vUv;
   #include <tonemapping_pars_fragment>
   #include <colorspace_pars_fragment>
   void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;
@@ -345,13 +356,16 @@ const FINAL_FRAG=`precision highp float;
     #ifdef SRGB_TRANSFER
       gl_FragColor=sRGBTransferOETF(gl_FragColor);
     #endif
+    /* grade: a little more contrast, shadows a touch cooler and highlights a touch warmer, colours a little fuller */
+    {vec3 g=clamp(gl_FragColor.rgb,0.,1.);g=mix(g,g*g*(3.-2.*g),uGr.x);float l=dot(g,vec3(.299,.587,.114));
+     g+=(vec3(-.014,.0,.022)*(1.-l)+vec3(.02,.008,-.022)*l)*uGr.y;gl_FragColor.rgb=mix(vec3(l),g,1.+uGr.z);}
     vec2 q=vUv-.5;gl_FragColor.rgb*=1.-uFin.y*smoothstep(.1,.62,dot(q,q)*1.6);
     float n=fract(52.9829189*fract(dot(gl_FragCoord.xy+uT*vec2(47.,17.),vec2(.06711056,.00583715))));
     gl_FragColor.rgb+=(n-.5)*uFin.z;}`;
-function finalPass(){const p=new THREE.OutputPass();Object.assign(p.uniforms,{uPx:{value:new THREE.Vector2()},uFin:{value:new THREE.Vector3(.5,.2,.012)},uT:{value:0}});
+function finalPass(){const p=new THREE.OutputPass();Object.assign(p.uniforms,{uPx:{value:new THREE.Vector2()},uFin:{value:new THREE.Vector3(.5,.2,.012)},uGr:{value:new THREE.Vector3(.12,1,.07)},uT:{value:0}});
   p.material.fragmentShader=FINAL_FRAG;
   /* the stock pass sets its switches the first time it draws; they are set here instead (with ours), so the shader is built once */
-  p._outputColorSpace=R.outputColorSpace;p._toneMapping=R.toneMapping;p.material.defines={SRGB_TRANSFER:'',ACES_FILMIC_TONE_MAPPING:''};if(!Q.has('nosharp'))p.material.defines.IH_SHARP='';
+  p._outputColorSpace=R.outputColorSpace;p._toneMapping=R.toneMapping;p.material.defines={SRGB_TRANSFER:'',ACES_FILMIC_TONE_MAPPING:''};if(!Q.has('nosharp'))p.material.defines.IH_SHARP='';if(Q.has('nograde'))p.uniforms.uGr.value.set(0,0,0);
   return p;}
 const HP_FRAG=`uniform sampler2D tDiffuse;uniform vec3 defaultColor;uniform float defaultOpacity,luminosityThreshold,smoothWidth;varying vec2 vUv;
   void main(){vec4 t=texture2D(tDiffuse,vUv);float v=max(t.r,max(t.g,t.b));float a=smoothstep(luminosityThreshold,luminosityThreshold+smoothWidth,v);
@@ -392,6 +406,18 @@ function decalSet(id,texName,max,dark){if(DEC[id])return DEC[id];const g=new THR
 function decal(id,x,z,size,rot){const D=id==='scorch'?decalSet('scorch','40-scorch-mark',48):decalSet('print','86-mech-footprint',72,0xb0a89c);
   _m4.compose(_w.set(x,hgt(x,z)+.05,z),_q.setFromAxisAngle(_v.set(0,1,0),rot||0),_v.set(size,1,size));D.im.setMatrixAt(D.i,_m4);D.i=(D.i+1)%D.max;D.im.count=Math.max(D.im.count,D.i===0?D.max:D.i);D.im.instanceMatrix.needsUpdate=true;}
 const SOFT_GROUND=()=>MAPID==='woods'||MAPID==='field';
+/* ---- contact shading (docks): the ground darkens softly for 1.8 m around the foot of every container stack, warehouse and crane leg, the way
+   real corners gather shade. One draw for all of them; it fades out with the haze. On Low, where nothing casts a shadow, it is what seats them. ---- */
+function contactShade(){const seen=new Set();for(const a of VEG.cols.values())for(const c of a)if(c.b&&Math.abs(c.y0-hgt(c.x,c.z))<.4)seen.add(c);const n=seen.size;if(!n)return;
+  const base=new THREE.PlaneGeometry(2,2);base.rotateX(-Math.PI/2);const g=new THREE.InstancedBufferGeometry();g.index=base.index;g.setAttribute('position',base.attributes.position);
+  const iB=new Float32Array(n*4),iY=new Float32Array(n);let i=0;for(const c of seen){iB.set([c.x,c.z,(c.x1-c.x0)/2,(c.z1-c.z0)/2],i*4);iY[i++]=c.y0;}
+  g.setAttribute('iB',new THREE.InstancedBufferAttribute(iB,4));g.setAttribute('iY',new THREE.InstancedBufferAttribute(iY,1));g.instanceCount=n;
+  const m=new THREE.ShaderMaterial({transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3,uniforms:{uFog:{value:new THREE.Vector2(30,160)}},
+    vertexShader:`attribute vec4 iB;attribute float iY;varying vec2 vL,vH;varying float vD;
+      void main(){vH=iB.zw;vL=position.xz*(iB.zw+1.8);vec4 mv=viewMatrix*vec4(iB.x+vL.x,iY+.05,iB.y+vL.y,1.);vD=-mv.z;gl_Position=projectionMatrix*mv;}`,
+    fragmentShader:`uniform vec2 uFog;varying vec2 vL,vH;varying float vD;
+      void main(){float d=length(max(abs(vL)-vH,0.)),a=1.-smoothstep(0.,1.8,d);gl_FragColor=vec4(0.,0.,0.,a*a*.5*(1.-smoothstep(uFog.x,uFog.y,vD)));}`});
+  const mesh=new THREE.Mesh(g,m);mesh.frustumCulled=false;mesh.renderOrder=1;mesh.onBeforeRender=()=>m.uniforms.uFog.value.set(S.fog.near,S.fog.far);S.add(mesh);}
 /* ---- Low draws no cast shadows, so the Wraith and the machines looked as if they floated. On Low each gets a soft dark patch on the ground
    under it, laid along the slope: one small draw for all of them. It shrinks as the Wraith rises on its jets. ---- */
 const BLOB={im:null,max:40,up:new THREE.Vector3(0,1,0)};
@@ -1865,7 +1891,7 @@ noise(x,z,k,kind){if(!FNL.ready||kind==='step')return;
    Shading is baked into the vertex colours. */
 const MT={};
 function mechMats(){
-  const k=(a,w)=>{a.vertexColors=true;return hookWorld(a,{wear:w});};
+  const k=(a,w)=>{a.vertexColors=true;return hookWorld(a,{wear:w,rim:1});};
   MT.org=k(new THREE.MeshStandardMaterial({map:tex('22-howler-armour'),normalMap:nmap('22-howler-armour'),normalScale:new THREE.Vector2(nmapK('22-howler-armour'),nmapK('22-howler-armour')),roughness:.46,metalness:.35}),1);
   MT.grey=k(new THREE.MeshStandardMaterial({map:tex('23-grey-armour'),normalMap:nmap('23-grey-armour'),normalScale:new THREE.Vector2(nmapK('23-grey-armour'),nmapK('23-grey-armour')),roughness:.5,metalness:.45}),1);
   MT.gun=k(new THREE.MeshStandardMaterial({map:tex('24-gunmetal'),normalMap:nmap('24-gunmetal'),normalScale:new THREE.Vector2(nmapK('24-gunmetal'),nmapK('24-gunmetal')),color:0xb4bac4,roughness:.44,metalness:.72}));
@@ -1944,10 +1970,10 @@ const TEXC={};
 function k4tex(url,lin){const key=url+(lin?'|lin':'');if(TEXC[key])return TEXC[key];const t=new THREE.TextureLoader(LM).load(url);t.flipY=false;t.colorSpace=lin?THREE.NoColorSpace:THREE.SRGBColorSpace;t.anisotropy=4;return TEXC[key]=t;}
 function k4lin(url){return k4tex(url,true);}
 /* one material per model: the print (full) or the baked maps (combat) */
-function kitMat(f,world){const key=f.map+(world?'w':'');if(KMAT[key])return KMAT[key];
+function kitMat(f,world,eyes){const key=f.map+(world?'w':'')+(eyes?'e':'');if(KMAT[key])return KMAT[key];
   const m=f.nrm?new THREE.MeshStandardMaterial({map:k4tex(f.map),normalMap:k4lin(f.nrm),roughnessMap:k4lin(f.orm),metalnessMap:k4lin(f.orm),roughness:1,metalness:1})
                :new THREE.MeshStandardMaterial({map:k4tex(f.map),roughness:.62,metalness:.18});
-  return KMAT[key]=world?hookWorld(m):m;}
+  return KMAT[key]=world?hookWorld(m,{rim:1,eyes:eyes?1:0}):m;}
 function dressModel(sc,mat){sc.traverse(o=>{if(o.isMesh){o.material=mat;o.castShadow=o.receiveShadow=true;}});return sc;}
 /* put a kit piece on a mount: the piece's own `mount` empty lands exactly on the host's mount */
 function onMount(host,sc){sc.updateMatrixWorld(true);const mt=sc.getObjectByName('mount');
@@ -2279,6 +2305,10 @@ function sparks(x,y,z,n,col){if(n>2)part({x,y,z,vx:0,vy:0,vz:0,life:.14,s0:.7,s1
   part({x,y,z,vx:Math.cos(a)*s*Math.sqrt(1-b*b),vy:b*s+2,vz:Math.sin(a)*s*Math.sqrt(1-b*b),life:.25+Math.random()*.25,s0:.22,s1:.06,a:2,col,glow:true,drag:2,grav:12});}}
 function boom(x,y,z,k){lifeNoise(x,z,k,'boom');sBoom(k);CAMS.shake=Math.max(CAMS.shake,Math.min(.9,.7*k*12/Math.max(6,Math.hypot(x-P.x,z-P.z))));
   part({x,y,z,vx:0,vy:0,vz:0,life:.35,s0:4*k,s1:7*k,a:1.6,col:[1,.62,.28],glow:true});
+  /* round two of the look: a blast wave that races outward, and burning bits thrown up that arc back down */
+  part({x,y,z,vx:0,vy:0,vz:0,life:.3,s0:3*k,s1:14*k,a:.75,col:[1,.82,.6],glow:true,ring:true,vr:0});
+  for(let i=0,n=(QL==='low'?4:8)*k;i<n;i++){const a=Math.random()*TAU,s=(4+Math.random()*9)*Math.sqrt(k);
+    part({x,y,z,vx:Math.cos(a)*s,vy:6+Math.random()*9*Math.sqrt(k),vz:Math.sin(a)*s,life:.8+Math.random()*.8,s0:.34,s1:.1,a:2.2,col:[1,.5,.16],glow:true,drag:.5,grav:17});}
   for(let i=0;i<2;i++)part({x:x+(Math.random()-.5)*k,y:y+.3*i,z:z+(Math.random()-.5)*k,vx:0,vy:1.2,vz:0,life:.5+i*.15,s0:2.6*k,s1:(7.5+i*2)*k,a:1.5,col:[1,1,1],glow:true,img:i,vr:(Math.random()-.5)*2});
   if(y-hgt(x,z)<3.5)decal('scorch',x,z,(2.4+Math.random()*1.4)*Math.max(.8,k)*1.5,Math.random()*TAU);
   for(let i=0;i<10*k;i++){const a=Math.random()*TAU,s=2+Math.random()*5*k;part({x,y,z,vx:Math.cos(a)*s,vy:1+Math.random()*4,vz:Math.sin(a)*s,life:1.4+Math.random(),s0:1.2*k,s1:4.4*k,a:.45,col:[.32,.3,.29],drag:1.8,grav:-.6});}
@@ -2294,7 +2324,7 @@ const EDEF={
 const EN=[],EMAT={},ETPL={};
 let ENEMY_READY=false;
 function loadEnemies(){
-  const k=(a,w)=>{a.vertexColors=true;return hookWorld(a,{wear:w});};
+  const k=(a,w)=>{a.vertexColors=true;return hookWorld(a,{wear:w,rim:1});};
   EMAT.egrey=k(new THREE.MeshStandardMaterial({map:tex('23-grey-armour'),normalMap:nmap('23-grey-armour'),normalScale:new THREE.Vector2(nmapK('23-grey-armour'),nmapK('23-grey-armour')),color:0x9c8884,roughness:.5,metalness:.45}),1);
   EMAT.egun=k(new THREE.MeshStandardMaterial({map:tex('24-gunmetal'),normalMap:nmap('24-gunmetal'),normalScale:new THREE.Vector2(nmapK('24-gunmetal'),nmapK('24-gunmetal')),color:0x6c7078,roughness:.45,metalness:.7}));
   EMAT.edark=k(new THREE.MeshStandardMaterial({color:0x121316,roughness:.7,metalness:.4}));
@@ -2360,13 +2390,21 @@ function spawnSpot(){const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
     const B=BND(),dx=fx*ca-fz*sa,dz=fx*sa+fz*ca,x=clamp(P.x+dx*d,B.x0+4,B.x1-4),z=clamp(P.z+dz*d,B.z0+4,B.z1-4);
     if(Math.hypot(x-P.x,z-P.z)<35)continue;const k=navCell(x,z);if(k<0||NAV.block[k])continue;return [x,z];}
   const B=BND();return [clamp(P.x-Math.sin(P.yaw)*60,B.x0+4,B.x1-4),clamp(P.z-Math.cos(P.yaw)*60,B.z0+4,B.z1-4)];}
-function startWave(){
-  const w=WAVES[G.wave%WAVES.length];G.hpK=1+Math.floor(G.wave/WAVES.length)*.3;if(G.wave>0)addXP(100+50*G.wave,'wave');G.wave++;
-  HUD.banner('WAVE '+G.wave);briefMaybe(w,'WAVE '+G.wave);   /* IH4: an intel brief when the wave brings a machine not yet briefed (06l_brief.js) */
-  for(const id in w){const [cx,cz]=spawnSpot();BEACONS.push({x:cx,z:cz,t:1.3});
+/* Longer waves (15 Nov): a wave is three groups of its table instead of one (a boss still comes once). The next group lands when two or
+   fewer machines are left, or after 16 s, so a wave lasts about three times as long with no more machines on screen at once than before. */
+const WV={groups:3,left:0,t:0,w:null,more:0};
+function waveGroup(w,first){
+  for(const id in w){if(!first&&EDEF[id].boss)continue;const [cx,cz]=spawnSpot();BEACONS.push({x:cx,z:cz,t:1.3});
     for(let i=0;i<w[id];i++){const a=Math.random()*TAU,r=Math.random()*(id==='skitter'?6:4)+(i?2:0);let x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;
       const cl=collide(x,z,EDEF[id].r);spawnEnemy(id,cl[0],cl[1]);}}
 }
+function startWave(){
+  const w=WAVES[G.wave%WAVES.length];G.hpK=1+Math.floor(G.wave/WAVES.length)*.3;if(G.wave>0)addXP(100+50*G.wave,'wave');G.wave++;
+  HUD.banner('WAVE '+G.wave);briefMaybe(w,'WAVE '+G.wave);   /* IH4: an intel card when the wave brings a machine not yet briefed (06l_brief.js) */
+  WV.w=w;WV.left=WV.groups-1;WV.t=16;WV.more=0;for(const id in w)if(!EDEF[id].boss)WV.more+=w[id];waveGroup(w,true);
+}
+/* how many machines are still to be destroyed in this sandbox wave (alive + the groups not yet landed) */
+function waveLeft(){let n=0;for(const e of EN)if(!e.dead)n++;return n+WV.left*WV.more;}
 /* ---- damage ---- */
 function hurtEnemy(e,dmg,x,y,z){if(e.dead)return;if(e.d.armor)dmg*=e.d.armor(e,x,z);e.hp-=dmg;e.flash=1;if(e.hp<=0)killEnemy(e);}
 function killEnemy(e){e.dead=true;enemyFree(e);
@@ -2413,6 +2451,10 @@ function updEnemies(dt){
   for(const e of EN){if(e.dead)continue;alive++;
     if(e.spawnT>0){e.spawnT-=dt;if(e.spawnT<=0){e.o.visible=true;dustPuff(e.x,e.z,8,e.d.r*.8);}continue;}
     e.t+=dt;e.cd-=dt*DK.rate;e.flash=Math.max(0,e.flash-dt*7);e.mat.emissive.setRGB(e.flash*1.4,e.flash*.5,e.flash*.3);
+    /* a machine below 40 % trails dark smoke and throws the odd spark, so you can see which one is nearly done */
+    if(e.hp<(e.hp0||(e.hp0=e.hp))*.4&&Math.random()<dt*(QL==='low'?3:7)){const r=e.d.r,hy=e.y+e.d.cy*1.25;
+      part({x:e.x+(Math.random()-.5)*r,y:hy,z:e.z+(Math.random()-.5)*r,vx:(Math.random()-.5)*1.2,vy:2+Math.random()*1.6,vz:(Math.random()-.5)*1.2,life:1+Math.random()*.7,s0:.5+r*.3,s1:1.6+r*.9,a:.4,col:[.15,.14,.14],drag:.7,grav:-.9});
+      if(Math.random()<.22)sparks(e.x+(Math.random()-.5)*r,hy-.3,e.z+(Math.random()-.5)*r,2,[1,.6,.25]);}
     const dx=P.x-e.x,dz=P.z-e.z,dist=Math.hypot(dx,dz)||1,face=Math.atan2(-dx,-dz);let mvx=0,mvz=0,sp=e.d.speed,want=face;
     const tg=truckGoal(e,dist);
     if(tg){mvx=tg[0];mvz=tg[1];sp=tg[2];if(sp)want=Math.atan2(-mvx,-mvz);}
@@ -2455,7 +2497,9 @@ function updEnemies(dt){
     poseEnemy(e,dt,Math.hypot(e.vx,e.vz));
   }
   for(let i=EN.length-1;i>=0;i--)if(EN[i].dead)EN.splice(i,1);
-  if(G.mode==='play'&&!P.dead&&!MISSION){if(alive===0&&BEACONS.length===0){G.breakT-=dt;if(G.breakT<=0){startWave();G.breakT=4;}}}
+  if(G.mode==='play'&&!P.dead&&!MISSION){
+    if(WV.left>0){WV.t-=dt;if(BEACONS.length===0&&(alive<=2||WV.t<=0)){WV.left--;WV.t=16;waveGroup(WV.w,false);if(WV.left===0)HUD.msg('LAST GROUP',1.4);}}
+    else if(alive===0&&BEACONS.length===0){G.breakT-=dt;if(G.breakT<=0){startWave();G.breakT=4;}}}
 }
 function poseEnemy(e,dt,sp){
   e.o.position.set(e.x,e.y,e.z);e.o.rotation.y=e.yaw;e.phase+=dt*(1.2+sp*(e.id==='skitter'?.9:e.id==='hound'?.42:.5));const ph=e.phase;
@@ -2724,7 +2768,7 @@ function loadSet6(){const L=new THREE.GLTFLoader(LM),get=f=>new Promise(ok=>L.lo
     if(t){const red=new THREE.MeshBasicMaterial({color:new THREE.Color(1,.1,.05).multiplyScalar(3)});
       t.traverse(o=>{if(o.isMesh){const n=o.material.name;o.material=n==='red'?red:MT[MECH_MAT[n]||n]||MT.gun;o.castShadow=n!=='eye'&&n!=='glow'&&n!=='red';o.receiveShadow=true;}});mergeParts(t,o=>/^(ty|hub)\d/.test(o.name));TRUCK_TPL=t;}
     if(b){/* the boss gets lighter, less metallic armour than the small machines so its shape reads from far away, and a deeper red so the knees read as red */
-      const k=(m,w)=>{m.vertexColors=true;return hookWorld(m,{wear:w});};
+      const k=(m,w)=>{m.vertexColors=true;return hookWorld(m,{wear:w,rim:1});};
       BMAT.egrey=k(new THREE.MeshStandardMaterial({map:tex('54-forge-armour'),normalMap:nmap('54-forge-armour'),normalScale:new THREE.Vector2(nmapK('54-forge-armour'),nmapK('54-forge-armour')),color:0xc4b8b4,roughness:.55,metalness:.25}),1);
       BMAT.egun=k(new THREE.MeshStandardMaterial({map:tex('24-gunmetal'),normalMap:nmap('24-gunmetal'),normalScale:new THREE.Vector2(nmapK('24-gunmetal'),nmapK('24-gunmetal')),color:0x9a9ea6,roughness:.45,metalness:.45}));
       BMAT.edark=k(new THREE.MeshStandardMaterial({color:0x34363a,roughness:.65,metalness:.35}));BMAT.esteel=MT.steel;BMAT.emblem=EMAT.emblem;
@@ -3126,11 +3170,12 @@ const EW={wave:0,state:'break',t:5,boss:false,queue:[],qt:0};
 /* machines join the waves in campaign order: [type, first wave, how common] */
 const EN_ORDER=[['skitter',1,5],['hound',3,3],['gunner',5,2.2],['hornet',7,2.2],['lancer',9,1],['bulwark',11,1.1],['tank',13,.7],['mortar',15,.6]];
 function endlessWave(n){const w={},add=(id,k)=>{w[id]=(w[id]||0)+k;};
-  if(n%10===0){add('skitter',Math.min(8,2+(n/5|0)));add('hound',Math.min(4,n/10|0));return w;}
+  /* longer waves (15 Nov): about 1.75 times as many machines in every wave; they still arrive in groups of 6, and a new group waits until 12 or fewer are left (endlessStep) */
+  if(n%10===0){add('skitter',Math.min(14,4+2*(n/5|0)));add('hound',Math.min(8,2*(n/10|0)));return w;}
   /* IH4: each heavy wave also brings one of the FORGE bosses, in turn: wave 5 Alpha Hound, 15 Gunner Prime, 25 Brood Skitter, 35 Alpha Hound ... */
   if(n%5===0)add(['ahound','gprime','brood'][((n/5|0)-1)/2%3|0],1);
-  if(n%5===0){add('gunner',2+(n/10|0));add('hound',2);if(n>=11)add('bulwark',1+(n/20|0));if(n>=13)add('tank',1+(n/25|0));else add('gunner',1);return w;}
-  const pool=EN_ORDER.filter(t=>n>=t[1]),tot=pool.reduce((a,t)=>a+t[2],0),count=Math.min(24,3+n);
+  if(n%5===0){add('gunner',4+2*(n/10|0));add('hound',4);if(n>=11)add('bulwark',2+(n/20|0));if(n>=13)add('tank',1+(n/25|0));else add('gunner',1);return w;}
+  const pool=EN_ORDER.filter(t=>n>=t[1]),tot=pool.reduce((a,t)=>a+t[2],0),count=Math.min(40,5+Math.round(n*1.8));
   for(let i=0;i<count;i++){let r=Math.random()*tot;for(const t of pool){r-=t[2];if(r<=0){add(t[0],1);break;}}}
   return w;}
 function endlessBegin(){MS.repairs=0;Object.assign(EW,{wave:0,state:'break',t:6,boss:false,queue:[],qt:0});DIFF.dmg=.9;DIFF.hp=1;G.hpK=1;
@@ -3148,7 +3193,7 @@ function aliveN(){let n=0;for(const e of EN)if(!e.dead)n++;return n;}
 function endlessStep(s,dt){const alive=aliveN();
   if(EW.state==='break'){EW.t-=dt;if(EW.t<=0)startEWave();return {txt:'WAVE '+(EW.wave+1)+' IN '+Math.max(1,Math.ceil(EW.t)),ok:false,pos:null};}
   let bossPos=null;if(EW.boss&&BOSS.o){const r=BOSS_DEF[MISSION.boss].step(s,dt);bossPos=r.pos;if(BOSS.dead&&BOSS.deadT>2.5){EW.boss=false;addScore(3000);}}
-  if(EW.queue.length&&(EW.qt-=dt)<=0){EW.qt=7;const g=EW.queue.shift(),q=spawnSpot();for(const id in g)EW.qn-=g[id];spawnGroup(g,q[0],q[1],[0,10]);}
+  if(EW.queue.length&&(EW.qt-=dt)<=0&&alive<=12){EW.qt=7;const g=EW.queue.shift(),q=spawnSpot();for(const id in g)EW.qn-=g[id];spawnGroup(g,q[0],q[1],[0,10]);}
   const left=alive+(EW.queue.length?EW.qn:0);   /* machines still to come are counted as the groups leave the queue */
   if(!left&&!EW.boss){addScore(EW.wave*200);EW.state='break';EW.t=8;HUD.banner('WAVE '+EW.wave+' CLEARED');sPickup();
     const f=fwdOf(P.yaw),dx=P.x+f[0]*9,dz=P.z+f[1]*9;dropPickup(dx-2,dz,'repair');dropPickup(dx+2,dz,'shield');if(EW.wave%3===0)dropPickup(dx,dz+2,'chip');
@@ -3297,7 +3342,7 @@ function bayInput(){const pts=new Map();let pd=0,down=null;
     if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)<10&&performance.now()-down.t<400)bayTap(e.clientX,e.clientY);down=null;};
   addEventListener('pointerup',up);addEventListener('pointercancel',up);
   cv.addEventListener('wheel',e=>{if(BAY.open)BAY.want.d=clamp(BAY.want.d*(1+e.deltaY*.001),3,24);},{passive:true});
-  $('baydone').onclick=e=>{e.stopPropagation();if(BAY.mode==='brief')briefDone();else{if(BAY.mode==='book')viewClose();closeBay();}};$('bayup').onclick=e=>{e.stopPropagation();hangar();};
+  $('baydone').onclick=e=>{e.stopPropagation();if(BAY.mode==='book')viewClose();closeBay();};$('bayup').onclick=e=>{e.stopPropagation();hangar();};
   $('hback').addEventListener('click',()=>{if(BAY.open)bayUI();});}
 function bayTap(x,y){const v=new THREE.Vector3(),r=cv.getBoundingClientRect();let best=null,bd=46;
   for(const s in BAY.marks){const m=BAY.marks[s];if(!m.visible)continue;v.copy(m.position).project(BAY.cam);
@@ -3345,7 +3390,7 @@ EDEF.brood=Object.assign({},EDEF.skitter,{hp:900,score:2500,drop:1,scrap:250,sc:
   init(e,N){skInit(e,N);broodPod(e);e.id='skitter';bossBanner(e);e.spawnCd=4;},dress:e=>tintMat(e,'brood'),pose:broodPose});
 /* the sandbox and Endless waves: after Ironhowl 3's six, a boss wave each */
 WAVES.push({ahound:1,hound:2},{gprime:1,skitter:4},{brood:1,hound:1});
-function f4load(id){const d=EDEF[id],[dir,stem]=d.m4,f=kitFiles(dir,stem,false);d.amat=kitMat(f,true);if(id==='skitter')spodModel().catch(()=>{});   /* the pod model loads with the machines, not when the first pod appears */
+function f4load(id){const d=EDEF[id],[dir,stem]=d.m4,f=kitFiles(dir,stem,false);d.amat=kitMat(f,true,true);if(id==='skitter')spodModel().catch(()=>{});   /* the pod model loads with the machines, not when the first pod appears */
   
   return loadGLB(f.glb).then(sc=>{dressModel(sc,d.amat);ETPL[id]=sc;sc.updateMatrixWorld(true);
     const J={};sc.traverse(o=>{if(o.name)J[o.name]=J[o.name]||o;});
@@ -3640,9 +3685,8 @@ if(DEV){const I=window.__ih4||(window.__ih4={});Object.assign(I,{DR,LANCE,ARCW,K
 /* ===================== Ironhowl 4: the intel brief and the armory book (session 4) =====================
    Both use the modification bay's room (06i_bay.js): the same lights, floor, camera and touch controls (drag to turn,
    pinch or wheel to zoom), with a model on the stage instead of the Wraith.
-   INTEL BRIEF: before a run, and later in a run when a wave brings a machine you haven't been briefed on (every boss),
-     the game stops and shows the machines headed your way: a chip for each kind with how many are coming, the full-detail
-     model turning, and its card. No timer: DEPLOY starts the fight.
+   INTEL CARD (was the intel brief): before a run, and later in a run when a wave brings a machine you haven't met (every boss),
+     a small card comes up on the HUD with the machine's field model turning, how many are coming and a tip. The game keeps going.
    ARMORY BOOK (title screen): a card for every kit piece (locked ones say the pilot level that opens them) and for every
      machine; a machine's card is filled in the first time you destroy one, until then it stands as a dark shape.
    Full-detail models load in the background: the combat model shows at once, the full one replaces it when it arrives
@@ -3724,28 +3768,63 @@ function viewClose(){STG.seq++;stageClear();STG.id=null;STG.dark=undefined;   /*
   if(STG.grp)STG.grp.visible=false;if(BAY.W)BAY.W.root.visible=true;$('bayup').style.display='';$('baydone').textContent='DONE';BAY.mode='bay';}
 
 /* ---------- intel brief ---------- */
-const BRF={list:[],sel:0,sub:'',done:null};
-/* comp: {machine id: how many}. Returns true if a brief opened. */
-function briefMaybe(comp,label,force){if(G.mode!=='play'||BAY.open)return false;const ids=Object.keys(comp).filter(id=>comp[id]>0&&FOE_INFO[id]);
+/* INTEL CARD (15 Nov; Christopher: "its field model, not the heavy version, so it can pop up as a heads-up display and not a new window").
+   The brief no longer stops the game or opens the bay's room. A small card slides onto the HUD, under the health bars: the machine's own
+   field (combat) model turning in a little window, its name, how many are coming, its hit points and one tip. New machines stay 5 s
+   (a boss 6.5 s), ones already met 2.6 s; several queue up one after another. Nothing is downloaded: the field model is already loaded.
+   The model is the same one that walks the map, lit by the same sun. It lives in the game's own scene on its own layer and is drawn into
+   the card's window after the picture is finished, so it costs one small extra draw of one machine, only while a card is showing. */
+const FC={q:[],cur:null,t:0,piv:null,obj:null,mat:null,cam:null,rect:null,ready:false,seq:0,col:new THREE.Color()};
+function foeClear(){FC.q.length=0;foeHide();}
+function foeHide(){FC.seq++;FC.cur=null;FC.ready=false;const el=$('foe');if(el)el.classList.remove('on');
+  if(FC.obj){FC.piv.remove(FC.obj);if(FC.mat)FC.mat.dispose();FC.obj=FC.mat=null;}}   /* the shapes are the field machines' own: only this copy's material goes */
+function foeLayers(){if(FC.piv)FC.piv.traverse(o=>o.layers.set(1));}
+/* a copy of the field model, dressed like the one that walks the map (bosses included, without their banner) */
+function foeModel(id){if(id==='spod')return spodModel().then(p=>({o:p,mat:null}));
+  const tp=ETPL[id],d=EDEF[id];if(!tp||!d)return Promise.reject(new Error('no field model for '+id));
+  const o=tp.clone(true),base=d.amat;let mat=null;
+  if(base){mat=base.clone();mat.onBeforeCompile=base.onBeforeCompile;mat.customProgramCacheKey=base.customProgramCacheKey;o.traverse(m=>{if(m.isMesh&&m.material===base)m.material=mat;});stageDress(id,o,mat,false);}
+  return Promise.resolve({o,mat});}
+function foeShow(it){const seq=++FC.seq,I=FOE_INFO[it.id],d=EDEF[it.id]||{},boss=!!(d.boss);FC.cur=it;FC.t=it.fresh?(boss?6.5:5):2.6;FC.ready=false;
+  if(!FC.cam){FC.cam=new THREE.PerspectiveCamera(30,1,.5,60);FC.cam.layers.set(1);FC.piv=new THREE.Group();FC.piv.position.set(0,-600,0);S.add(FC.piv);
+    FC.cam.position.set(0,-598.6,9.6);FC.cam.lookAt(0,-600,0);FC.cam.updateMatrixWorld();}
+  S.traverse(o=>{if(o.isLight)o.layers.enable(1);});   /* the same lights as the field, so the model needs no new kind of shader */
+  const hp=I.hp||d.hp;$('foen').textContent=I.name;$('foec').textContent=I.cls;$('foes').textContent=(it.n>1?it.n+' COMING':it.n===1?'1 COMING':'')+(hp?(it.n?' · ':'')+hp.toLocaleString('en-US')+' HP':'');$('foet').textContent=I.tip;
+  const el=$('foe');el.className=(boss?'boss ':'')+(it.fresh?'':'old ');
+  foeModel(it.id).then(({o,mat})=>{if(seq!==FC.seq){if(mat)mat.dispose();return;}
+    if(FC.obj){FC.piv.remove(FC.obj);if(FC.mat)FC.mat.dispose();}
+    o.position.set(0,0,0);o.rotation.set(0,0,0);o.scale.setScalar(1);o.visible=true;o.updateMatrixWorld(true);
+    const b=new THREE.Box3().setFromObject(o),sz=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3()),k=Math.min(4.5/Math.max(sz.y,.01),5.1/Math.max(Math.hypot(sz.x,sz.z),.01));   /* fits the window at every angle as it turns */
+    o.scale.setScalar(k);o.position.set(-c.x*k,-c.y*k,-c.z*k);FC.obj=o;FC.mat=mat;FC.piv.add(o);FC.piv.rotation.y=.7;foeLayers();
+    const go=()=>{if(seq!==FC.seq)return;FC.ready=true;foeRect();el.classList.add('on');if(boss)sBriefBoss();else if(it.fresh)sClick();};
+    /* its shader for the window is built in the background where the browser can, so the card does not make the game hitch */
+    let done=false;const once=()=>{if(!done){done=true;go();}};setTimeout(once,700);
+    try{R.setRenderTarget(null);const p=R.compileAsync&&R.extensions.has('KHR_parallel_shader_compile')&&R.compileAsync(FC.piv,FC.cam,S);if(p&&p.then)p.then(once,once);else once();}catch(e){once();}
+  }).catch(err=>{console.warn('intel card',it.id,err);if(seq===FC.seq){FC.cur=null;}});}
+function foeRect(){const r=$('foewin').getBoundingClientRect();FC.rect=[r.left,innerHeight-r.bottom,r.width,r.height];}
+addEventListener('resize',()=>{if(FC.cur)setTimeout(foeRect,60);});
+/* every frame of play: turn the model, time the card, bring on the next */
+function foeTick(dt){if(G.mode!=='play'){if(FC.cur||FC.q.length)foeClear();return;}if(G.paused)return;
+  if(FC.cur){if(FC.ready){FC.t-=dt;FC.piv.rotation.y+=dt*.75;if(FC.t>5.5||FC.t<.2&&FC.t>0)foeLayers();}   /* a Brood's pod joins a moment later: keep it on the window's layer */
+    if(FC.t<=0)foeHide();}
+  else if(FC.q.length)foeShow(FC.q.shift());}
+/* drawn after the finished picture, straight into the card's window */
+function foeDraw(){if(!FC.cur||!FC.ready||!FC.obj||!FC.rect||BAY.open)return;const [x,y,w,h]=FC.rect;if(w<8||h<8)return;
+  const au=R.shadowMap.autoUpdate,ac=R.autoClear,a=R.getClearAlpha();R.getClearColor(FC.col);
+  R.setRenderTarget(null);R.setViewport(x,y,w,h);R.setScissor(x,y,w,h);R.setScissorTest(true);R.setClearColor(0x0a0c0f,1);R.clear(true,true,false);
+  R.shadowMap.autoUpdate=false;R.autoClear=false;R.render(S,FC.cam);
+  R.shadowMap.autoUpdate=au;R.autoClear=ac;R.setClearColor(FC.col,a);R.setScissorTest(false);R.setViewport(0,0,innerWidth,innerHeight);}
+/* comp: {machine id: how many}. Queues an intel card for each machine not yet met in this run (force: for every machine). Returns true if any were queued. */
+function briefMaybe(comp,label,force){if(G.mode!=='play')return false;const ids=Object.keys(comp).filter(id=>comp[id]>0&&FOE_INFO[id]);
   const fresh=ids.filter(id=>!RUNSEEN.has(id));if(!fresh.length&&!force)return false;ids.forEach(id=>RUNSEEN.add(id));
-  const list=ids.map(id=>({id,n:comp[id],fresh:fresh.includes(id)})).sort((a,b)=>FOE_ORDER.indexOf(a.id)-FOE_ORDER.indexOf(b.id));
-  const tot=list.reduce((a,q)=>a+q.n,0);BRF.list=list;BRF.sel=Math.max(0,list.findIndex(q=>q.fresh));
-  const fn=list.filter(q=>q.fresh&&EDEF[q.id]&&EDEF[q.id].boss).map(q=>FOE_INFO[q.id].name);BRF.after=fn[0]||label||'';
-  BRF.sub=(label?label+' · ':'')+(fn.length?fn.join(', ')+' INBOUND':tot+(tot===1?' MACHINE':' MACHINES')+' HEADED YOUR WAY');
-  viewOpen('brief');$('bayname').querySelector('b').textContent='INTEL BRIEF';$('baydone').textContent='DEPLOY';
-  if(fn.length)sBriefBoss();else sClick();briefUI();return true;}
-function briefSub(){if(!BAY.open)return;if(BAY.mode==='brief')$('baysub').textContent=BRF.sub+(STG.pct>=0?' · FULL DETAIL '+STG.pct+'%':'');
-  else if(BAY.mode==='book')$('baysub').textContent=BOOK.sub+(STG.pct>=0?' · FULL DETAIL '+STG.pct+'%':'');}
-function briefUI(){const L=BRF.list,q=L[BRF.sel];
-  $('bayslots').innerHTML=L.map((it,i)=>'<button data-i="'+i+'"'+(i===BRF.sel?' class="on"':'')+'>'+it.n+' × '+FOE_INFO[it.id].name+(it.fresh&&EDEF[it.id]&&EDEF[it.id].boss?' ★':'')+'</button>').join('');
-  $('bayslots').querySelectorAll('button').forEach(b=>b.onclick=e=>{e.stopPropagation();BRF.sel=+b.dataset.i;briefUI();});
-  const on=$('bayslots').querySelector('.on');if(on)on.scrollIntoView({inline:'center',block:'nearest'});
-  $('baycard').innerHTML=foeCard(q.id,q.n);if(STG.id!==q.id)stageShow(q.id,false);briefSub();}
+  const list=(force?ids:fresh).map(id=>({id,n:comp[id],fresh:fresh.includes(id)})).sort((a,b)=>FOE_ORDER.indexOf(a.id)-FOE_ORDER.indexOf(b.id));
+  for(const it of list)if(FC.q.length<8&&!(FC.cur&&FC.cur.id===it.id)&&!FC.q.some(q=>q.id===it.id))FC.q.push(it);
+  return list.length>0;}
+function briefSub(){if(BAY.open&&BAY.mode==='book')$('baysub').textContent=BOOK.sub+(STG.pct>=0?' · FULL DETAIL '+STG.pct+'%':'');}
 function foeCard(id,n){const I=FOE_INFO[id],d=EDEF[id]||{},hp=I.hp||d.hp,sp=I.speed!=null?I.speed:d.speed,scr=I.scrap!=null?I.scrap:d.scrap;
   return '<b>'+I.name+'</b><span class="role"><i class="cls">'+I.cls+'</i> '+I.fight+'</span>'+
     statRows([['HIT POINTS',(hp||0).toLocaleString('en-US')],['TOP SPEED',sp?sp+' m/s':'does not move'],['ATTACK',I.atk],['SIZE',I.size],['SCRAP',scr?scr+' a wreck':'—']].concat(n?[['COMING',n]]:[]))+
     '<span class="live">'+I.tip+'</span>';}
-function briefDone(){viewClose();closeBay();freeFull();if(!touchy&&G.mode==='play')lockMouse();if(BRF.after)HUD.banner(BRF.after);   /* the banner it covered */if(BRF.done){const f=BRF.done;BRF.done=null;f();}}
 function sBriefBoss(){thump(70,30,.6,.35,0,0);tone('sawtooth',220,110,.5,.05);}
 
 /* ---------- armory book ---------- */
@@ -4644,7 +4723,8 @@ function buildFX(){
         vec4 mv=viewMatrix*vec4(iP,1.);mv.xy+=q;gl_Position=projectionMatrix*mv;}`,
     fragmentShader:`uniform sampler2D tSmoke,tFx;varying vec2 vUv;varying vec4 vS;varying vec3 vC;
       void main(){if(vS.w<.5){float t=texture2D(tSmoke,vUv).r;float a=smoothstep(.04,.6,t)*vS.z;gl_FragColor=vec4(vC*(.6+.5*t)*a,a);}
-        else if(vS.w<1.5){float r=length(vUv-.5)*2.;float gl=pow(max(0.,1.-r),2.2);gl_FragColor=vec4(vC*gl*vS.z,0.);}
+        else if(vS.w<1.2){float r=length(vUv-.5)*2.;float gl=pow(max(0.,1.-r),2.2);gl_FragColor=vec4(vC*gl*vS.z,0.);}
+        else if(vS.w<1.5){float r=length(vUv-.5)*2.;float gl=smoothstep(.55,.84,r)*(1.-smoothstep(.86,1.,r));gl_FragColor=vec4(vC*gl*vS.z,0.);}   /* a thin bright ring: the blast wave */
         else{float t=vS.w-2.;vec2 tu=vec2((mod(t,4.)+vUv.x)*.25,1.-(floor(t/4.)+1.-vUv.y)*.5);vec3 c=texture2D(tFx,tu).rgb;
           float edge=smoothstep(.5,.42,max(abs(vUv.x-.5),abs(vUv.y-.5)));c*=edge;   /* art tiles: 0-1 explosions, 2 muzzle flash, 3 sparks add light; 4 steam blends */
           if(t>3.5){float a=smoothstep(.04,.6,dot(c,vec3(.33)))*vS.z;gl_FragColor=vec4(vC*c*a,a);}else gl_FragColor=vec4(c*vC*vS.z,0.);}
@@ -4653,7 +4733,7 @@ function buildFX(){
       }`});
   PFX.mesh=new THREE.Mesh(g,m);PFX.mesh.frustumCulled=false;PFX.mesh.renderOrder=5;S.add(PFX.mesh);
 }
-/* o: {x,y,z, vx,vy,vz, life, s0,s1 (size start/end), a (alpha), col [r,g,b], glow (bool), drag, grav, vr} */
+/* o: {x,y,z, vx,vy,vz, life, s0,s1 (size start/end), a (alpha), col [r,g,b], glow (bool), ring (bool, with glow: a thin bright ring), drag, grav, vr} */
 function part(o){o.t=0;o.rot=Math.random()*TAU;o.vr=o.vr==null?(Math.random()-.5)*1.2:o.vr;const L=PFX.list;
   if(L.length>=PFX.max)L[(PFX.ri=((PFX.ri|0)+1)%PFX.max)]=o;else L.push(o);}   /* full: this one takes an old one's place (no shifting the whole list) */
 const DUST=[.5,.43,.33],SMOKE=[.55,.55,.57];
@@ -4664,7 +4744,7 @@ function updFX(dt){
   let w=0;for(let i=0;i<L.length;i++){const p=L[i];p.t+=dt;if(p.t>=p.life)continue;L[w++]=p;   /* one pass: finished ones drop out as the list closes up */
     const dr=Math.exp(-(p.drag||0)*dt);p.vx*=dr;p.vy*=dr;p.vz*=dr;p.vy-=(p.grav||0)*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.rot+=p.vr*dt;
     const f=p.t/p.life,s=lerp(p.s0,p.s1,Math.sqrt(f)),a=p.a*(p.glow?(1-f):Math.min(1,f*6)*(1-f)*(1-f));
-    P_[n*3]=p.x;P_[n*3+1]=p.y;P_[n*3+2]=p.z;S_[n*4]=s;S_[n*4+1]=p.rot;S_[n*4+2]=a;S_[n*4+3]=p.img!=null?2+p.img:p.glow?1:0;C_[n*3]=p.col[0];C_[n*3+1]=p.col[1];C_[n*3+2]=p.col[2];n++;}
+    P_[n*3]=p.x;P_[n*3+1]=p.y;P_[n*3+2]=p.z;S_[n*4]=s;S_[n*4+1]=p.rot;S_[n*4+2]=a;S_[n*4+3]=p.img!=null?2+p.img:p.ring?1.3:p.glow?1:0;C_[n*3]=p.col[0];C_[n*3+1]=p.col[1];C_[n*3+2]=p.col[2];n++;}
   L.length=w;PFX.mesh.geometry.instanceCount=n;
   if(n)for(const A of [PFX.iP,PFX.iS,PFX.iC]){A.clearUpdateRanges();A.addUpdateRange(0,n*A.itemSize);A.needsUpdate=true;}   /* send only the part in use */
 }
@@ -4773,7 +4853,7 @@ const HUD={_c:{},
      this.set('gtier','text',(ac?'GUN '+ROMAN[GUN.tier]:'')+(ln?(ac?' · ':'')+'LANCE':'')+(ar?(ac||ln?' · ':'')+'ARC':''));}
     this.set('hov','cls',P.hovering?'on act':P.hov<.999?'on':'');this.set('hovb','width',(P.hov*100).toFixed(0)+'%');
     kitHud(dt||1/60);this.set('mslc','text','MSL '+MSL.ammo);this.set('bmsl','text','MSL '+MSL.ammo);
-    this.set('score','text',G.score.toLocaleString('en-US'));if(!MISSION)this.set('obj','text','');const cm=G.t-G.lastKill<3&&G.combo>1;this.set('combo','text',cm?'x'+Math.min(3,1+.25*(G.combo-1)).toFixed(2).replace(/\.?0+$/,''):'');
+    this.set('score','text',G.score.toLocaleString('en-US'));if(!MISSION)this.set('obj','text',G.mode==='play'&&G.wave>0&&waveLeft()>0?'WAVE '+G.wave+' · '+waveLeft()+' LEFT':'');const cm=G.t-G.lastKill<3&&G.combo>1;this.set('combo','text',cm?'x'+Math.min(3,1+.25*(G.combo-1)).toFixed(2).replace(/\.?0+$/,''):'');
     this.set('heatb','width',GUN.heat.toFixed(0)+'%');this.set('heat','cls',GUN.over?'over':GUN.heat>70?'warm':'');
     this.set('cross','cls',GUN.hitT>0?'hit':AIM.e?'on':'');
     this.set('bvent','cls','tb'+(GUN.ventCd>0?' cool':GUN.over?' hot':''));
@@ -4827,10 +4907,10 @@ function setQuality(q,dyn){QL=q;QC=QUAL[q];DYN=dyn||1;resize();setShadow();postS
 /* Low has no flash lights (the gun's and the jets'): every lit surface is then shaded for two lights fewer, on the devices that most need it. The flashes themselves still glow. */
 function lowLights(){const on=QL!=='low';if(MFL)MFL.visible=on;if(M&&M.jl)M.jl.visible=on;}
 function cycleView(){SET.view=SET.view==='close'?'far':'close';store.set('view',SET.view);HUD.view(SET.view);}
-function setPause(b){G.paused=b;HUD.menu();setVolume();if(!b&&!touchy&&G.mode==='play')lockMouse();if(b)jetLoop(0);}
+function setPause(b){G.paused=b;document.body.classList.toggle('paused',!!b);HUD.menu();setVolume();if(!b&&!touchy&&G.mode==='play')lockMouse();if(b)jetLoop(0);}
 function clearFight(){for(const e of EN)enemyFree(e);bossClearMarks();EN.length=0;BOLTS.length=EBOLTS.length=MISS.length=BEACONS.length=0;for(const p of PK)S.remove(p.g);PK.length=0;}
 function resetRun(){P=mkPlayer();CAMS.ready=false;clearFight();Object.assign(GUN,{tier:GUN.base,heat:0,over:false,cd:0,ventCd:0});MSL.ammo=12;SALVO.cd=0;SALVO.left=0;
-  Object.assign(G,{score:0,kills:0,combo:0,lastKill:-9,wave:0,hpK:1,breakT:3});if(M)M.root.visible=true;$('down').style.display='none';}
+  Object.assign(G,{score:0,kills:0,combo:0,lastKill:-9,wave:0,hpK:1,breakT:3});WV.left=0;foeClear();if(M)M.root.visible=true;$('down').style.display='none';}
 function playerDown(){if(P.dead)return;P.dead=true;P.thrust=0;boom(P.x,P.y+2.5,P.z,2);boom(P.x+1,P.y+3.5,P.z-1,1.2);if(M)M.root.visible=false;
   G.mode='down';G.downT=2.4;
   if(MISSION){const can=missionDown();$('dscore').textContent=can?'REPAIRS LEFT '+MS.repairs:'NO REPAIRS LEFT';$('dgo').textContent=can?'TAP TO REPAIR AT THE CHECKPOINT':'';if(!can)G.downT=99;return;}
@@ -4862,7 +4942,7 @@ function jetFX(dt){if(P.thrust<.05)return;for(const J of M.jets){J.n.getWorldPos
   const k=P.thrust;if(Math.random()<k*dt*60)part({x:_np.x,y:_np.y-.4,z:_np.z,vx:(Math.random()-.5)*2,vy:-6-Math.random()*4,vz:(Math.random()-.5)*2,life:.25+Math.random()*.15,s0:.9,s1:.35,a:1.4*k,col:[1,.55,.22],glow:true,drag:2});
   if(Math.random()<k*dt*30)part({x:_np.x,y:_np.y-.6,z:_np.z,vx:(Math.random()-.5)*1.5,vy:-3-Math.random()*2,vz:(Math.random()-.5)*1.5,life:1.2+Math.random()*.8,s0:.8,s1:3.4,a:.3,col:SMOKE,drag:1.6,grav:-.6});}}
 function tick(dt){
-  G.t+=dt;U.uTime.value=G.t;if(MAPDEF.tick)MAPDEF.tick(dt);lifeTick(dt);updRain(dt);updWeather(dt);updShieldFx(dt);updBlobs();if(G.mode==='play')updMarks(dt);if(RING)RING.position.set(cam.position.x,cam.position.y+RING.userData.lift,cam.position.z);
+  G.t+=dt;U.uTime.value=G.t;if(MAPDEF.tick)MAPDEF.tick(dt);lifeTick(dt);updRain(dt);updWeather(dt);updShieldFx(dt);updBlobs();foeTick(dt);if(G.mode==='play')updMarks(dt);if(RING)RING.position.set(cam.position.x,cam.position.y+RING.userData.lift,cam.position.z);
   /* the clouds drift; their shadows slide over the ground with them */
   U.uCloudOff.value.x-=dt*.00165;U.uCloudOff.value.y-=dt*.0006;   /* minus: the shadows then travel toward +x, with the wind */
   const live=(G.mode==='play'||G.mode==='demo')&&!G.paused;
@@ -4909,11 +4989,11 @@ function frame(now){
   if(DEV&&window.__hold){requestAnimationFrame(frame);return;}   /* tests: the clip recorder steps and draws the game itself (look.py clip:) */
   if(STY.open){storyFrame(dt);requestAnimationFrame(frame);return;}   /* IH4: a story scene covers the screen: the game waits */
   if(BAY.open){bayFrame(dt);requestAnimationFrame(frame);return;}
-  if(!(DEV&&window.__freeze))tick(dt);autoQ(dt);renderFrame();if(SET.fps&&(G.fpsT=(G.fpsT||0)-raw)<=0){G.fpsT=.5;$('fps').textContent=Math.round(1/Math.max(.001,G.fdt))+' FPS · '+QL.toUpperCase();}HUD.dev();requestAnimationFrame(frame);
+  if(!(DEV&&window.__freeze))tick(dt);autoQ(dt);renderFrame();foeDraw();if(SET.fps&&(G.fpsT=(G.fpsT||0)-raw)<=0){G.fpsT=.5;$('fps').textContent=Math.round(1/Math.max(.001,G.fdt))+' FPS · '+QL.toUpperCase();}HUD.dev();requestAnimationFrame(frame);
 }
 function boot(){
   pickMap();setupHud();setQuality(QL,SET.quality==='auto'&&AQ.q&&AQ.d>=.5?Math.min(1,AQ.d):1);const LK=MISSION&&MISSION.look?Object.assign({},MAPDEF.look,MISSION.look):MAPDEF.look;NIGHT_ON=!!LK.night;applyLook(LK);buildEnv(LK);setupTitle();U.tCloud.value=tex('34-fog',{srgb:false});
-  buildGround();const before=new Set(S.children);MAPDEF.build();mergeStatic(before);if(MAPDEF.dress&&!Q.has('nodress'))MAPDEF.dress();M=buildMech();buildFX();buildWeapons();P=mkPlayer();
+  buildGround();const before=new Set(S.children);MAPDEF.build();mergeStatic(before);if(MAPID==='docks')contactShade();if(MAPDEF.dress&&!Q.has('nodress'))MAPDEF.dress();M=buildMech();buildFX();buildWeapons();P=mkPlayer();
   let readySent=false;   /* textures loaded later (decals, effects) fire onLoad again: say ready only once */
   const done=()=>{if(readySent)return;readySent=true;G.mode=G.mode==='load'?'title':G.mode;$('load').style.display='none';$('title').style.display=G.mode==='title'?'flex':'none';document.title='IRONHOWL 4';ARC.post('ready',{title:ARC.title});};
   let vegDone=false,texDone=false;LM.onLoad=()=>{texDone=true;if(vegDone)done();};

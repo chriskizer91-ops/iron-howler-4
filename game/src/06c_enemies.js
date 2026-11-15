@@ -6,7 +6,7 @@ const EDEF={
 const EN=[],EMAT={},ETPL={};
 let ENEMY_READY=false;
 function loadEnemies(){
-  const k=(a,w)=>{a.vertexColors=true;return hookWorld(a,{wear:w});};
+  const k=(a,w)=>{a.vertexColors=true;return hookWorld(a,{wear:w,rim:1});};
   EMAT.egrey=k(new THREE.MeshStandardMaterial({map:tex('23-grey-armour'),normalMap:nmap('23-grey-armour'),normalScale:new THREE.Vector2(nmapK('23-grey-armour'),nmapK('23-grey-armour')),color:0x9c8884,roughness:.5,metalness:.45}),1);
   EMAT.egun=k(new THREE.MeshStandardMaterial({map:tex('24-gunmetal'),normalMap:nmap('24-gunmetal'),normalScale:new THREE.Vector2(nmapK('24-gunmetal'),nmapK('24-gunmetal')),color:0x6c7078,roughness:.45,metalness:.7}));
   EMAT.edark=k(new THREE.MeshStandardMaterial({color:0x121316,roughness:.7,metalness:.4}));
@@ -72,13 +72,21 @@ function spawnSpot(){const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
     const B=BND(),dx=fx*ca-fz*sa,dz=fx*sa+fz*ca,x=clamp(P.x+dx*d,B.x0+4,B.x1-4),z=clamp(P.z+dz*d,B.z0+4,B.z1-4);
     if(Math.hypot(x-P.x,z-P.z)<35)continue;const k=navCell(x,z);if(k<0||NAV.block[k])continue;return [x,z];}
   const B=BND();return [clamp(P.x-Math.sin(P.yaw)*60,B.x0+4,B.x1-4),clamp(P.z-Math.cos(P.yaw)*60,B.z0+4,B.z1-4)];}
-function startWave(){
-  const w=WAVES[G.wave%WAVES.length];G.hpK=1+Math.floor(G.wave/WAVES.length)*.3;if(G.wave>0)addXP(100+50*G.wave,'wave');G.wave++;
-  HUD.banner('WAVE '+G.wave);briefMaybe(w,'WAVE '+G.wave);   /* IH4: an intel brief when the wave brings a machine not yet briefed (06l_brief.js) */
-  for(const id in w){const [cx,cz]=spawnSpot();BEACONS.push({x:cx,z:cz,t:1.3});
+/* Longer waves (15 Nov): a wave is three groups of its table instead of one (a boss still comes once). The next group lands when two or
+   fewer machines are left, or after 16 s, so a wave lasts about three times as long with no more machines on screen at once than before. */
+const WV={groups:3,left:0,t:0,w:null,more:0};
+function waveGroup(w,first){
+  for(const id in w){if(!first&&EDEF[id].boss)continue;const [cx,cz]=spawnSpot();BEACONS.push({x:cx,z:cz,t:1.3});
     for(let i=0;i<w[id];i++){const a=Math.random()*TAU,r=Math.random()*(id==='skitter'?6:4)+(i?2:0);let x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;
       const cl=collide(x,z,EDEF[id].r);spawnEnemy(id,cl[0],cl[1]);}}
 }
+function startWave(){
+  const w=WAVES[G.wave%WAVES.length];G.hpK=1+Math.floor(G.wave/WAVES.length)*.3;if(G.wave>0)addXP(100+50*G.wave,'wave');G.wave++;
+  HUD.banner('WAVE '+G.wave);briefMaybe(w,'WAVE '+G.wave);   /* IH4: an intel card when the wave brings a machine not yet briefed (06l_brief.js) */
+  WV.w=w;WV.left=WV.groups-1;WV.t=16;WV.more=0;for(const id in w)if(!EDEF[id].boss)WV.more+=w[id];waveGroup(w,true);
+}
+/* how many machines are still to be destroyed in this sandbox wave (alive + the groups not yet landed) */
+function waveLeft(){let n=0;for(const e of EN)if(!e.dead)n++;return n+WV.left*WV.more;}
 /* ---- damage ---- */
 function hurtEnemy(e,dmg,x,y,z){if(e.dead)return;if(e.d.armor)dmg*=e.d.armor(e,x,z);e.hp-=dmg;e.flash=1;if(e.hp<=0)killEnemy(e);}
 function killEnemy(e){e.dead=true;enemyFree(e);
@@ -125,6 +133,10 @@ function updEnemies(dt){
   for(const e of EN){if(e.dead)continue;alive++;
     if(e.spawnT>0){e.spawnT-=dt;if(e.spawnT<=0){e.o.visible=true;dustPuff(e.x,e.z,8,e.d.r*.8);}continue;}
     e.t+=dt;e.cd-=dt*DK.rate;e.flash=Math.max(0,e.flash-dt*7);e.mat.emissive.setRGB(e.flash*1.4,e.flash*.5,e.flash*.3);
+    /* a machine below 40 % trails dark smoke and throws the odd spark, so you can see which one is nearly done */
+    if(e.hp<(e.hp0||(e.hp0=e.hp))*.4&&Math.random()<dt*(QL==='low'?3:7)){const r=e.d.r,hy=e.y+e.d.cy*1.25;
+      part({x:e.x+(Math.random()-.5)*r,y:hy,z:e.z+(Math.random()-.5)*r,vx:(Math.random()-.5)*1.2,vy:2+Math.random()*1.6,vz:(Math.random()-.5)*1.2,life:1+Math.random()*.7,s0:.5+r*.3,s1:1.6+r*.9,a:.4,col:[.15,.14,.14],drag:.7,grav:-.9});
+      if(Math.random()<.22)sparks(e.x+(Math.random()-.5)*r,hy-.3,e.z+(Math.random()-.5)*r,2,[1,.6,.25]);}
     const dx=P.x-e.x,dz=P.z-e.z,dist=Math.hypot(dx,dz)||1,face=Math.atan2(-dx,-dz);let mvx=0,mvz=0,sp=e.d.speed,want=face;
     const tg=truckGoal(e,dist);
     if(tg){mvx=tg[0];mvz=tg[1];sp=tg[2];if(sp)want=Math.atan2(-mvx,-mvz);}
@@ -167,7 +179,9 @@ function updEnemies(dt){
     poseEnemy(e,dt,Math.hypot(e.vx,e.vz));
   }
   for(let i=EN.length-1;i>=0;i--)if(EN[i].dead)EN.splice(i,1);
-  if(G.mode==='play'&&!P.dead&&!MISSION){if(alive===0&&BEACONS.length===0){G.breakT-=dt;if(G.breakT<=0){startWave();G.breakT=4;}}}
+  if(G.mode==='play'&&!P.dead&&!MISSION){
+    if(WV.left>0){WV.t-=dt;if(BEACONS.length===0&&(alive<=2||WV.t<=0)){WV.left--;WV.t=16;waveGroup(WV.w,false);if(WV.left===0)HUD.msg('LAST GROUP',1.4);}}
+    else if(alive===0&&BEACONS.length===0){G.breakT-=dt;if(G.breakT<=0){startWave();G.breakT=4;}}}
 }
 function poseEnemy(e,dt,sp){
   e.o.position.set(e.x,e.y,e.z);e.o.rotation.y=e.yaw;e.phase+=dt*(1.2+sp*(e.id==='skitter'?.9:e.id==='hound'?.42:.5));const ph=e.phase;

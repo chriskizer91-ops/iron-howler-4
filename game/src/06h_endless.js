@@ -10,11 +10,12 @@ const EW={wave:0,state:'break',t:5,boss:false,queue:[],qt:0};
 /* machines join the waves in campaign order: [type, first wave, how common] */
 const EN_ORDER=[['skitter',1,5],['hound',3,3],['gunner',5,2.2],['hornet',7,2.2],['lancer',9,1],['bulwark',11,1.1],['tank',13,.7],['mortar',15,.6]];
 function endlessWave(n){const w={},add=(id,k)=>{w[id]=(w[id]||0)+k;};
-  if(n%10===0){add('skitter',Math.min(8,2+(n/5|0)));add('hound',Math.min(4,n/10|0));return w;}
+  /* longer waves (15 Nov): about 1.75 times as many machines in every wave; they still arrive in groups of 6, and a new group waits until 12 or fewer are left (endlessStep) */
+  if(n%10===0){add('skitter',Math.min(14,4+2*(n/5|0)));add('hound',Math.min(8,2*(n/10|0)));return w;}
   /* IH4: each heavy wave also brings one of the FORGE bosses, in turn: wave 5 Alpha Hound, 15 Gunner Prime, 25 Brood Skitter, 35 Alpha Hound ... */
   if(n%5===0)add(['ahound','gprime','brood'][((n/5|0)-1)/2%3|0],1);
-  if(n%5===0){add('gunner',2+(n/10|0));add('hound',2);if(n>=11)add('bulwark',1+(n/20|0));if(n>=13)add('tank',1+(n/25|0));else add('gunner',1);return w;}
-  const pool=EN_ORDER.filter(t=>n>=t[1]),tot=pool.reduce((a,t)=>a+t[2],0),count=Math.min(24,3+n);
+  if(n%5===0){add('gunner',4+2*(n/10|0));add('hound',4);if(n>=11)add('bulwark',2+(n/20|0));if(n>=13)add('tank',1+(n/25|0));else add('gunner',1);return w;}
+  const pool=EN_ORDER.filter(t=>n>=t[1]),tot=pool.reduce((a,t)=>a+t[2],0),count=Math.min(40,5+Math.round(n*1.8));
   for(let i=0;i<count;i++){let r=Math.random()*tot;for(const t of pool){r-=t[2];if(r<=0){add(t[0],1);break;}}}
   return w;}
 function endlessBegin(){MS.repairs=0;Object.assign(EW,{wave:0,state:'break',t:6,boss:false,queue:[],qt:0});DIFF.dmg=.9;DIFF.hp=1;G.hpK=1;
@@ -32,7 +33,7 @@ function aliveN(){let n=0;for(const e of EN)if(!e.dead)n++;return n;}
 function endlessStep(s,dt){const alive=aliveN();
   if(EW.state==='break'){EW.t-=dt;if(EW.t<=0)startEWave();return {txt:'WAVE '+(EW.wave+1)+' IN '+Math.max(1,Math.ceil(EW.t)),ok:false,pos:null};}
   let bossPos=null;if(EW.boss&&BOSS.o){const r=BOSS_DEF[MISSION.boss].step(s,dt);bossPos=r.pos;if(BOSS.dead&&BOSS.deadT>2.5){EW.boss=false;addScore(3000);}}
-  if(EW.queue.length&&(EW.qt-=dt)<=0){EW.qt=7;const g=EW.queue.shift(),q=spawnSpot();for(const id in g)EW.qn-=g[id];spawnGroup(g,q[0],q[1],[0,10]);}
+  if(EW.queue.length&&(EW.qt-=dt)<=0&&alive<=12){EW.qt=7;const g=EW.queue.shift(),q=spawnSpot();for(const id in g)EW.qn-=g[id];spawnGroup(g,q[0],q[1],[0,10]);}
   const left=alive+(EW.queue.length?EW.qn:0);   /* machines still to come are counted as the groups leave the queue */
   if(!left&&!EW.boss){addScore(EW.wave*200);EW.state='break';EW.t=8;HUD.banner('WAVE '+EW.wave+' CLEARED');sPickup();
     const f=fwdOf(P.yaw),dx=P.x+f[0]*9,dz=P.z+f[1]*9;dropPickup(dx-2,dz,'repair');dropPickup(dx+2,dz,'shield');if(EW.wave%3===0)dropPickup(dx,dz+2,'chip');

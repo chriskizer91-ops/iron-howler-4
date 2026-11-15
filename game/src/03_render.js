@@ -145,6 +145,16 @@ function hookWorld(mat,o={}){
       .replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(metalnessFactor,.9,wr);');
     if(o.leaf)f=f.replace('#include <normal_fragment_begin>',LEAF_NORMAL)
       .replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance+=diffuseColor.rgb*uLeafGlow*vec3(.9,1.,.7);');
+    /* edge light (o.rim: the Wraith, its kit and every machine): surfaces turning away from the camera pick up the sky's colour, most on their
+       upper sides, so a machine stands out from the ground and the haze behind it. A few sums per pixel, no texture.
+       o.eyes (the FORGE machines): the red lamps and seams painted on them give off their own light, so they show in haze and at night and glow a little. */
+    if(o.rim){const L=LOOKNOW||{},c=new THREE.Color(L.sky||0xd6e4ff).multiplyScalar((L.hemiK||1.5)*.26),f3=x=>x.toFixed(3);
+      f=f.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
+      {float rm=1.-max(dot(normal,normalize(vViewPosition)),0.);rm*=rm*rm;
+       totalEmissiveRadiance+=vec3(${f3(c.r)},${f3(c.g)},${f3(c.b)})*rm*(.6+.4*(vec4(normal,0.)*viewMatrix).y);}`+(o.eyes?`
+      #ifdef USE_MAP
+      {vec4 ce=texture2D(map,vMapUv);totalEmissiveRadiance+=vec3(1.,.05,.02)*1.1*smoothstep(.14,.36,ce.r-max(ce.g,ce.b));}
+      #endif`:''));}
     /* a gust lightens the plants it bends, the way a meadow flashes pale when the wind lays it over */
     if(o.wind)f=f.replace('#include <color_fragment>','#include <color_fragment>\ndiffuseColor.rgb*=1.+vGust;');
     if(o.ground)f=f.replace('#include <map_fragment>',`#include <map_fragment>
@@ -161,7 +171,7 @@ function hookWorld(mat,o={}){
        vec3 wn=(vec4(normal,0.)*viewMatrix).xyz;wn=normalize(wn+vec3(nn.x,0.,-nn.y)*uNStr);normal=normalize((viewMatrix*vec4(wn,0.)).xyz);}`);
     sh.fragmentShader=f;
   };
-  mat.customProgramCacheKey=()=>'w'+(o.fade?1:0)+(o.leaf?1:0)+(o.ground?1:0)+(o.wear?1:0)+(o.wind||'');
+  mat.customProgramCacheKey=()=>'w'+(o.fade?1:0)+(o.leaf?1:0)+(o.ground?1:0)+(o.wear?1:0)+(o.rim?1:0)+(o.eyes?1:0)+(o.wind||'');
   return mat;
 }
 

@@ -18,7 +18,7 @@ EDEF.brood=Object.assign({},EDEF.skitter,{hp:900,score:2500,drop:1,scrap:250,sc:
   init(e,N){skInit(e,N);broodPod(e);e.id='skitter';bossBanner(e);e.spawnCd=4;},dress:e=>tintMat(e,'brood'),pose:broodPose});
 /* the sandbox and Endless waves: after Ironhowl 3's six, a boss wave each */
 WAVES.push({ahound:1,hound:2},{gprime:1,skitter:4},{brood:1,hound:1});
-function f4load(id){const d=EDEF[id],[dir,stem]=d.m4,f=kitFiles(dir,stem,false);d.amat=kitMat(f,true);if(id==='skitter')spodModel().catch(()=>{});   /* the pod model loads with the machines, not when the first pod appears */
+function f4load(id){const d=EDEF[id],[dir,stem]=d.m4,f=kitFiles(dir,stem,false);d.amat=kitMat(f,true,true);if(id==='skitter')spodModel().catch(()=>{});   /* the pod model loads with the machines, not when the first pod appears */
   
   return loadGLB(f.glb).then(sc=>{dressModel(sc,d.amat);ETPL[id]=sc;sc.updateMatrixWorld(true);
     const J={};sc.traverse(o=>{if(o.name)J[o.name]=J[o.name]||o;});
