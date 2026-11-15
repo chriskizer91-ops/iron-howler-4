@@ -7,6 +7,7 @@ effects, saves and the arcade-cabinet messages. Each session swaps or adds the I
 playable at the test link.
 
 - Test build: https://claude.ai/artifact/RebwJkoUiVQYwZoDqsX6tk (made by `tools/pack_artifact.py`)
+- Test build of the smoother version (15 Nov, branch `claude/confident-albattani-9rx5p8`): https://claude.ai/artifact/W4jJSwsgSwPxLaWv7fAd3D (a separate page, so the test build above stays as it was for comparing)
 - Run from the repo: serve the repo folder and open `game/index.html` (the models come from the repo's `models/`).
 - Saves: keys starting `hd-ironhowl4-` only. Arcade id `ironhowl4` (same cabinet messages as Ironhowl 3, `?embed=1`).
 - Build: `python3 game/build.py` joins `game/src/*.js` into `game/js/ironhowl4.js`.
