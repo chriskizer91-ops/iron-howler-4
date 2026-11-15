@@ -9,6 +9,8 @@ const BOLTS=[],EBOLTS=[],MISS=[];
 const SALVO={cd:0,cool:12,n:14,left:0,t:0,dmg:16,range:48};
 const BOLT={speed:150,range:170};
 let BM=null,EBM=null,MSM=null,MFL=null;
+/* send the graphics card only the shots in flight (it used to get every slot, 27 KB a frame, whenever anything was fired) */
+function sendInst(im,n){im.visible=n>0;if(n){const A=im.instanceMatrix;A.clearUpdateRanges();A.addUpdateRange(0,n*16);A.needsUpdate=true;}}
 const NOARM=[null],_sc=new THREE.Vector3(),_v=new THREE.Vector3(),_w=new THREE.Vector3(),_m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_z=new THREE.Vector3(0,0,1);
 function buildWeapons(){
   const g=new THREE.CylinderGeometry(.1,.1,1,6,1,true);g.rotateX(Math.PI/2);
@@ -19,7 +21,7 @@ function buildWeapons(){
   MSM=new THREE.InstancedMesh(g3,hookWorld(new THREE.MeshStandardMaterial({color:0xd8d8d0,roughness:.5,metalness:.4})),40);
   for(const m of [BM,EBM,MSM]){m.count=0;m.frustumCulled=false;m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);S.add(m);}
   BM.renderOrder=EBM.renderOrder=4;
-  MFL=new THREE.PointLight(0xffb060,0,22,1.6);S.add(MFL);
+  MFL=new THREE.PointLight(0xffb060,0,22,1.6);S.add(MFL);lowLights();
 }
 /* where the crosshair points: the first enemy, tree or ground along the camera ray (aim assist bends it onto a nearby enemy) */
 const AIM={x:0,y:0,z:0,e:null,dist:0};
@@ -138,11 +140,11 @@ function segSphere(x0,y0,z0,x1,y1,z1,cx,cy,cz,r){const dx=x1-x0,dy=y1-y0,dz=z1-z
 function drawShots(){
   let n=0;for(const b of BOLTS){if(n>=160)break;const l=Math.hypot(b.vx,b.vy,b.vz);_v.set(b.vx/l,b.vy/l,b.vz/l);_q.setFromUnitVectors(_z,_v);
     _m4.compose(_w.set(b.x-_v.x*1.8,b.y-_v.y*1.8,b.z-_v.z*1.8),_q,_sc.set(1,1,3.6));BM.setMatrixAt(n++,_m4);}
-  BM.count=n;BM.instanceMatrix.needsUpdate=true;BM.visible=n>0;
+  BM.count=n;sendInst(BM,n);
   n=0;for(const b of EBOLTS){if(n>=220)break;const l=Math.hypot(b.vx,b.vy,b.vz);_v.set(b.vx/l,b.vy/l,b.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(b.x,b.y,b.z),_q,_sc.setScalar(b.s||1));EBM.setMatrixAt(n++,_m4);}
-  EBM.count=n;EBM.instanceMatrix.needsUpdate=true;EBM.visible=n>0;
+  EBM.count=n;sendInst(EBM,n);
   n=0;for(const m of MISS){if(n>=40)break;if(m.t<m.delay)continue;const l=Math.hypot(m.vx,m.vy,m.vz)||1;_v.set(m.vx/l,m.vy/l,m.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(m.x,m.y,m.z),_q,_sc.set(1,1,1));MSM.setMatrixAt(n++,_m4);}
-  MSM.count=n;MSM.instanceMatrix.needsUpdate=true;MSM.visible=n>0;
+  MSM.count=n;sendInst(MSM,n);
 }
 function sparks(x,y,z,n,col){if(n>2)part({x,y,z,vx:0,vy:0,vz:0,life:.14,s0:.7,s1:1.6,a:1.3,col:[1,1,1],glow:true,img:3});for(let i=0;i<n;i++){const a=Math.random()*TAU,b=Math.random()*2-1,s=4+Math.random()*7;
   part({x,y,z,vx:Math.cos(a)*s*Math.sqrt(1-b*b),vy:b*s+2,vz:Math.sin(a)*s*Math.sqrt(1-b*b),life:.25+Math.random()*.25,s0:.22,s1:.06,a:2,col,glow:true,drag:2,grav:12});}}

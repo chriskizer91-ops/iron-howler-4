@@ -35,7 +35,9 @@ function updBeams(dt){if(!KX.bm)kitFxInit();const L=KX.beams;let n=0;
   for(const B of L){if(n>=400)break;const f=1-B.t/B.life,a=B.a,b=B.b;KX.d.set(b[0]-a[0],b[1]-a[1],b[2]-a[2]);const len=KX.d.length();if(len<1e-3)continue;
     KX.p.set((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2);KX.q.setFromUnitVectors(KX.z,KX.d.multiplyScalar(1/len));const r=B.r*(.4+.6*f);KX.s.set(r,r,len);
     KX.m4.compose(KX.p,KX.q,KX.s);KX.bm.setMatrixAt(n,KX.m4);KX.bm.setColorAt(n,KX.col.setRGB(B.col[0]*f,B.col[1]*f,B.col[2]*f));n++;}
-  KX.bm.count=n;KX.bm.instanceMatrix.needsUpdate=true;if(KX.bm.instanceColor)KX.bm.instanceColor.needsUpdate=true;}
+  /* only the beams in use are sent to the graphics card, and nothing at all while there are none (it used to send all 400 slots, 30 KB, every frame) */
+  KX.bm.count=n;KX.bm.visible=n>0;
+  if(n)for(const A of [KX.bm.instanceMatrix,KX.bm.instanceColor])if(A){A.clearUpdateRanges();A.addUpdateRange(0,n*A.itemSize);A.needsUpdate=true;}}
 function sRail(k){nz('highpass',5200,700,.5,.42*k+.12,1.4);thump(110,34,.35,.5*k+.15,0,0);tone('sawtooth',1400,90,.32,.07);}
 function sCharge(){tone('sine',180,1100,LANCE.charge,.05);}
 function sArc(){nz('bandpass',4200,1500,.09,.11,3);tone('square',1900,700,.06,.025);}

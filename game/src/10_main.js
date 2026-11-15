@@ -2,7 +2,9 @@
 let NIGHT_ON=false;
 const G={mode:'load',paused:false,t:0,fdt:1/60,birdT:6,perf:{t:0,n:0,s:0},demoI:1,demoHop:4,score:0,kills:0,combo:0,lastKill:-9,wave:0,hpK:1,breakT:3,downT:0};
 let M=null,CTLX=null;
-function setQuality(q){QL=q;QC=QUAL[q];DYN=1;resize();setShadow();postSetup();S.fog.far=Math.min(QC.fog,LOOKNOW&&LOOKNOW.fogFar||1e9);S.fog.near=S.fog.far*.22;}
+function setQuality(q,dyn){QL=q;QC=QUAL[q];DYN=dyn||1;resize();setShadow();postSetup();S.fog.far=Math.min(QC.fog,LOOKNOW&&LOOKNOW.fogFar||1e9);S.fog.near=S.fog.far*.22;lowLights();}
+/* Low has no flash lights (the gun's and the jets'): every lit surface is then shaded for two lights fewer, on the devices that most need it. The flashes themselves still glow. */
+function lowLights(){const on=QL!=='low';if(MFL)MFL.visible=on;if(M&&M.jl)M.jl.visible=on;}
 function cycleView(){SET.view=SET.view==='close'?'far':'close';store.set('view',SET.view);HUD.view(SET.view);}
 function setPause(b){G.paused=b;HUD.menu();setVolume();if(!b&&!touchy&&G.mode==='play')lockMouse();if(b)jetLoop(0);}
 function clearFight(){for(const e of EN)enemyFree(e);bossClearMarks();EN.length=0;BOLTS.length=EBOLTS.length=MISS.length=BEACONS.length=0;for(const p of PK)S.remove(p.g);PK.length=0;}
@@ -39,7 +41,7 @@ function jetFX(dt){if(P.thrust<.05)return;for(const J of M.jets){J.n.getWorldPos
   const k=P.thrust;if(Math.random()<k*dt*60)part({x:_np.x,y:_np.y-.4,z:_np.z,vx:(Math.random()-.5)*2,vy:-6-Math.random()*4,vz:(Math.random()-.5)*2,life:.25+Math.random()*.15,s0:.9,s1:.35,a:1.4*k,col:[1,.55,.22],glow:true,drag:2});
   if(Math.random()<k*dt*30)part({x:_np.x,y:_np.y-.6,z:_np.z,vx:(Math.random()-.5)*1.5,vy:-3-Math.random()*2,vz:(Math.random()-.5)*1.5,life:1.2+Math.random()*.8,s0:.8,s1:3.4,a:.3,col:SMOKE,drag:1.6,grav:-.6});}}
 function tick(dt){
-  G.t+=dt;U.uTime.value=G.t;if(MAPDEF.tick)MAPDEF.tick(dt);lifeTick(dt);updRain(dt);updWeather(dt);updShieldFx(dt);if(G.mode==='play')updMarks(dt);if(RING)RING.position.set(cam.position.x,cam.position.y+RING.userData.lift,cam.position.z);
+  G.t+=dt;U.uTime.value=G.t;if(MAPDEF.tick)MAPDEF.tick(dt);lifeTick(dt);updRain(dt);updWeather(dt);updShieldFx(dt);updBlobs();if(G.mode==='play')updMarks(dt);if(RING)RING.position.set(cam.position.x,cam.position.y+RING.userData.lift,cam.position.z);
   /* the clouds drift; their shadows slide over the ground with them */
   U.uCloudOff.value.x-=dt*.00165;U.uCloudOff.value.y-=dt*.0006;   /* minus: the shadows then travel toward +x, with the wind */
   const live=(G.mode==='play'||G.mode==='demo')&&!G.paused;
@@ -72,10 +74,14 @@ function tick(dt){
 /* auto quality: if frames are slow, lower the render scale, then the quality level */
 function autoQ(dt){if(SET.quality!=='auto'||G.mode!=='play'||G.paused)return;const pf=G.perf;pf.t+=dt;pf.n++;
   if(pf.t>=1.8){const avg=pf.t/pf.n;pf.t=0;pf.n=0;
-    if(avg>1/44){if(DYN>.66){DYN*=.88;resize();}
+    let calm=true;for(const e of EN)if(!e.dead){calm=false;break;}
+    if(avg>1/44){pf.good=0;if(DYN>.66){DYN*=.88;resize();autoSave();}
       /* Medium to Low turns shadows off, which rebuilds every shader (a hitch): wait for a moment with no machines alive */
-      else if(QL==='high')setQuality('med');else if(QL==='med'){let fight=false;for(const e of EN)if(!e.dead){fight=true;break;}if(!fight)setQuality('low');}}
-    else if(avg<1/57&&DYN<1){DYN=Math.min(1,DYN*1.06);resize();}}}
+      else if(QL==='high'){AQ.ceil='med';setQuality('med');autoSave();}else if(QL==='med'&&calm){AQ.ceil='low';setQuality('low');autoSave();}}
+    else if(avg<1/57){if(DYN<1){DYN=Math.min(1,DYN*1.06);resize();autoSave();}
+      /* a remembered level is tried one step higher after 20 smooth seconds, in a quiet moment. If the device then cannot hold it, it comes back down and stays (AQ.ceil). */
+      else if(QRANK[QL]<QRANK[QTOP]&&(!AQ.ceil||QRANK[QL]<QRANK[AQ.ceil])){pf.good=(pf.good||0)+1.8;if(pf.good>=20&&calm){pf.good=0;setQuality(QL==='low'?'med':'high');autoSave();}}}
+    else pf.good=0;}}
 let last=performance.now();
 function frame(now){
   const raw=(now-last)/1000,dt=Math.min(.05,raw);last=now;G.fdt+=(raw-G.fdt)*.1;
@@ -85,7 +91,7 @@ function frame(now){
   if(!(DEV&&window.__freeze))tick(dt);autoQ(dt);renderFrame();if(SET.fps&&(G.fpsT=(G.fpsT||0)-raw)<=0){G.fpsT=.5;$('fps').textContent=Math.round(1/Math.max(.001,G.fdt))+' FPS · '+QL.toUpperCase();}HUD.dev();requestAnimationFrame(frame);
 }
 function boot(){
-  pickMap();setupHud();setQuality(QL);const LK=MISSION&&MISSION.look?Object.assign({},MAPDEF.look,MISSION.look):MAPDEF.look;NIGHT_ON=!!LK.night;applyLook(LK);buildEnv(LK);setupTitle();U.tCloud.value=tex('34-fog',{srgb:false});
+  pickMap();setupHud();setQuality(QL,SET.quality==='auto'&&AQ.q&&AQ.d>=.5?Math.min(1,AQ.d):1);const LK=MISSION&&MISSION.look?Object.assign({},MAPDEF.look,MISSION.look):MAPDEF.look;NIGHT_ON=!!LK.night;applyLook(LK);buildEnv(LK);setupTitle();U.tCloud.value=tex('34-fog',{srgb:false});
   buildGround();const before=new Set(S.children);MAPDEF.build();mergeStatic(before);if(MAPDEF.dress&&!Q.has('nodress'))MAPDEF.dress();M=buildMech();buildFX();buildWeapons();P=mkPlayer();
   let readySent=false;   /* textures loaded later (decals, effects) fire onLoad again: say ready only once */
   const done=()=>{if(readySent)return;readySent=true;G.mode=G.mode==='load'?'title':G.mode;$('load').style.display='none';$('title').style.display=G.mode==='title'?'flex':'none';document.title='IRONHOWL 4';ARC.post('ready',{title:ARC.title});};

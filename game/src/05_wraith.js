@@ -62,7 +62,7 @@ function buildMech(){
   buildWraithModel(false,true).then(W=>{M.W=W;M.root.add(W.root);const J=W.J;
     M.hips=J.hips;M.torso=J.torso;M.head=J.head;M.hip0=J.hips.position.y;M.tor0=J.torso.position.y;
     W.root.updateMatrixWorld(true);M.legs=[-1,1].map(sd=>legSetup(J,sd<0?'L':'R',sd,M.hip0));
-    M.jl=new THREE.PointLight(0xff9a40,0,14,1.8);M.jl.position.set(0,0,1.6);M.torso.add(M.jl);
+    M.jl=new THREE.PointLight(0xff9a40,0,14,1.8);M.jl.position.set(0,0,1.6);M.torso.add(M.jl);lowLights();
     M.rest=[M.hips,M.torso,J.arm_L,J.arm_R].filter(Boolean).map(o=>[o,o.rotation.clone()]);   /* the standing pose, for placing muzzles */
     rigKit(M);M.ready=true;M.tier=0;setTier(M,GUN.tier||1);});
   return M;

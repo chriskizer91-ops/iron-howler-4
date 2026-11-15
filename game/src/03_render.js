@@ -5,10 +5,16 @@ const SET={fps:store.get('fps','0')==='1'||store.get('fps',0)===1,quality:store.
 const QUAL={low:{bloom:0,px:.75e6,shadow:0,grass:24,grassNear:8,near:24,far:115,fog:100},
             med:{bloom:1,px:1.35e6,shadow:1024,grass:36,grassNear:12,near:32,far:165,fog:140},
             high:{bloom:1,px:3.4e6,shadow:2048,grass:52,grassNear:18,near:48,far:230,fog:185}};
-let QL=SET.quality==='auto'?(touchy?'med':'high'):SET.quality,QC=QUAL[QL],DYN=1;
+/* Auto quality remembers what it settled on for three days (the level, the picture scale, and the highest level this device held).
+   Every mission and every place reloads the page, so without this a slower phone started each one too high and stuttered its way down again. */
+const QTOP=touchy?'med':'high',QRANK={low:0,med:1,high:2};
+const AQ=(()=>{try{const a=JSON.parse(store.get('autoq','null'));return a&&QUAL[a.q]&&Date.now()-a.t<2592e5?a:{};}catch(e){return {};}})();
+function autoSave(){store.set('autoq',JSON.stringify({q:QL,d:+DYN.toFixed(2),ceil:AQ.ceil||null,t:Date.now()}));}
+function autoForget(){AQ.q=AQ.ceil=null;AQ.d=1;store.set('autoq','null');}
+let QL=SET.quality==='auto'?(AQ.q||QTOP):SET.quality,QC=QUAL[QL],DYN=1;
 const R=new THREE.WebGLRenderer({canvas:cv,antialias:!Q.has('noaa'),powerPreference:'high-performance',stencil:false});
 R.outputColorSpace=THREE.SRGBColorSpace;R.toneMapping=THREE.ACESFilmicToneMapping;R.toneMappingExposure=1.18;
-R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFSoftShadowMap;R.shadowMap.autoUpdate=true;
+R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFShadowMap;   /* this three.js draws soft shadows with PCFShadowMap (the old PCFSoftShadowMap name only printed a warning and fell back to it) */R.shadowMap.autoUpdate=true;
 const S=new THREE.Scene();
 const cam=new THREE.PerspectiveCamera(66,1,.1,700);
 function resize(){
@@ -52,8 +58,16 @@ const LM=new THREE.LoadingManager();let LOADP=0;
 LM.onProgress=(u,a,b)=>{LOADP=a/b;HUD.load(LOADP);};
 const TL=new THREE.TextureLoader(LM);
 const ART='art/';
-function tex(n,o={}){const t=TL.load(ART+n+'.webp');t.wrapS=t.wrapT=o.clamp?THREE.ClampToEdgeWrapping:THREE.RepeatWrapping;if(o.rep)t.repeat.set(o.rep,o.rep);
-  if(o.srgb!==false)t.colorSpace=THREE.SRGBColorSpace;if(o.glb)t.flipY=false;   /* models from Blender use glTF's upside-down v */t.anisotropy=Math.min(8,R.capabilities.getMaxAnisotropy());return t;}
+/* A picture file is downloaded, unpacked and stored on the graphics card once. Asking for it again (another material that tiles it
+   differently) gives a second texture that shares the first one's picture, so it costs no more memory or loading time.
+   (Before, the docks kept four copies of the blast wall and three of the gunmetal: about 5 MB each.) */
+const TEXB={};
+const ANISO=Math.min(touchy?4:8,R.capabilities.getMaxAnisotropy());   /* how sharp ground stays at a shallow angle: 4 on phones (cheaper to draw), 8 on laptops */
+function tex(n,o={}){let b=TEXB[n],t;
+  if(!b){b=TEXB[n]={t:null,ok:false,more:[]};t=b.t=TL.load(ART+n+'.webp',()=>{b.ok=true;for(const c of b.more)c.version++;b.more.length=0;});}
+  else{t=new THREE.Texture();t.source=b.t.source;if(b.ok)t.version++;else b.more.push(t);}   /* version++ = ready to draw, without sending the picture again */
+  t.wrapS=t.wrapT=o.clamp?THREE.ClampToEdgeWrapping:THREE.RepeatWrapping;if(o.rep)t.repeat.set(o.rep,o.rep);
+  if(o.srgb!==false)t.colorSpace=THREE.SRGBColorSpace;if(o.glb)t.flipY=false;   /* models from Blender use glTF's upside-down v */t.anisotropy=ANISO;return t;}
 /* --- light --- */
 const SUN=new THREE.Vector3(-.42,.62,-.66).normalize();   /* direction toward the sun: high, from the north-west */
 const HEMI=new THREE.HemisphereLight(0xd6e4ff,0x6a5a44,1.55);S.add(HEMI);
@@ -69,13 +83,18 @@ function placeSun(fx,fz){
 }
 /* --- sky dome: gradient, sun, drifting clouds (the same cloud texture throws the moving shadows on the ground) --- */
 const SKYU={tPano:{value:null},uPano:{value:0},uPanoK:{value:1},uSun:{value:SUN},uZen:{value:new THREE.Color(0x2a5fb4)},uHor:{value:new THREE.Color(0xb3c8de)},uSunC:{value:new THREE.Color(1,.93,.8)},
-  tCloud:U.tCloud,uCloudOff:U.uCloudOff,uCloudAmt:U.uCloudAmt};
+  tCloud:U.tCloud,uCloudOff:U.uCloudOff,uCloudAmt:U.uCloudAmt,
+  /* distance haze (see atmosphere() below): the haze colour, its cool tint away from the sun, its warm glow toward the sun, which way the sun lies on the map, how far up the sky the haze reaches */
+  uFog:{value:new THREE.Color(0xb3c8de)},uCool:{value:new THREE.Vector3(1,1,1)},uGlow:{value:new THREE.Vector3()},uSunAz:{value:new THREE.Vector2(0,-1)},uHaze:{value:.16}};
 const SKY=new THREE.Mesh(new THREE.SphereGeometry(500,32,16),new THREE.ShaderMaterial({uniforms:SKYU,side:THREE.BackSide,depthWrite:false,fog:false,
   vertexShader:`varying vec3 vD;void main(){vD=normalize(position);vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_Position=p.xyww;}`,
-  fragmentShader:`uniform vec3 uSun,uZen,uHor,uSunC;uniform sampler2D tCloud,tPano;uniform vec2 uCloudOff;uniform float uCloudAmt,uPano,uPanoK;varying vec3 vD;
+  fragmentShader:`uniform vec3 uSun,uZen,uHor,uSunC,uFog,uCool,uGlow;uniform sampler2D tCloud,tPano;uniform vec2 uCloudOff,uSunAz;uniform float uCloudAmt,uPano,uPanoK,uHaze;varying vec3 vD;
+  /* the haze at the horizon: the same colour the far ground fades to, so the land runs into the sky without a hard edge */
+  vec3 hazeCol(vec3 d){float fa=.5+.5*dot(normalize(d.xz+vec2(1e-5)),uSunAz);return uFog*mix(uCool,vec3(1.),fa)+uGlow*fa*fa*fa;}
+  float hazeAmt(float y){float k=1.-smoothstep(0.,uHaze,y);return k*k;}
   void main(){vec3 d=normalize(vD);float h=max(d.y,0.);
     if(uPano>.5){vec2 uv=vec2(atan(d.x,-d.z)/6.2831853+.5,.5+asin(clamp(d.y,-1.,1.))/3.1415927);vec3 pc=texture2D(tPano,vec2(uv.x,max(uv.y,.502))).rgb*uPanoK;
-      float sd=max(dot(d,uSun),0.);pc+=uSunC*pow(sd,700.)*10.;if(d.y<0.)pc=mix(pc,uHor,min(1.,-d.y*6.));gl_FragColor=vec4(pc,1.);
+      float sd=max(dot(d,uSun),0.);pc+=uSunC*pow(sd,700.)*10.;pc=mix(pc,hazeCol(d),hazeAmt(d.y));gl_FragColor=vec4(pc,1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;}
@@ -87,7 +106,7 @@ const SKY=new THREE.Mesh(new THREE.SphereGeometry(500,32,16),new THREE.ShaderMat
       float cl=smoothstep(.36,.86,n)*uCloudAmt*smoothstep(0.,.15,d.y);
       vec3 cc=mix(vec3(.46,.5,.58),vec3(1.05,1.03,1.),smoothstep(.25,.85,n2*.55+(1.-n1)*.65))+uSunC*pow(sd,6.)*.6;
       c=mix(c,cc,cl*.94);}
-    else c=mix(uHor,uHor*.8,min(1.,-d.y*4.));
+    c=mix(c,hazeCol(d),hazeAmt(d.y));
     gl_FragColor=vec4(c,1.);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -153,6 +172,26 @@ function horizonRing(texName,height,lift,tint,copies){
   const g=new THREE.CylinderGeometry(420,420,height,64,1,true);
   const m=new THREE.MeshBasicMaterial({map:t,transparent:true,side:THREE.BackSide,depthWrite:false,fog:false,color:new THREE.Color(...(tint||[1,1,1]))});
   RING=new THREE.Mesh(g,m);RING.renderOrder=-9;RING.frustumCulled=false;RING.userData.lift=lift;S.add(RING);}
+/* Distance haze that knows where the sun is. Far things used to fade to one flat colour all the way round. Now the haze is a little
+   warmer and brighter toward the sun and a little cooler away from it, and the sky's horizon uses the same colour, so the far ground
+   melts into the sky. It replaces three.js's own fog step in every material and costs a few sums per pixel: no extra pass, no texture.
+   The numbers are written into the shaders once, when the place loads (each place and mission loads the page afresh). */
+function atmosphere(L){
+  const f=x=>x.toFixed(4),C=THREE.ShaderChunk,sc=new THREE.Color(L.sunCol),m=Math.max(sc.r,sc.g,sc.b)||1,az=Math.hypot(SUN.x,SUN.z)||1;
+  /* strongest with a low sun (dusk at the docks), gentle at midday, faint at night */
+  const k=(L.glow!=null?L.glow:.2)*clamp((L.sunK||2)/3,.15,1)*(1-.55*SUN.y),cool=[1-.09*k/.2,1-.045*k/.2,1];
+  const fc=new THREE.Color(L.fog),lum=Math.max(.06,.3*fc.r+.6*fc.g+.1*fc.b),glow=[sc.r/m*k*lum*1.6,sc.g/m*k*lum*1.6,sc.b/m*k*lum*1.6];
+  SKYU.uFog.value.copy(fc);SKYU.uCool.value.set(...cool);SKYU.uGlow.value.set(...glow);SKYU.uSunAz.value.set(SUN.x/az,SUN.z/az);SKYU.uHaze.value=L.haze!=null?L.haze:L.pano?.2:.1;
+  C.fog_pars_vertex='#ifdef USE_FOG\n varying float vFogDepth;varying vec3 vFogDir;\n#endif';
+  C.fog_vertex='#ifdef USE_FOG\n vFogDepth=-mvPosition.z;vFogDir=(vec4(mvPosition.xyz,0.)*viewMatrix).xyz;\n#endif';   /* which way this point lies from the camera, in world directions */
+  C.fog_pars_fragment='#ifdef USE_FOG\n uniform vec3 fogColor;varying float vFogDepth;varying vec3 vFogDir;uniform float fogNear;uniform float fogFar;\n#endif';
+  C.fog_fragment=`#ifdef USE_FOG
+    float fogFactor=smoothstep(fogNear,fogFar,vFogDepth);
+    float fogA=.5+.5*dot(normalize(vFogDir.xz+vec2(1e-5)),vec2(${f(SUN.x/az)},${f(SUN.z/az)}));
+    vec3 fogC=fogColor*mix(vec3(${cool.map(f).join(',')}),vec3(1.),fogA)+vec3(${glow.map(f).join(',')})*fogA*fogA*fogA;
+    gl_FragColor.rgb=mix(gl_FragColor.rgb,fogC,fogFactor);
+  #endif`;
+}
 /* each map sets its own light, sky and fog */
 let LOOKNOW=null;
 function applyLook(L){LOOKNOW=L;if(L.fogFar){S.fog.far=Math.min(S.fog.far,L.fogFar);S.fog.near=S.fog.far*.22;}
@@ -160,4 +199,5 @@ function applyLook(L){LOOKNOW=L;if(L.fogFar){S.fog.far=Math.min(S.fog.far,L.fogF
   SKYU.uZen.value.set(L.zen);SKYU.uHor.value.set(L.hor);S.fog.color.set(L.fog);U.uCloudAmt.value=L.clouds;R.toneMappingExposure=L.exp||1.18;
   if(L.pano){SKYU.tPano.value=tex(L.pano);SKYU.uPano.value=1;SKYU.uPanoK.value=L.panoK||1;}
   if(L.ring)horizonRing(L.ring.tex,L.ring.h,L.ring.lift,L.ring.tint,L.ring.copies);
+  atmosphere(L);
 }

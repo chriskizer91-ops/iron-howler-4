@@ -3,6 +3,11 @@
    Each kind is one instanced mesh, so a whole map's clutter costs about 10-16 draw calls. ===================== */
 function rockGeo(r,seed){const g=new THREE.DodecahedronGeometry(r,1),p=g.attributes.position,rnd=mulberry(seed);
   for(let i=0;i<p.count;i++){const k=.78+rnd()*.4;p.setXYZ(i,p.getX(i)*k,p.getY(i)*k*.7,p.getZ(i)*k);}g.computeVertexNormals();return g;}
+/* a pebble: the same kind of stone from 36 triangles instead of 144. Hundreds lie about each outdoor place and they are all drawn every frame,
+   so this takes about 100,000 triangles a frame off the woods and 75,000 off the field. Corners that meet move together, so the stone stays closed. */
+function pebbleGeo(r,seed){const g=new THREE.DodecahedronGeometry(r,0),p=g.attributes.position;
+  for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),k=.74+.5*hash2(Math.round(x*97)+seed*131+Math.round(z*57),Math.round(y*83)+seed*17);p.setXYZ(i,x*k,y*k*.7,z*k);}
+  g.computeVertexNormals();return g;}
 /* place n copies where fn(rnd) says (returns [x,z] or null), avoiding walls, trunks and the spawn */
 function scatter(geo,mat,n,fn,o={}){const rnd=mulberry(o.seed||17),im=new THREE.InstancedMesh(geo,mat,n);let k=0;
   for(let t=0;t<n*6&&k<n;t++){const q=fn(rnd);if(!q)continue;const [x,z]=q;if(treeAt(x,z,.5)||Math.hypot(x-SPAWN.x,z-SPAWN.z)<(o.clear||8))continue;
@@ -29,7 +34,7 @@ function puddles(n,fn,size,o={}){const g=new THREE.PlaneGeometry(1,1);g.rotateX(
 /* ---------------- per map ---------------- */
 MAPS.woods.dress=function(){
   const rock=tmat('83-mossy-boulder-rock',{r:.95,m:0}),bark=new THREE.MeshStandardMaterial({color:0x4a3c30,roughness:.95,normalMap:nmap('83-mossy-boulder-rock'),normalScale:new THREE.Vector2(1.4,1.4)});
-  scatter(rockGeo(.35,3),rock,900,r=>inPlay(r),{s0:.5,s1:1.6,y:.1,seed:41,shadow:false});                     // pebbles and stones (no shadow: 130,000 triangles drawn again for a shadow you can't see)
+  scatter(pebbleGeo(.35,3),rock,900,r=>inPlay(r),{s0:.5,s1:1.6,y:.1,seed:41,shadow:false});                     // pebbles and stones (no shadow: 130,000 triangles drawn again for a shadow you can't see)
   const log=new THREE.CylinderGeometry(.42,.48,1,10);log.rotateZ(Math.PI/2);
   scatter(log,bark,90,r=>{const q=inPlay(r);return clearD(q[0],q[1])>4&&trailD(q[0],q[1])>5?q:null;},{s0:4,s1:8,sy:.12,y:.05,seed:43,n2:1,shadow:false});   // fallen logs
   scatter(new THREE.CylinderGeometry(.5,.65,1,10),bark,150,r=>inPlay(r),{s0:.8,s1:1.3,y:.5,sy:.7,seed:47,shadow:false});          // stumps
@@ -37,7 +42,7 @@ MAPS.woods.dress=function(){
 };
 MAPS.field.dress=function(){
   const rock=tmat('83-mossy-boulder-rock',{r:.95,m:0,col:0xb8b0a0}),wood=tmat('16-wooden-crate'),gm=tmat('24-gunmetal'),drum=tmat('18-red-drum-label',{r:.5,m:.4});
-  scatter(rockGeo(.4,7),rock,700,r=>inPlay(r),{s0:.4,s1:1.5,y:.1,seed:51,shadow:false});
+  scatter(pebbleGeo(.4,7),rock,700,r=>inPlay(r),{s0:.4,s1:1.5,y:.1,seed:51,shadow:false});
   const F=MAPS.field.farm;
   scatter(new THREE.BoxGeometry(1.2,.16,1.2),wood,26,r=>[F.x+(r()-.5)*40,F.z+(r()-.5)*36],{s0:1,s1:1.2,y:.08,seed:53});            // pallets by the farm
   scatter(new THREE.CylinderGeometry(.45,.45,1.3,12),drum,18,r=>[F.x+(r()-.5)*44,F.z+(r()-.5)*40],{s0:1,s1:1,y:.65,seed:55});        // drums
@@ -59,7 +64,7 @@ MAPS.docks.dress=function(){
   scatter(new THREE.ConeGeometry(.28,.8,10),haz,110,edge,{s0:1,s1:1,y:.4,seed:67});                                       // traffic cones
   scatter(new THREE.CylinderGeometry(.45,.45,1.3,12),drumR,70,edge,{s0:1,s1:1,y:.65,seed:68});
   scatter(new THREE.CylinderGeometry(.45,.45,1.3,12),drumB,70,edge,{s0:1,s1:1,y:.65,seed:69});
-  scatter(new THREE.TorusGeometry(.5,.14,8,16).rotateX(Math.PI/2),tmat('57-rubber-and-cables'),60,edge,{s0:1,s1:1.3,y:.14,seed:70});   // coiled hoses
+  scatter(new THREE.TorusGeometry(.5,.14,6,12).rotateX(Math.PI/2),tmat('57-rubber-and-cables'),60,edge,{s0:1,s1:1.3,y:.14,seed:70});   // coiled hoses
 };
 MAPS.foundry.dress=function(){
   const B=MAPS.foundry.bounds,yard=r=>{const q=inBounds(r,6);return Math.hypot(q[0]-FORGE_AT.x,q[1]-FORGE_AT.z)>30?q:null;};

@@ -18,7 +18,17 @@ function buildGround(){
   g.setAttribute('aTrail',new THREE.BufferAttribute(tr,1));g.setAttribute('aMix',new THREE.BufferAttribute(mx,1));g.computeVertexNormals();
   const m=hookWorld(new THREE.MeshStandardMaterial({map:tex(G_.a,{rep:WORLD*2/G_.ar}),roughness:G_.rough||.96,metalness:0}),
     {ground:{tB:tex(G_.b),tC:tex(G_.c),bRep:1/G_.br,cRep:1/G_.cr,tint:G_.tint||[1,1,1],nA:nmap(G_.a,{rep:[WORLD*2/G_.ar,WORLD*2/G_.ar]}),nB:nmap(G_.b),nC:nmap(G_.c)}});
-  const mesh=new THREE.Mesh(g,m);mesh.receiveShadow=true;S.add(mesh);return mesh;
+  /* The ground is cut into 3 x 3 pieces so the pieces behind you and off to the sides are not drawn (it was one sheet of 101,250 triangles,
+     all of it sent every frame). The slopes (normals) are worked out on the whole sheet first, so no seam shows where two pieces meet. */
+  const CH=3,C=n/CH,N1=n+1,C1=C+1,idx=[];
+  for(let j=0;j<C;j++)for(let i=0;i<C;i++){const a=i+C1*j,b=i+C1*(j+1),c=i+1+C1*(j+1),d=i+1+C1*j;idx.push(a,b,d,b,c,d);}
+  const index=new THREE.BufferAttribute(new Uint16Array(idx),1),grp=new THREE.Group();
+  for(let cj=0;cj<CH;cj++)for(let ci=0;ci<CH;ci++){const cg=new THREE.BufferGeometry();
+    for(const nm of ['position','normal','uv','aTrail','aMix']){const src=g.attributes[nm],k=src.itemSize,arr=new Float32Array(C1*C1*k);
+      for(let j=0;j<C1;j++){const o=((cj*C+j)*N1+ci*C)*k;arr.set(src.array.subarray(o,o+C1*k),j*C1*k);}
+      cg.setAttribute(nm,new THREE.BufferAttribute(arr,k));}
+    cg.setIndex(index);const mesh=new THREE.Mesh(cg,m);mesh.receiveShadow=true;grp.add(mesh);}
+  g.dispose();S.add(grp);return grp;
 }
 /* a road or trail draped over the ground, textured along its length, soft at the edges */
 function ribbon(pts,width,texName,repLen,lift){
@@ -100,6 +110,10 @@ function loadVeg(mixId){
 }
 const _cf=new THREE.Vector3();
 let VEGN={tris:0,inst:0,by:{}};
+/* plants are filed in 25 m squares, so each frame only looks through the squares within drawing distance instead of at every plant on the map
+   (the field has 15,000 grass tufts, and grass is drawn only out to 24-52 m) */
+const VCS=25,VCN=18,VCH=9;
+function vegGrid(a){const g=a.grid=new Array(VCN*VCN);a.inst.forEach((s,i)=>{const k=clamp(Math.floor(s.x/VCS)+VCH,0,VCN-1)*VCN+clamp(Math.floor(s.z/VCS)+VCH,0,VCN-1);(g[k]||(g[k]=[])).push(i);});}
 /* every frame: choose which instances to draw (distance + view cone), near or far, and how faded */
 function updVeg(dt,mx,my,mz){
   if(!VEG.ready)return;
@@ -109,10 +123,12 @@ function updVeg(dt,mx,my,mz){
   const segx=mx-cx,segz=mz-cz,segL2=segx*segx+segz*segz||1;
   for(const a of VEG.list){
     const isT=a.kind==='tree',K=a.kind,far=a.parts.far.length>0,nearD=isT?NEAR:K==='grass'?QC.grassNear:K==='bush'?NEAR*.55:NEAR,lim=K==='grass'?GR:K==='bush'?NEAR*1.3:K==='prop'?NEAR*1.5:FAR;
-    const sn=a.sel,sf=a.selFar;sn.length=0;sf.length=0;
-    for(let i=0;i<a.inst.length;i++){const s=a.inst[i],dx=s.x-cx,dz=s.z-cz,d2=dx*dx+dz*dz;if(d2>lim*lim)continue;
+    const sn=a.sel,sf=a.selFar;sn.length=0;sf.length=0;if(!a.grid)vegGrid(a);
+    const i0=clamp(Math.floor((cx-lim)/VCS)+VCH,0,VCN-1),i1=clamp(Math.floor((cx+lim)/VCS)+VCH,0,VCN-1),j0=clamp(Math.floor((cz-lim)/VCS)+VCH,0,VCN-1),j1=clamp(Math.floor((cz+lim)/VCS)+VCH,0,VCN-1);
+    for(let ci=i0;ci<=i1;ci++)for(let cj=j0;cj<=j1;cj++){const C=a.grid[ci*VCN+cj];if(!C)continue;
+     for(let q=0;q<C.length;q++){const i=C[q],s=a.inst[i],dx=s.x-cx,dz=s.z-cz,d2=dx*dx+dz*dz;if(d2>lim*lim)continue;
       const d=Math.sqrt(d2);if(d>s.cr+6&&(dx*fx+dz*fz)/d<cosT-s.cr/d)continue;
-      if(!far||d<nearD)sn.push(i);else sf.push(i);}
+      if(!far||d<nearD)sn.push(i);else sf.push(i);}}
     /* fade near trees that stand between the camera and the mech, or right against the lens */
     if(isT){for(const i of sn){const s=a.inst[i],dx=s.x-cx,dz=s.z-cz;let tgt=0;const t=(dx*segx+dz*segz)/segL2;
         if(t>-.05&&t<1.08){const px=dx-segx*t,pz=dz-segz*t,dp=Math.sqrt(px*px+pz*pz);if(dp<s.cr*.7+1.4)tgt=.86;}

@@ -11,7 +11,36 @@ function nmap(name,o={}){if(!NMAPS.has(name))return null;const t=tex(name+'-n',{
 const NK={'22-howler-armour':.5,'23-grey-armour':.5,'24-gunmetal':.45,'25-brushed-steel':.4,'54-forge-armour':.6,'53-howler-armour-large-plates':.5};
 function addNormal(mat,name,k,o){const t=nmap(name,o);if(t){mat.normalMap=t;mat.normalScale.set(k,k);}return mat;}
 /* ---- bloom ---- */
-const POST={on:false,comp:null,bloom:null};
+const POST={on:false,comp:null,bloom:null,out:null};
+/* ---- the finished picture (Medium and High; it rides on the step that already turns the picture into screen colours, so it adds no pass) ----
+   sharpen: each pixel is pushed a little away from the average of its four neighbours, so paint, plates and ground read crisper on a phone,
+            where the picture is drawn smaller than the screen and stretched (the push is capped, so bright lights get no halo);
+   corners: shaded a little, which draws the eye to the middle;
+   grain:   a pixel of noise that breaks up the stripes (banding) that haze and sky gradients show on 8-bit screens. */
+const FINAL_FRAG=`precision highp float;
+  uniform sampler2D tDiffuse;uniform vec2 uPx;uniform vec3 uFin;uniform float uT;varying vec2 vUv;
+  #include <tonemapping_pars_fragment>
+  #include <colorspace_pars_fragment>
+  void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;
+    #ifdef IH_SHARP
+      vec3 a=(texture2D(tDiffuse,vUv+vec2(uPx.x,0.)).rgb+texture2D(tDiffuse,vUv-vec2(uPx.x,0.)).rgb+texture2D(tDiffuse,vUv+vec2(0.,uPx.y)).rgb+texture2D(tDiffuse,vUv-vec2(0.,uPx.y)).rgb)*.25;
+      vec3 lim=c*.3+.004;c=max(c+clamp(c-a,-lim,lim)*uFin.x,0.);
+    #endif
+    gl_FragColor=vec4(c,1.);
+    #ifdef ACES_FILMIC_TONE_MAPPING
+      gl_FragColor.rgb=ACESFilmicToneMapping(gl_FragColor.rgb);
+    #endif
+    #ifdef SRGB_TRANSFER
+      gl_FragColor=sRGBTransferOETF(gl_FragColor);
+    #endif
+    vec2 q=vUv-.5;gl_FragColor.rgb*=1.-uFin.y*smoothstep(.1,.62,dot(q,q)*1.6);
+    float n=fract(52.9829189*fract(dot(gl_FragCoord.xy+uT*vec2(47.,17.),vec2(.06711056,.00583715))));
+    gl_FragColor.rgb+=(n-.5)*uFin.z;}`;
+function finalPass(){const p=new THREE.OutputPass();Object.assign(p.uniforms,{uPx:{value:new THREE.Vector2()},uFin:{value:new THREE.Vector3(.5,.2,.012)},uT:{value:0}});
+  p.material.fragmentShader=FINAL_FRAG;
+  /* the stock pass sets its switches the first time it draws; they are set here instead (with ours), so the shader is built once */
+  p._outputColorSpace=R.outputColorSpace;p._toneMapping=R.toneMapping;p.material.defines={SRGB_TRANSFER:'',ACES_FILMIC_TONE_MAPPING:''};if(!Q.has('nosharp'))p.material.defines.IH_SHARP='';
+  return p;}
 const HP_FRAG=`uniform sampler2D tDiffuse;uniform vec3 defaultColor;uniform float defaultOpacity,luminosityThreshold,smoothWidth;varying vec2 vUv;
   void main(){vec4 t=texture2D(tDiffuse,vUv);float v=max(t.r,max(t.g,t.b));float a=smoothstep(luminosityThreshold,luminosityThreshold+smoothWidth,v);
     gl_FragColor=mix(vec4(defaultColor,defaultOpacity),t,a);}`;
@@ -20,12 +49,15 @@ function postSetup(){const want=!!QC.bloom&&!Q.has('nobloom');
     POST.comp=new THREE.EffectComposer(R,rt);POST.comp.addPass(new THREE.RenderPass(S,cam));
     POST.bloom=new THREE.UnrealBloomPass(new THREE.Vector2(256,256),.55,.42,1.7);POST.bloom.highPassUniforms.smoothWidth.value=.6;
     POST.bloom.materialHighPassFilter.fragmentShader=HP_FRAG;POST.bloom.materialHighPassFilter.needsUpdate=true;
-    POST.comp.addPass(POST.bloom);POST.comp.addPass(new THREE.OutputPass());}
+    POST.comp.addPass(POST.bloom);POST.out=finalPass();POST.comp.addPass(POST.out);}
   /* glow switched off: its buffers (several screen-sized images) are freed, not kept */
-  if(!want&&POST.comp){POST.comp.dispose();if(POST.bloom&&POST.bloom.dispose)POST.bloom.dispose();POST.comp=null;POST.bloom=null;}
+  if(!want&&POST.comp){POST.comp.dispose();if(POST.bloom&&POST.bloom.dispose)POST.bloom.dispose();POST.comp=null;POST.bloom=null;POST.out=null;}
   POST.on=want;postResize();}
-function postResize(){if(!POST.comp)return;POST.comp.setPixelRatio(R.getPixelRatio());POST.comp.setSize(innerWidth,innerHeight);}
-function renderFrame(){if(POST.on){R.info.autoReset=false;R.info.reset();POST.comp.render();}else{R.info.autoReset=true;R.render(S,cam);}}
+/* Below High the glow is worked out at half the picture's size (a quarter of the pixels). Glow is a soft blur, so it looks the same and costs a quarter. */
+function postResize(){if(!POST.comp)return;const pr=R.getPixelRatio();POST.comp.setPixelRatio(pr);POST.comp.setSize(innerWidth,innerHeight);
+  if(POST.bloom&&QL!=='high')POST.bloom.setSize(innerWidth*pr*.5,innerHeight*pr*.5);
+  if(POST.out)POST.out.uniforms.uPx.value.set(1/Math.max(1,Math.round(innerWidth*pr)),1/Math.max(1,Math.round(innerHeight*pr)));}
+function renderFrame(){if(POST.on){R.info.autoReset=false;R.info.reset();POST.out.uniforms.uT.value=(G.t*60|0)%251;POST.comp.render();}else{R.info.autoReset=true;R.render(S,cam);}}
 /* ---- reflections: a small sky made from the map's own colours, turned into an environment map for anything metal ---- */
 let ENV=null;
 function buildEnv(L){const c=x=>new THREE.Color(x),sc=new THREE.Scene();
@@ -48,6 +80,21 @@ function decalSet(id,texName,max,dark){if(DEC[id])return DEC[id];const g=new THR
 function decal(id,x,z,size,rot){const D=id==='scorch'?decalSet('scorch','40-scorch-mark',48):decalSet('print','86-mech-footprint',72,0xb0a89c);
   _m4.compose(_w.set(x,hgt(x,z)+.05,z),_q.setFromAxisAngle(_v.set(0,1,0),rot||0),_v.set(size,1,size));D.im.setMatrixAt(D.i,_m4);D.i=(D.i+1)%D.max;D.im.count=Math.max(D.im.count,D.i===0?D.max:D.i);D.im.instanceMatrix.needsUpdate=true;}
 const SOFT_GROUND=()=>MAPID==='woods'||MAPID==='field';
+/* ---- Low draws no cast shadows, so the Wraith and the machines looked as if they floated. On Low each gets a soft dark patch on the ground
+   under it, laid along the slope: one small draw for all of them. It shrinks as the Wraith rises on its jets. ---- */
+const BLOB={im:null,max:40,up:new THREE.Vector3(0,1,0)};
+function blobPut(n,x,z,r){const y=hgt(x,z);_v.set(hgt(x-1,z)-hgt(x+1,z),2,hgt(x,z-1)-hgt(x,z+1)).normalize();
+  _m4.compose(_w.set(x,y+.07,z),_q.setFromUnitVectors(BLOB.up,_v),_v.set(r,1,r));BLOB.im.setMatrixAt(n,_m4);}
+function updBlobs(){if(QC.shadow){if(BLOB.im)BLOB.im.visible=false;return;}
+  if(!BLOB.im){const c=document.createElement('canvas');c.width=c.height=64;const g2=c.getContext('2d'),gr=g2.createRadialGradient(32,32,3,32,32,32);
+    gr.addColorStop(0,'rgba(0,0,0,.6)');gr.addColorStop(.5,'rgba(0,0,0,.34)');gr.addColorStop(1,'rgba(0,0,0,0)');g2.fillStyle=gr;g2.fillRect(0,0,64,64);
+    const g=new THREE.PlaneGeometry(2,2);g.rotateX(-Math.PI/2);
+    const m=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),color:0,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4});
+    BLOB.im=new THREE.InstancedMesh(g,m,BLOB.max);BLOB.im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);BLOB.im.frustumCulled=false;BLOB.im.renderOrder=1;S.add(BLOB.im);}
+  let n=0;
+  if(M&&M.root.visible&&P&&!P.dead){const air=Math.max(0,P.y-hgt(P.x,P.z));blobPut(n++,P.x,P.z,4.4/(1+air*.09));}
+  for(const e of EN){if(n>=BLOB.max)break;if(e.dead||!e.o.visible)continue;blobPut(n++,e.x,e.z,e.d.r*2.3);}
+  const A=BLOB.im.instanceMatrix;BLOB.im.count=n;BLOB.im.visible=n>0;if(n){A.clearUpdateRanges();A.addUpdateRange(0,n*16);A.needsUpdate=true;}}
 /* ---- shield flash: a hex bubble around the mech when the shield soaks a hit ---- */
 let SHF=null;
 function shieldFlash(){if(!SHF){const t=tex('59-shield-hex-pattern');t.repeat.set(5,2.5);

@@ -112,10 +112,16 @@ const SET={fps:store.get('fps','0')==='1'||store.get('fps',0)===1,quality:store.
 const QUAL={low:{bloom:0,px:.75e6,shadow:0,grass:24,grassNear:8,near:24,far:115,fog:100},
             med:{bloom:1,px:1.35e6,shadow:1024,grass:36,grassNear:12,near:32,far:165,fog:140},
             high:{bloom:1,px:3.4e6,shadow:2048,grass:52,grassNear:18,near:48,far:230,fog:185}};
-let QL=SET.quality==='auto'?(touchy?'med':'high'):SET.quality,QC=QUAL[QL],DYN=1;
+/* Auto quality remembers what it settled on for three days (the level, the picture scale, and the highest level this device held).
+   Every mission and every place reloads the page, so without this a slower phone started each one too high and stuttered its way down again. */
+const QTOP=touchy?'med':'high',QRANK={low:0,med:1,high:2};
+const AQ=(()=>{try{const a=JSON.parse(store.get('autoq','null'));return a&&QUAL[a.q]&&Date.now()-a.t<2592e5?a:{};}catch(e){return {};}})();
+function autoSave(){store.set('autoq',JSON.stringify({q:QL,d:+DYN.toFixed(2),ceil:AQ.ceil||null,t:Date.now()}));}
+function autoForget(){AQ.q=AQ.ceil=null;AQ.d=1;store.set('autoq','null');}
+let QL=SET.quality==='auto'?(AQ.q||QTOP):SET.quality,QC=QUAL[QL],DYN=1;
 const R=new THREE.WebGLRenderer({canvas:cv,antialias:!Q.has('noaa'),powerPreference:'high-performance',stencil:false});
 R.outputColorSpace=THREE.SRGBColorSpace;R.toneMapping=THREE.ACESFilmicToneMapping;R.toneMappingExposure=1.18;
-R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFSoftShadowMap;R.shadowMap.autoUpdate=true;
+R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFShadowMap;   /* this three.js draws soft shadows with PCFShadowMap (the old PCFSoftShadowMap name only printed a warning and fell back to it) */R.shadowMap.autoUpdate=true;
 const S=new THREE.Scene();
 const cam=new THREE.PerspectiveCamera(66,1,.1,700);
 function resize(){
@@ -159,8 +165,16 @@ const LM=new THREE.LoadingManager();let LOADP=0;
 LM.onProgress=(u,a,b)=>{LOADP=a/b;HUD.load(LOADP);};
 const TL=new THREE.TextureLoader(LM);
 const ART='art/';
-function tex(n,o={}){const t=TL.load(ART+n+'.webp');t.wrapS=t.wrapT=o.clamp?THREE.ClampToEdgeWrapping:THREE.RepeatWrapping;if(o.rep)t.repeat.set(o.rep,o.rep);
-  if(o.srgb!==false)t.colorSpace=THREE.SRGBColorSpace;if(o.glb)t.flipY=false;   /* models from Blender use glTF's upside-down v */t.anisotropy=Math.min(8,R.capabilities.getMaxAnisotropy());return t;}
+/* A picture file is downloaded, unpacked and stored on the graphics card once. Asking for it again (another material that tiles it
+   differently) gives a second texture that shares the first one's picture, so it costs no more memory or loading time.
+   (Before, the docks kept four copies of the blast wall and three of the gunmetal: about 5 MB each.) */
+const TEXB={};
+const ANISO=Math.min(touchy?4:8,R.capabilities.getMaxAnisotropy());   /* how sharp ground stays at a shallow angle: 4 on phones (cheaper to draw), 8 on laptops */
+function tex(n,o={}){let b=TEXB[n],t;
+  if(!b){b=TEXB[n]={t:null,ok:false,more:[]};t=b.t=TL.load(ART+n+'.webp',()=>{b.ok=true;for(const c of b.more)c.version++;b.more.length=0;});}
+  else{t=new THREE.Texture();t.source=b.t.source;if(b.ok)t.version++;else b.more.push(t);}   /* version++ = ready to draw, without sending the picture again */
+  t.wrapS=t.wrapT=o.clamp?THREE.ClampToEdgeWrapping:THREE.RepeatWrapping;if(o.rep)t.repeat.set(o.rep,o.rep);
+  if(o.srgb!==false)t.colorSpace=THREE.SRGBColorSpace;if(o.glb)t.flipY=false;   /* models from Blender use glTF's upside-down v */t.anisotropy=ANISO;return t;}
 /* --- light --- */
 const SUN=new THREE.Vector3(-.42,.62,-.66).normalize();   /* direction toward the sun: high, from the north-west */
 const HEMI=new THREE.HemisphereLight(0xd6e4ff,0x6a5a44,1.55);S.add(HEMI);
@@ -176,13 +190,18 @@ function placeSun(fx,fz){
 }
 /* --- sky dome: gradient, sun, drifting clouds (the same cloud texture throws the moving shadows on the ground) --- */
 const SKYU={tPano:{value:null},uPano:{value:0},uPanoK:{value:1},uSun:{value:SUN},uZen:{value:new THREE.Color(0x2a5fb4)},uHor:{value:new THREE.Color(0xb3c8de)},uSunC:{value:new THREE.Color(1,.93,.8)},
-  tCloud:U.tCloud,uCloudOff:U.uCloudOff,uCloudAmt:U.uCloudAmt};
+  tCloud:U.tCloud,uCloudOff:U.uCloudOff,uCloudAmt:U.uCloudAmt,
+  /* distance haze (see atmosphere() below): the haze colour, its cool tint away from the sun, its warm glow toward the sun, which way the sun lies on the map, how far up the sky the haze reaches */
+  uFog:{value:new THREE.Color(0xb3c8de)},uCool:{value:new THREE.Vector3(1,1,1)},uGlow:{value:new THREE.Vector3()},uSunAz:{value:new THREE.Vector2(0,-1)},uHaze:{value:.16}};
 const SKY=new THREE.Mesh(new THREE.SphereGeometry(500,32,16),new THREE.ShaderMaterial({uniforms:SKYU,side:THREE.BackSide,depthWrite:false,fog:false,
   vertexShader:`varying vec3 vD;void main(){vD=normalize(position);vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_Position=p.xyww;}`,
-  fragmentShader:`uniform vec3 uSun,uZen,uHor,uSunC;uniform sampler2D tCloud,tPano;uniform vec2 uCloudOff;uniform float uCloudAmt,uPano,uPanoK;varying vec3 vD;
+  fragmentShader:`uniform vec3 uSun,uZen,uHor,uSunC,uFog,uCool,uGlow;uniform sampler2D tCloud,tPano;uniform vec2 uCloudOff,uSunAz;uniform float uCloudAmt,uPano,uPanoK,uHaze;varying vec3 vD;
+  /* the haze at the horizon: the same colour the far ground fades to, so the land runs into the sky without a hard edge */
+  vec3 hazeCol(vec3 d){float fa=.5+.5*dot(normalize(d.xz+vec2(1e-5)),uSunAz);return uFog*mix(uCool,vec3(1.),fa)+uGlow*fa*fa*fa;}
+  float hazeAmt(float y){float k=1.-smoothstep(0.,uHaze,y);return k*k;}
   void main(){vec3 d=normalize(vD);float h=max(d.y,0.);
     if(uPano>.5){vec2 uv=vec2(atan(d.x,-d.z)/6.2831853+.5,.5+asin(clamp(d.y,-1.,1.))/3.1415927);vec3 pc=texture2D(tPano,vec2(uv.x,max(uv.y,.502))).rgb*uPanoK;
-      float sd=max(dot(d,uSun),0.);pc+=uSunC*pow(sd,700.)*10.;if(d.y<0.)pc=mix(pc,uHor,min(1.,-d.y*6.));gl_FragColor=vec4(pc,1.);
+      float sd=max(dot(d,uSun),0.);pc+=uSunC*pow(sd,700.)*10.;pc=mix(pc,hazeCol(d),hazeAmt(d.y));gl_FragColor=vec4(pc,1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       return;}
@@ -194,7 +213,7 @@ const SKY=new THREE.Mesh(new THREE.SphereGeometry(500,32,16),new THREE.ShaderMat
       float cl=smoothstep(.36,.86,n)*uCloudAmt*smoothstep(0.,.15,d.y);
       vec3 cc=mix(vec3(.46,.5,.58),vec3(1.05,1.03,1.),smoothstep(.25,.85,n2*.55+(1.-n1)*.65))+uSunC*pow(sd,6.)*.6;
       c=mix(c,cc,cl*.94);}
-    else c=mix(uHor,uHor*.8,min(1.,-d.y*4.));
+    c=mix(c,hazeCol(d),hazeAmt(d.y));
     gl_FragColor=vec4(c,1.);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -260,6 +279,26 @@ function horizonRing(texName,height,lift,tint,copies){
   const g=new THREE.CylinderGeometry(420,420,height,64,1,true);
   const m=new THREE.MeshBasicMaterial({map:t,transparent:true,side:THREE.BackSide,depthWrite:false,fog:false,color:new THREE.Color(...(tint||[1,1,1]))});
   RING=new THREE.Mesh(g,m);RING.renderOrder=-9;RING.frustumCulled=false;RING.userData.lift=lift;S.add(RING);}
+/* Distance haze that knows where the sun is. Far things used to fade to one flat colour all the way round. Now the haze is a little
+   warmer and brighter toward the sun and a little cooler away from it, and the sky's horizon uses the same colour, so the far ground
+   melts into the sky. It replaces three.js's own fog step in every material and costs a few sums per pixel: no extra pass, no texture.
+   The numbers are written into the shaders once, when the place loads (each place and mission loads the page afresh). */
+function atmosphere(L){
+  const f=x=>x.toFixed(4),C=THREE.ShaderChunk,sc=new THREE.Color(L.sunCol),m=Math.max(sc.r,sc.g,sc.b)||1,az=Math.hypot(SUN.x,SUN.z)||1;
+  /* strongest with a low sun (dusk at the docks), gentle at midday, faint at night */
+  const k=(L.glow!=null?L.glow:.2)*clamp((L.sunK||2)/3,.15,1)*(1-.55*SUN.y),cool=[1-.09*k/.2,1-.045*k/.2,1];
+  const fc=new THREE.Color(L.fog),lum=Math.max(.06,.3*fc.r+.6*fc.g+.1*fc.b),glow=[sc.r/m*k*lum*1.6,sc.g/m*k*lum*1.6,sc.b/m*k*lum*1.6];
+  SKYU.uFog.value.copy(fc);SKYU.uCool.value.set(...cool);SKYU.uGlow.value.set(...glow);SKYU.uSunAz.value.set(SUN.x/az,SUN.z/az);SKYU.uHaze.value=L.haze!=null?L.haze:L.pano?.2:.1;
+  C.fog_pars_vertex='#ifdef USE_FOG\n varying float vFogDepth;varying vec3 vFogDir;\n#endif';
+  C.fog_vertex='#ifdef USE_FOG\n vFogDepth=-mvPosition.z;vFogDir=(vec4(mvPosition.xyz,0.)*viewMatrix).xyz;\n#endif';   /* which way this point lies from the camera, in world directions */
+  C.fog_pars_fragment='#ifdef USE_FOG\n uniform vec3 fogColor;varying float vFogDepth;varying vec3 vFogDir;uniform float fogNear;uniform float fogFar;\n#endif';
+  C.fog_fragment=`#ifdef USE_FOG
+    float fogFactor=smoothstep(fogNear,fogFar,vFogDepth);
+    float fogA=.5+.5*dot(normalize(vFogDir.xz+vec2(1e-5)),vec2(${f(SUN.x/az)},${f(SUN.z/az)}));
+    vec3 fogC=fogColor*mix(vec3(${cool.map(f).join(',')}),vec3(1.),fogA)+vec3(${glow.map(f).join(',')})*fogA*fogA*fogA;
+    gl_FragColor.rgb=mix(gl_FragColor.rgb,fogC,fogFactor);
+  #endif`;
+}
 /* each map sets its own light, sky and fog */
 let LOOKNOW=null;
 function applyLook(L){LOOKNOW=L;if(L.fogFar){S.fog.far=Math.min(S.fog.far,L.fogFar);S.fog.near=S.fog.far*.22;}
@@ -267,6 +306,7 @@ function applyLook(L){LOOKNOW=L;if(L.fogFar){S.fog.far=Math.min(S.fog.far,L.fogF
   SKYU.uZen.value.set(L.zen);SKYU.uHor.value.set(L.hor);S.fog.color.set(L.fog);U.uCloudAmt.value=L.clouds;R.toneMappingExposure=L.exp||1.18;
   if(L.pano){SKYU.tPano.value=tex(L.pano);SKYU.uPano.value=1;SKYU.uPanoK.value=L.panoK||1;}
   if(L.ring)horizonRing(L.ring.tex,L.ring.h,L.ring.lift,L.ring.tint,L.ring.copies);
+  atmosphere(L);
 }
 
 /* ---- 03b_post.js ---- */
@@ -283,7 +323,36 @@ function nmap(name,o={}){if(!NMAPS.has(name))return null;const t=tex(name+'-n',{
 const NK={'22-howler-armour':.5,'23-grey-armour':.5,'24-gunmetal':.45,'25-brushed-steel':.4,'54-forge-armour':.6,'53-howler-armour-large-plates':.5};
 function addNormal(mat,name,k,o){const t=nmap(name,o);if(t){mat.normalMap=t;mat.normalScale.set(k,k);}return mat;}
 /* ---- bloom ---- */
-const POST={on:false,comp:null,bloom:null};
+const POST={on:false,comp:null,bloom:null,out:null};
+/* ---- the finished picture (Medium and High; it rides on the step that already turns the picture into screen colours, so it adds no pass) ----
+   sharpen: each pixel is pushed a little away from the average of its four neighbours, so paint, plates and ground read crisper on a phone,
+            where the picture is drawn smaller than the screen and stretched (the push is capped, so bright lights get no halo);
+   corners: shaded a little, which draws the eye to the middle;
+   grain:   a pixel of noise that breaks up the stripes (banding) that haze and sky gradients show on 8-bit screens. */
+const FINAL_FRAG=`precision highp float;
+  uniform sampler2D tDiffuse;uniform vec2 uPx;uniform vec3 uFin;uniform float uT;varying vec2 vUv;
+  #include <tonemapping_pars_fragment>
+  #include <colorspace_pars_fragment>
+  void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;
+    #ifdef IH_SHARP
+      vec3 a=(texture2D(tDiffuse,vUv+vec2(uPx.x,0.)).rgb+texture2D(tDiffuse,vUv-vec2(uPx.x,0.)).rgb+texture2D(tDiffuse,vUv+vec2(0.,uPx.y)).rgb+texture2D(tDiffuse,vUv-vec2(0.,uPx.y)).rgb)*.25;
+      vec3 lim=c*.3+.004;c=max(c+clamp(c-a,-lim,lim)*uFin.x,0.);
+    #endif
+    gl_FragColor=vec4(c,1.);
+    #ifdef ACES_FILMIC_TONE_MAPPING
+      gl_FragColor.rgb=ACESFilmicToneMapping(gl_FragColor.rgb);
+    #endif
+    #ifdef SRGB_TRANSFER
+      gl_FragColor=sRGBTransferOETF(gl_FragColor);
+    #endif
+    vec2 q=vUv-.5;gl_FragColor.rgb*=1.-uFin.y*smoothstep(.1,.62,dot(q,q)*1.6);
+    float n=fract(52.9829189*fract(dot(gl_FragCoord.xy+uT*vec2(47.,17.),vec2(.06711056,.00583715))));
+    gl_FragColor.rgb+=(n-.5)*uFin.z;}`;
+function finalPass(){const p=new THREE.OutputPass();Object.assign(p.uniforms,{uPx:{value:new THREE.Vector2()},uFin:{value:new THREE.Vector3(.5,.2,.012)},uT:{value:0}});
+  p.material.fragmentShader=FINAL_FRAG;
+  /* the stock pass sets its switches the first time it draws; they are set here instead (with ours), so the shader is built once */
+  p._outputColorSpace=R.outputColorSpace;p._toneMapping=R.toneMapping;p.material.defines={SRGB_TRANSFER:'',ACES_FILMIC_TONE_MAPPING:''};if(!Q.has('nosharp'))p.material.defines.IH_SHARP='';
+  return p;}
 const HP_FRAG=`uniform sampler2D tDiffuse;uniform vec3 defaultColor;uniform float defaultOpacity,luminosityThreshold,smoothWidth;varying vec2 vUv;
   void main(){vec4 t=texture2D(tDiffuse,vUv);float v=max(t.r,max(t.g,t.b));float a=smoothstep(luminosityThreshold,luminosityThreshold+smoothWidth,v);
     gl_FragColor=mix(vec4(defaultColor,defaultOpacity),t,a);}`;
@@ -292,12 +361,15 @@ function postSetup(){const want=!!QC.bloom&&!Q.has('nobloom');
     POST.comp=new THREE.EffectComposer(R,rt);POST.comp.addPass(new THREE.RenderPass(S,cam));
     POST.bloom=new THREE.UnrealBloomPass(new THREE.Vector2(256,256),.55,.42,1.7);POST.bloom.highPassUniforms.smoothWidth.value=.6;
     POST.bloom.materialHighPassFilter.fragmentShader=HP_FRAG;POST.bloom.materialHighPassFilter.needsUpdate=true;
-    POST.comp.addPass(POST.bloom);POST.comp.addPass(new THREE.OutputPass());}
+    POST.comp.addPass(POST.bloom);POST.out=finalPass();POST.comp.addPass(POST.out);}
   /* glow switched off: its buffers (several screen-sized images) are freed, not kept */
-  if(!want&&POST.comp){POST.comp.dispose();if(POST.bloom&&POST.bloom.dispose)POST.bloom.dispose();POST.comp=null;POST.bloom=null;}
+  if(!want&&POST.comp){POST.comp.dispose();if(POST.bloom&&POST.bloom.dispose)POST.bloom.dispose();POST.comp=null;POST.bloom=null;POST.out=null;}
   POST.on=want;postResize();}
-function postResize(){if(!POST.comp)return;POST.comp.setPixelRatio(R.getPixelRatio());POST.comp.setSize(innerWidth,innerHeight);}
-function renderFrame(){if(POST.on){R.info.autoReset=false;R.info.reset();POST.comp.render();}else{R.info.autoReset=true;R.render(S,cam);}}
+/* Below High the glow is worked out at half the picture's size (a quarter of the pixels). Glow is a soft blur, so it looks the same and costs a quarter. */
+function postResize(){if(!POST.comp)return;const pr=R.getPixelRatio();POST.comp.setPixelRatio(pr);POST.comp.setSize(innerWidth,innerHeight);
+  if(POST.bloom&&QL!=='high')POST.bloom.setSize(innerWidth*pr*.5,innerHeight*pr*.5);
+  if(POST.out)POST.out.uniforms.uPx.value.set(1/Math.max(1,Math.round(innerWidth*pr)),1/Math.max(1,Math.round(innerHeight*pr)));}
+function renderFrame(){if(POST.on){R.info.autoReset=false;R.info.reset();POST.out.uniforms.uT.value=(G.t*60|0)%251;POST.comp.render();}else{R.info.autoReset=true;R.render(S,cam);}}
 /* ---- reflections: a small sky made from the map's own colours, turned into an environment map for anything metal ---- */
 let ENV=null;
 function buildEnv(L){const c=x=>new THREE.Color(x),sc=new THREE.Scene();
@@ -320,6 +392,21 @@ function decalSet(id,texName,max,dark){if(DEC[id])return DEC[id];const g=new THR
 function decal(id,x,z,size,rot){const D=id==='scorch'?decalSet('scorch','40-scorch-mark',48):decalSet('print','86-mech-footprint',72,0xb0a89c);
   _m4.compose(_w.set(x,hgt(x,z)+.05,z),_q.setFromAxisAngle(_v.set(0,1,0),rot||0),_v.set(size,1,size));D.im.setMatrixAt(D.i,_m4);D.i=(D.i+1)%D.max;D.im.count=Math.max(D.im.count,D.i===0?D.max:D.i);D.im.instanceMatrix.needsUpdate=true;}
 const SOFT_GROUND=()=>MAPID==='woods'||MAPID==='field';
+/* ---- Low draws no cast shadows, so the Wraith and the machines looked as if they floated. On Low each gets a soft dark patch on the ground
+   under it, laid along the slope: one small draw for all of them. It shrinks as the Wraith rises on its jets. ---- */
+const BLOB={im:null,max:40,up:new THREE.Vector3(0,1,0)};
+function blobPut(n,x,z,r){const y=hgt(x,z);_v.set(hgt(x-1,z)-hgt(x+1,z),2,hgt(x,z-1)-hgt(x,z+1)).normalize();
+  _m4.compose(_w.set(x,y+.07,z),_q.setFromUnitVectors(BLOB.up,_v),_v.set(r,1,r));BLOB.im.setMatrixAt(n,_m4);}
+function updBlobs(){if(QC.shadow){if(BLOB.im)BLOB.im.visible=false;return;}
+  if(!BLOB.im){const c=document.createElement('canvas');c.width=c.height=64;const g2=c.getContext('2d'),gr=g2.createRadialGradient(32,32,3,32,32,32);
+    gr.addColorStop(0,'rgba(0,0,0,.6)');gr.addColorStop(.5,'rgba(0,0,0,.34)');gr.addColorStop(1,'rgba(0,0,0,0)');g2.fillStyle=gr;g2.fillRect(0,0,64,64);
+    const g=new THREE.PlaneGeometry(2,2);g.rotateX(-Math.PI/2);
+    const m=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),color:0,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4});
+    BLOB.im=new THREE.InstancedMesh(g,m,BLOB.max);BLOB.im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);BLOB.im.frustumCulled=false;BLOB.im.renderOrder=1;S.add(BLOB.im);}
+  let n=0;
+  if(M&&M.root.visible&&P&&!P.dead){const air=Math.max(0,P.y-hgt(P.x,P.z));blobPut(n++,P.x,P.z,4.4/(1+air*.09));}
+  for(const e of EN){if(n>=BLOB.max)break;if(e.dead||!e.o.visible)continue;blobPut(n++,e.x,e.z,e.d.r*2.3);}
+  const A=BLOB.im.instanceMatrix;BLOB.im.count=n;BLOB.im.visible=n>0;if(n){A.clearUpdateRanges();A.addUpdateRange(0,n*16);A.needsUpdate=true;}}
 /* ---- shield flash: a hex bubble around the mech when the shield soaks a hit ---- */
 let SHF=null;
 function shieldFlash(){if(!SHF){const t=tex('59-shield-hex-pattern');t.repeat.set(5,2.5);
@@ -348,7 +435,17 @@ function buildGround(){
   g.setAttribute('aTrail',new THREE.BufferAttribute(tr,1));g.setAttribute('aMix',new THREE.BufferAttribute(mx,1));g.computeVertexNormals();
   const m=hookWorld(new THREE.MeshStandardMaterial({map:tex(G_.a,{rep:WORLD*2/G_.ar}),roughness:G_.rough||.96,metalness:0}),
     {ground:{tB:tex(G_.b),tC:tex(G_.c),bRep:1/G_.br,cRep:1/G_.cr,tint:G_.tint||[1,1,1],nA:nmap(G_.a,{rep:[WORLD*2/G_.ar,WORLD*2/G_.ar]}),nB:nmap(G_.b),nC:nmap(G_.c)}});
-  const mesh=new THREE.Mesh(g,m);mesh.receiveShadow=true;S.add(mesh);return mesh;
+  /* The ground is cut into 3 x 3 pieces so the pieces behind you and off to the sides are not drawn (it was one sheet of 101,250 triangles,
+     all of it sent every frame). The slopes (normals) are worked out on the whole sheet first, so no seam shows where two pieces meet. */
+  const CH=3,C=n/CH,N1=n+1,C1=C+1,idx=[];
+  for(let j=0;j<C;j++)for(let i=0;i<C;i++){const a=i+C1*j,b=i+C1*(j+1),c=i+1+C1*(j+1),d=i+1+C1*j;idx.push(a,b,d,b,c,d);}
+  const index=new THREE.BufferAttribute(new Uint16Array(idx),1),grp=new THREE.Group();
+  for(let cj=0;cj<CH;cj++)for(let ci=0;ci<CH;ci++){const cg=new THREE.BufferGeometry();
+    for(const nm of ['position','normal','uv','aTrail','aMix']){const src=g.attributes[nm],k=src.itemSize,arr=new Float32Array(C1*C1*k);
+      for(let j=0;j<C1;j++){const o=((cj*C+j)*N1+ci*C)*k;arr.set(src.array.subarray(o,o+C1*k),j*C1*k);}
+      cg.setAttribute(nm,new THREE.BufferAttribute(arr,k));}
+    cg.setIndex(index);const mesh=new THREE.Mesh(cg,m);mesh.receiveShadow=true;grp.add(mesh);}
+  g.dispose();S.add(grp);return grp;
 }
 /* a road or trail draped over the ground, textured along its length, soft at the edges */
 function ribbon(pts,width,texName,repLen,lift){
@@ -430,6 +527,10 @@ function loadVeg(mixId){
 }
 const _cf=new THREE.Vector3();
 let VEGN={tris:0,inst:0,by:{}};
+/* plants are filed in 25 m squares, so each frame only looks through the squares within drawing distance instead of at every plant on the map
+   (the field has 15,000 grass tufts, and grass is drawn only out to 24-52 m) */
+const VCS=25,VCN=18,VCH=9;
+function vegGrid(a){const g=a.grid=new Array(VCN*VCN);a.inst.forEach((s,i)=>{const k=clamp(Math.floor(s.x/VCS)+VCH,0,VCN-1)*VCN+clamp(Math.floor(s.z/VCS)+VCH,0,VCN-1);(g[k]||(g[k]=[])).push(i);});}
 /* every frame: choose which instances to draw (distance + view cone), near or far, and how faded */
 function updVeg(dt,mx,my,mz){
   if(!VEG.ready)return;
@@ -439,10 +540,12 @@ function updVeg(dt,mx,my,mz){
   const segx=mx-cx,segz=mz-cz,segL2=segx*segx+segz*segz||1;
   for(const a of VEG.list){
     const isT=a.kind==='tree',K=a.kind,far=a.parts.far.length>0,nearD=isT?NEAR:K==='grass'?QC.grassNear:K==='bush'?NEAR*.55:NEAR,lim=K==='grass'?GR:K==='bush'?NEAR*1.3:K==='prop'?NEAR*1.5:FAR;
-    const sn=a.sel,sf=a.selFar;sn.length=0;sf.length=0;
-    for(let i=0;i<a.inst.length;i++){const s=a.inst[i],dx=s.x-cx,dz=s.z-cz,d2=dx*dx+dz*dz;if(d2>lim*lim)continue;
+    const sn=a.sel,sf=a.selFar;sn.length=0;sf.length=0;if(!a.grid)vegGrid(a);
+    const i0=clamp(Math.floor((cx-lim)/VCS)+VCH,0,VCN-1),i1=clamp(Math.floor((cx+lim)/VCS)+VCH,0,VCN-1),j0=clamp(Math.floor((cz-lim)/VCS)+VCH,0,VCN-1),j1=clamp(Math.floor((cz+lim)/VCS)+VCH,0,VCN-1);
+    for(let ci=i0;ci<=i1;ci++)for(let cj=j0;cj<=j1;cj++){const C=a.grid[ci*VCN+cj];if(!C)continue;
+     for(let q=0;q<C.length;q++){const i=C[q],s=a.inst[i],dx=s.x-cx,dz=s.z-cz,d2=dx*dx+dz*dz;if(d2>lim*lim)continue;
       const d=Math.sqrt(d2);if(d>s.cr+6&&(dx*fx+dz*fz)/d<cosT-s.cr/d)continue;
-      if(!far||d<nearD)sn.push(i);else sf.push(i);}
+      if(!far||d<nearD)sn.push(i);else sf.push(i);}}
     /* fade near trees that stand between the camera and the mech, or right against the lens */
     if(isT){for(const i of sn){const s=a.inst[i],dx=s.x-cx,dz=s.z-cz;let tgt=0;const t=(dx*segx+dz*segz)/segL2;
         if(t>-.05&&t<1.08){const px=dx-segx*t,pz=dz-segz*t,dp=Math.sqrt(px*px+pz*pz);if(dp<s.cr*.7+1.4)tgt=.86;}
@@ -708,6 +811,11 @@ MAPS.foundry={name:'FOUNDRY 4',mix:'woods',spawn:{x:0,z:100,yaw:0},bounds:{x0:-1
    Each kind is one instanced mesh, so a whole map's clutter costs about 10-16 draw calls. ===================== */
 function rockGeo(r,seed){const g=new THREE.DodecahedronGeometry(r,1),p=g.attributes.position,rnd=mulberry(seed);
   for(let i=0;i<p.count;i++){const k=.78+rnd()*.4;p.setXYZ(i,p.getX(i)*k,p.getY(i)*k*.7,p.getZ(i)*k);}g.computeVertexNormals();return g;}
+/* a pebble: the same kind of stone from 36 triangles instead of 144. Hundreds lie about each outdoor place and they are all drawn every frame,
+   so this takes about 100,000 triangles a frame off the woods and 75,000 off the field. Corners that meet move together, so the stone stays closed. */
+function pebbleGeo(r,seed){const g=new THREE.DodecahedronGeometry(r,0),p=g.attributes.position;
+  for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),k=.74+.5*hash2(Math.round(x*97)+seed*131+Math.round(z*57),Math.round(y*83)+seed*17);p.setXYZ(i,x*k,y*k*.7,z*k);}
+  g.computeVertexNormals();return g;}
 /* place n copies where fn(rnd) says (returns [x,z] or null), avoiding walls, trunks and the spawn */
 function scatter(geo,mat,n,fn,o={}){const rnd=mulberry(o.seed||17),im=new THREE.InstancedMesh(geo,mat,n);let k=0;
   for(let t=0;t<n*6&&k<n;t++){const q=fn(rnd);if(!q)continue;const [x,z]=q;if(treeAt(x,z,.5)||Math.hypot(x-SPAWN.x,z-SPAWN.z)<(o.clear||8))continue;
@@ -734,7 +842,7 @@ function puddles(n,fn,size,o={}){const g=new THREE.PlaneGeometry(1,1);g.rotateX(
 /* ---------------- per map ---------------- */
 MAPS.woods.dress=function(){
   const rock=tmat('83-mossy-boulder-rock',{r:.95,m:0}),bark=new THREE.MeshStandardMaterial({color:0x4a3c30,roughness:.95,normalMap:nmap('83-mossy-boulder-rock'),normalScale:new THREE.Vector2(1.4,1.4)});
-  scatter(rockGeo(.35,3),rock,900,r=>inPlay(r),{s0:.5,s1:1.6,y:.1,seed:41,shadow:false});                     // pebbles and stones (no shadow: 130,000 triangles drawn again for a shadow you can't see)
+  scatter(pebbleGeo(.35,3),rock,900,r=>inPlay(r),{s0:.5,s1:1.6,y:.1,seed:41,shadow:false});                     // pebbles and stones (no shadow: 130,000 triangles drawn again for a shadow you can't see)
   const log=new THREE.CylinderGeometry(.42,.48,1,10);log.rotateZ(Math.PI/2);
   scatter(log,bark,90,r=>{const q=inPlay(r);return clearD(q[0],q[1])>4&&trailD(q[0],q[1])>5?q:null;},{s0:4,s1:8,sy:.12,y:.05,seed:43,n2:1,shadow:false});   // fallen logs
   scatter(new THREE.CylinderGeometry(.5,.65,1,10),bark,150,r=>inPlay(r),{s0:.8,s1:1.3,y:.5,sy:.7,seed:47,shadow:false});          // stumps
@@ -742,7 +850,7 @@ MAPS.woods.dress=function(){
 };
 MAPS.field.dress=function(){
   const rock=tmat('83-mossy-boulder-rock',{r:.95,m:0,col:0xb8b0a0}),wood=tmat('16-wooden-crate'),gm=tmat('24-gunmetal'),drum=tmat('18-red-drum-label',{r:.5,m:.4});
-  scatter(rockGeo(.4,7),rock,700,r=>inPlay(r),{s0:.4,s1:1.5,y:.1,seed:51,shadow:false});
+  scatter(pebbleGeo(.4,7),rock,700,r=>inPlay(r),{s0:.4,s1:1.5,y:.1,seed:51,shadow:false});
   const F=MAPS.field.farm;
   scatter(new THREE.BoxGeometry(1.2,.16,1.2),wood,26,r=>[F.x+(r()-.5)*40,F.z+(r()-.5)*36],{s0:1,s1:1.2,y:.08,seed:53});            // pallets by the farm
   scatter(new THREE.CylinderGeometry(.45,.45,1.3,12),drum,18,r=>[F.x+(r()-.5)*44,F.z+(r()-.5)*40],{s0:1,s1:1,y:.65,seed:55});        // drums
@@ -764,7 +872,7 @@ MAPS.docks.dress=function(){
   scatter(new THREE.ConeGeometry(.28,.8,10),haz,110,edge,{s0:1,s1:1,y:.4,seed:67});                                       // traffic cones
   scatter(new THREE.CylinderGeometry(.45,.45,1.3,12),drumR,70,edge,{s0:1,s1:1,y:.65,seed:68});
   scatter(new THREE.CylinderGeometry(.45,.45,1.3,12),drumB,70,edge,{s0:1,s1:1,y:.65,seed:69});
-  scatter(new THREE.TorusGeometry(.5,.14,8,16).rotateX(Math.PI/2),tmat('57-rubber-and-cables'),60,edge,{s0:1,s1:1.3,y:.14,seed:70});   // coiled hoses
+  scatter(new THREE.TorusGeometry(.5,.14,6,12).rotateX(Math.PI/2),tmat('57-rubber-and-cables'),60,edge,{s0:1,s1:1.3,y:.14,seed:70});   // coiled hoses
 };
 MAPS.foundry.dress=function(){
   const B=MAPS.foundry.bounds,yard=r=>{const q=inBounds(r,6);return Math.hypot(q[0]-FORGE_AT.x,q[1]-FORGE_AT.z)>30?q:null;};
@@ -1867,7 +1975,7 @@ function buildMech(){
   buildWraithModel(false,true).then(W=>{M.W=W;M.root.add(W.root);const J=W.J;
     M.hips=J.hips;M.torso=J.torso;M.head=J.head;M.hip0=J.hips.position.y;M.tor0=J.torso.position.y;
     W.root.updateMatrixWorld(true);M.legs=[-1,1].map(sd=>legSetup(J,sd<0?'L':'R',sd,M.hip0));
-    M.jl=new THREE.PointLight(0xff9a40,0,14,1.8);M.jl.position.set(0,0,1.6);M.torso.add(M.jl);
+    M.jl=new THREE.PointLight(0xff9a40,0,14,1.8);M.jl.position.set(0,0,1.6);M.torso.add(M.jl);lowLights();
     M.rest=[M.hips,M.torso,J.arm_L,J.arm_R].filter(Boolean).map(o=>[o,o.rotation.clone()]);   /* the standing pose, for placing muzzles */
     rigKit(M);M.ready=true;M.tier=0;setTier(M,GUN.tier||1);});
   return M;
@@ -2030,6 +2138,8 @@ const BOLTS=[],EBOLTS=[],MISS=[];
 const SALVO={cd:0,cool:12,n:14,left:0,t:0,dmg:16,range:48};
 const BOLT={speed:150,range:170};
 let BM=null,EBM=null,MSM=null,MFL=null;
+/* send the graphics card only the shots in flight (it used to get every slot, 27 KB a frame, whenever anything was fired) */
+function sendInst(im,n){im.visible=n>0;if(n){const A=im.instanceMatrix;A.clearUpdateRanges();A.addUpdateRange(0,n*16);A.needsUpdate=true;}}
 const NOARM=[null],_sc=new THREE.Vector3(),_v=new THREE.Vector3(),_w=new THREE.Vector3(),_m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0),_z=new THREE.Vector3(0,0,1);
 function buildWeapons(){
   const g=new THREE.CylinderGeometry(.1,.1,1,6,1,true);g.rotateX(Math.PI/2);
@@ -2040,7 +2150,7 @@ function buildWeapons(){
   MSM=new THREE.InstancedMesh(g3,hookWorld(new THREE.MeshStandardMaterial({color:0xd8d8d0,roughness:.5,metalness:.4})),40);
   for(const m of [BM,EBM,MSM]){m.count=0;m.frustumCulled=false;m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);S.add(m);}
   BM.renderOrder=EBM.renderOrder=4;
-  MFL=new THREE.PointLight(0xffb060,0,22,1.6);S.add(MFL);
+  MFL=new THREE.PointLight(0xffb060,0,22,1.6);S.add(MFL);lowLights();
 }
 /* where the crosshair points: the first enemy, tree or ground along the camera ray (aim assist bends it onto a nearby enemy) */
 const AIM={x:0,y:0,z:0,e:null,dist:0};
@@ -2159,11 +2269,11 @@ function segSphere(x0,y0,z0,x1,y1,z1,cx,cy,cz,r){const dx=x1-x0,dy=y1-y0,dz=z1-z
 function drawShots(){
   let n=0;for(const b of BOLTS){if(n>=160)break;const l=Math.hypot(b.vx,b.vy,b.vz);_v.set(b.vx/l,b.vy/l,b.vz/l);_q.setFromUnitVectors(_z,_v);
     _m4.compose(_w.set(b.x-_v.x*1.8,b.y-_v.y*1.8,b.z-_v.z*1.8),_q,_sc.set(1,1,3.6));BM.setMatrixAt(n++,_m4);}
-  BM.count=n;BM.instanceMatrix.needsUpdate=true;BM.visible=n>0;
+  BM.count=n;sendInst(BM,n);
   n=0;for(const b of EBOLTS){if(n>=220)break;const l=Math.hypot(b.vx,b.vy,b.vz);_v.set(b.vx/l,b.vy/l,b.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(b.x,b.y,b.z),_q,_sc.setScalar(b.s||1));EBM.setMatrixAt(n++,_m4);}
-  EBM.count=n;EBM.instanceMatrix.needsUpdate=true;EBM.visible=n>0;
+  EBM.count=n;sendInst(EBM,n);
   n=0;for(const m of MISS){if(n>=40)break;if(m.t<m.delay)continue;const l=Math.hypot(m.vx,m.vy,m.vz)||1;_v.set(m.vx/l,m.vy/l,m.vz/l);_q.setFromUnitVectors(_z,_v);_m4.compose(_w.set(m.x,m.y,m.z),_q,_sc.set(1,1,1));MSM.setMatrixAt(n++,_m4);}
-  MSM.count=n;MSM.instanceMatrix.needsUpdate=true;MSM.visible=n>0;
+  MSM.count=n;sendInst(MSM,n);
 }
 function sparks(x,y,z,n,col){if(n>2)part({x,y,z,vx:0,vy:0,vz:0,life:.14,s0:.7,s1:1.6,a:1.3,col:[1,1,1],glow:true,img:3});for(let i=0;i<n;i++){const a=Math.random()*TAU,b=Math.random()*2-1,s=4+Math.random()*7;
   part({x,y,z,vx:Math.cos(a)*s*Math.sqrt(1-b*b),vy:b*s+2,vz:Math.sin(a)*s*Math.sqrt(1-b*b),life:.25+Math.random()*.25,s0:.22,s1:.06,a:2,col,glow:true,drag:2,grav:12});}}
@@ -3360,7 +3470,9 @@ function updBeams(dt){if(!KX.bm)kitFxInit();const L=KX.beams;let n=0;
   for(const B of L){if(n>=400)break;const f=1-B.t/B.life,a=B.a,b=B.b;KX.d.set(b[0]-a[0],b[1]-a[1],b[2]-a[2]);const len=KX.d.length();if(len<1e-3)continue;
     KX.p.set((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2);KX.q.setFromUnitVectors(KX.z,KX.d.multiplyScalar(1/len));const r=B.r*(.4+.6*f);KX.s.set(r,r,len);
     KX.m4.compose(KX.p,KX.q,KX.s);KX.bm.setMatrixAt(n,KX.m4);KX.bm.setColorAt(n,KX.col.setRGB(B.col[0]*f,B.col[1]*f,B.col[2]*f));n++;}
-  KX.bm.count=n;KX.bm.instanceMatrix.needsUpdate=true;if(KX.bm.instanceColor)KX.bm.instanceColor.needsUpdate=true;}
+  /* only the beams in use are sent to the graphics card, and nothing at all while there are none (it used to send all 400 slots, 30 KB, every frame) */
+  KX.bm.count=n;KX.bm.visible=n>0;
+  if(n)for(const A of [KX.bm.instanceMatrix,KX.bm.instanceColor])if(A){A.clearUpdateRanges();A.addUpdateRange(0,n*A.itemSize);A.needsUpdate=true;}}
 function sRail(k){nz('highpass',5200,700,.5,.42*k+.12,1.4);thump(110,34,.35,.5*k+.15,0,0);tone('sawtooth',1400,90,.32,.07);}
 function sCharge(){tone('sine',180,1100,LANCE.charge,.05);}
 function sArc(){nz('bandpass',4200,1500,.09,.11,3);tone('square',1900,700,.06,.025);}
@@ -4698,7 +4810,7 @@ function setupHud(){
   $('mresume').onclick=()=>setPause(false);
   $('mview').onclick=()=>{cycleView();HUD.menu();};
   $('mqual').onclick=()=>{const o=['auto','low','med','high'];SET.quality=o[(o.indexOf(SET.quality)+1)%o.length];store.set('quality',SET.quality);
-    setQuality(SET.quality==='auto'?(touchy?'med':'high'):SET.quality);HUD.menu();};
+    autoForget();setQuality(SET.quality==='auto'?QTOP:SET.quality);HUD.menu();};
   $('msound').onclick=()=>{SET.sound=!SET.sound;store.set('sound',SET.sound?1:0);HUD.menu();};
   $('msens').onclick=()=>{const o=[.6,.8,1,1.3,1.7];SET.sens=o[(o.indexOf(SET.sens)+1)%o.length]||1;store.set('sens',SET.sens);HUD.menu();};
   $('mexit').onclick=()=>ARC.exit();
@@ -4711,7 +4823,9 @@ function setupHud(){
 let NIGHT_ON=false;
 const G={mode:'load',paused:false,t:0,fdt:1/60,birdT:6,perf:{t:0,n:0,s:0},demoI:1,demoHop:4,score:0,kills:0,combo:0,lastKill:-9,wave:0,hpK:1,breakT:3,downT:0};
 let M=null,CTLX=null;
-function setQuality(q){QL=q;QC=QUAL[q];DYN=1;resize();setShadow();postSetup();S.fog.far=Math.min(QC.fog,LOOKNOW&&LOOKNOW.fogFar||1e9);S.fog.near=S.fog.far*.22;}
+function setQuality(q,dyn){QL=q;QC=QUAL[q];DYN=dyn||1;resize();setShadow();postSetup();S.fog.far=Math.min(QC.fog,LOOKNOW&&LOOKNOW.fogFar||1e9);S.fog.near=S.fog.far*.22;lowLights();}
+/* Low has no flash lights (the gun's and the jets'): every lit surface is then shaded for two lights fewer, on the devices that most need it. The flashes themselves still glow. */
+function lowLights(){const on=QL!=='low';if(MFL)MFL.visible=on;if(M&&M.jl)M.jl.visible=on;}
 function cycleView(){SET.view=SET.view==='close'?'far':'close';store.set('view',SET.view);HUD.view(SET.view);}
 function setPause(b){G.paused=b;HUD.menu();setVolume();if(!b&&!touchy&&G.mode==='play')lockMouse();if(b)jetLoop(0);}
 function clearFight(){for(const e of EN)enemyFree(e);bossClearMarks();EN.length=0;BOLTS.length=EBOLTS.length=MISS.length=BEACONS.length=0;for(const p of PK)S.remove(p.g);PK.length=0;}
@@ -4748,7 +4862,7 @@ function jetFX(dt){if(P.thrust<.05)return;for(const J of M.jets){J.n.getWorldPos
   const k=P.thrust;if(Math.random()<k*dt*60)part({x:_np.x,y:_np.y-.4,z:_np.z,vx:(Math.random()-.5)*2,vy:-6-Math.random()*4,vz:(Math.random()-.5)*2,life:.25+Math.random()*.15,s0:.9,s1:.35,a:1.4*k,col:[1,.55,.22],glow:true,drag:2});
   if(Math.random()<k*dt*30)part({x:_np.x,y:_np.y-.6,z:_np.z,vx:(Math.random()-.5)*1.5,vy:-3-Math.random()*2,vz:(Math.random()-.5)*1.5,life:1.2+Math.random()*.8,s0:.8,s1:3.4,a:.3,col:SMOKE,drag:1.6,grav:-.6});}}
 function tick(dt){
-  G.t+=dt;U.uTime.value=G.t;if(MAPDEF.tick)MAPDEF.tick(dt);lifeTick(dt);updRain(dt);updWeather(dt);updShieldFx(dt);if(G.mode==='play')updMarks(dt);if(RING)RING.position.set(cam.position.x,cam.position.y+RING.userData.lift,cam.position.z);
+  G.t+=dt;U.uTime.value=G.t;if(MAPDEF.tick)MAPDEF.tick(dt);lifeTick(dt);updRain(dt);updWeather(dt);updShieldFx(dt);updBlobs();if(G.mode==='play')updMarks(dt);if(RING)RING.position.set(cam.position.x,cam.position.y+RING.userData.lift,cam.position.z);
   /* the clouds drift; their shadows slide over the ground with them */
   U.uCloudOff.value.x-=dt*.00165;U.uCloudOff.value.y-=dt*.0006;   /* minus: the shadows then travel toward +x, with the wind */
   const live=(G.mode==='play'||G.mode==='demo')&&!G.paused;
@@ -4781,10 +4895,14 @@ function tick(dt){
 /* auto quality: if frames are slow, lower the render scale, then the quality level */
 function autoQ(dt){if(SET.quality!=='auto'||G.mode!=='play'||G.paused)return;const pf=G.perf;pf.t+=dt;pf.n++;
   if(pf.t>=1.8){const avg=pf.t/pf.n;pf.t=0;pf.n=0;
-    if(avg>1/44){if(DYN>.66){DYN*=.88;resize();}
+    let calm=true;for(const e of EN)if(!e.dead){calm=false;break;}
+    if(avg>1/44){pf.good=0;if(DYN>.66){DYN*=.88;resize();autoSave();}
       /* Medium to Low turns shadows off, which rebuilds every shader (a hitch): wait for a moment with no machines alive */
-      else if(QL==='high')setQuality('med');else if(QL==='med'){let fight=false;for(const e of EN)if(!e.dead){fight=true;break;}if(!fight)setQuality('low');}}
-    else if(avg<1/57&&DYN<1){DYN=Math.min(1,DYN*1.06);resize();}}}
+      else if(QL==='high'){AQ.ceil='med';setQuality('med');autoSave();}else if(QL==='med'&&calm){AQ.ceil='low';setQuality('low');autoSave();}}
+    else if(avg<1/57){if(DYN<1){DYN=Math.min(1,DYN*1.06);resize();autoSave();}
+      /* a remembered level is tried one step higher after 20 smooth seconds, in a quiet moment. If the device then cannot hold it, it comes back down and stays (AQ.ceil). */
+      else if(QRANK[QL]<QRANK[QTOP]&&(!AQ.ceil||QRANK[QL]<QRANK[AQ.ceil])){pf.good=(pf.good||0)+1.8;if(pf.good>=20&&calm){pf.good=0;setQuality(QL==='low'?'med':'high');autoSave();}}}
+    else pf.good=0;}}
 let last=performance.now();
 function frame(now){
   const raw=(now-last)/1000,dt=Math.min(.05,raw);last=now;G.fdt+=(raw-G.fdt)*.1;
@@ -4794,7 +4912,7 @@ function frame(now){
   if(!(DEV&&window.__freeze))tick(dt);autoQ(dt);renderFrame();if(SET.fps&&(G.fpsT=(G.fpsT||0)-raw)<=0){G.fpsT=.5;$('fps').textContent=Math.round(1/Math.max(.001,G.fdt))+' FPS · '+QL.toUpperCase();}HUD.dev();requestAnimationFrame(frame);
 }
 function boot(){
-  pickMap();setupHud();setQuality(QL);const LK=MISSION&&MISSION.look?Object.assign({},MAPDEF.look,MISSION.look):MAPDEF.look;NIGHT_ON=!!LK.night;applyLook(LK);buildEnv(LK);setupTitle();U.tCloud.value=tex('34-fog',{srgb:false});
+  pickMap();setupHud();setQuality(QL,SET.quality==='auto'&&AQ.q&&AQ.d>=.5?Math.min(1,AQ.d):1);const LK=MISSION&&MISSION.look?Object.assign({},MAPDEF.look,MISSION.look):MAPDEF.look;NIGHT_ON=!!LK.night;applyLook(LK);buildEnv(LK);setupTitle();U.tCloud.value=tex('34-fog',{srgb:false});
   buildGround();const before=new Set(S.children);MAPDEF.build();mergeStatic(before);if(MAPDEF.dress&&!Q.has('nodress'))MAPDEF.dress();M=buildMech();buildFX();buildWeapons();P=mkPlayer();
   let readySent=false;   /* textures loaded later (decals, effects) fire onLoad again: say ready only once */
   const done=()=>{if(readySent)return;readySent=true;G.mode=G.mode==='load'?'title':G.mode;$('load').style.display='none';$('title').style.display=G.mode==='title'?'flex':'none';document.title='IRONHOWL 4';ARC.post('ready',{title:ARC.title});};

@@ -65,7 +65,7 @@ function setupHud(){
   $('mresume').onclick=()=>setPause(false);
   $('mview').onclick=()=>{cycleView();HUD.menu();};
   $('mqual').onclick=()=>{const o=['auto','low','med','high'];SET.quality=o[(o.indexOf(SET.quality)+1)%o.length];store.set('quality',SET.quality);
-    setQuality(SET.quality==='auto'?(touchy?'med':'high'):SET.quality);HUD.menu();};
+    autoForget();setQuality(SET.quality==='auto'?QTOP:SET.quality);HUD.menu();};
   $('msound').onclick=()=>{SET.sound=!SET.sound;store.set('sound',SET.sound?1:0);HUD.menu();};
   $('msens').onclick=()=>{const o=[.6,.8,1,1.3,1.7];SET.sens=o[(o.indexOf(SET.sens)+1)%o.length]||1;store.set('sens',SET.sens);HUD.menu();};
   $('mexit').onclick=()=>ARC.exit();
