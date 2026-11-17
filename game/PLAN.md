@@ -11,7 +11,7 @@ playable at the test link.
 - Run from the repo: serve the repo folder and open `game/index.html` (the models come from the repo's `models/`).
 - Saves: keys starting `hd-ironhowl4-` only. Arcade id `ironhowl4` (same cabinet messages as Ironhowl 3, `?embed=1`).
 - Build: `python3 game/build.py` joins `game/src/*.js` into `game/js/ironhowl4.js`.
-- One-file game (opens from the disk, no internet; source code inside at the end): `python3 game/tools/pack_single.py . Ironhowl4_game.html` (119 MB on 7 Nov). Add `--light` for the light version without the full-detail models (42 MB; the bay, brief and book show the combat models).
+- One-file game (opens from the disk, no internet; source code inside at the end): `python3 game/tools/pack_single.py . Ironhowl4_game.html` (119 MB on 7 Nov). Add `--light` for the light version without the full-detail models (42 MB; the bay, brief and book show the combat models). Built copies of the 15 Nov version (smoother, longer waves, intel card, both rounds on the look) are in `game/single-file/`: `Ironhowl4_game_light.html` (47 MB, for the phone) and `Ironhowl4_game.html` (124 MB, for the laptop). Download one and open it in a browser.
 
 | Session | What gets built | What you can try at the end |
 |---|---|---|
